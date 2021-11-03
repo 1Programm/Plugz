@@ -17,13 +17,6 @@
     </properties>
 
     <dependencies>
-        <!-- For Testing -->
-        <dependency>
-            <groupId>com.programm.projects</groupId>
-            <artifactId>plugz-api</artifactId>
-            <version>0.1-SNAPSHOT</version>
-        </dependency>
-
         <dependency>
             <groupId>com.programm.projects</groupId>
             <artifactId>ioutils-log-api</artifactId>

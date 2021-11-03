@@ -58,12 +58,18 @@ class PlugzScanner {
 
         while(!base.equals("")){
             int nextDot = base.indexOf('.');
-            if(nextDot == -1) nextDot = base.length();
+            String name;
 
-            String name = base.substring(0, nextDot);
-            base = base.substring(nextDot + 1);
+            if(nextDot == -1) {
+                name = base;
+                base = "";
+            }
+            else {
+                name = base.substring(0, nextDot);
+                base = base.substring(nextDot + 1);
+            }
 
-            File[] children = file.listFiles();
+            File[] children = cur.listFiles();
             if(children == null) throw new ScanException("Base package does not map with file path!");
 
             for(int i=0;i<children.length;i++){

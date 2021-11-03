@@ -31,7 +31,7 @@ public class MagicEnvironment {
         List<URL> additionalUrls = new ArrayList<>();
         Map<URL, String> bases = new HashMap<>();
 
-        StackTraceElement ste = Thread.currentThread().getStackTrace()[2];
+        StackTraceElement ste = Thread.currentThread().getStackTrace()[3];
         String _callingClass = ste.getClassName();
         try {
             Class<?> callingClass = MagicEnvironment.class.getClassLoader().loadClass(_callingClass);
@@ -50,7 +50,7 @@ public class MagicEnvironment {
     }
 
     private void startupPostSetup(){
-        
+
     }
 
 }

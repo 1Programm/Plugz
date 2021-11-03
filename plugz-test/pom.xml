@@ -19,9 +19,8 @@
     <dependencies>
         <dependency>
             <groupId>com.programm.projects</groupId>
-            <artifactId>plugz-api</artifactId>
+            <artifactId>plugz-magic</artifactId>
             <version>0.1-SNAPSHOT</version>
         </dependency>
     </dependencies>
-
 </project>
