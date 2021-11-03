@@ -4,7 +4,7 @@ import com.programm.projects.ioutils.log.api.out.IOutput;
 
 public class Main {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception{
         Plugz.setLogger(new IOutput() {
             @Override
             public void print(String s, Object... objects) {
@@ -18,6 +18,7 @@ public class Main {
         });
 
         Plugz plugz = Plugz.fromConfigFile();
+        plugz.scan();
         System.out.println(plugz);
     }
 
