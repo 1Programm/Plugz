@@ -50,8 +50,8 @@ public class Plugz {
     private final Map<URL, String> basePackageMap;
     private final List<Class<? extends Annotation>> baseClsAnnotations;
 
-    private URLClassLoader classLoader;
     private final Map<Class<? extends Annotation>, List<Class<?>>> annotationClasses = new HashMap<>();
+    private URLClassLoader classLoader;
 
     public void scan(){
         scanUrls(baseScanPaths, basePackageMap, baseClsAnnotations);
@@ -91,7 +91,7 @@ public class Plugz {
 
         try {
             for (URL url : scanPathArray) {
-                String basePackage = basePackageMap.get(url);
+                String basePackage = basePackageMap.getOrDefault(url, "");
                 PlugzScanner.searchInUrl(url, basePackage, classLoader, clsAnnotations, annotationClasses);
             }
         }

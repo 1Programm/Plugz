@@ -17,7 +17,9 @@ public class Main {
             }
         });
 
-        Plugz plugz = Plugz.fromConfigFile();
+        Plugz plugz = Plugz.create()
+                .addScanPath("file:/Users/julian/Desktop/Programming/Java/tests/PlugzTest/target/classes/")
+                .build();
         plugz.scan();
         System.out.println(plugz);
     }

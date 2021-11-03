@@ -136,8 +136,9 @@ public class PlugzBuilder {
         return this;
     }
 
-    public PlugzBuilder addClassAnnotation(Class<? extends Annotation> cls){
-        clsAnnotations.add(cls);
+    @SafeVarargs
+    public final PlugzBuilder addClassAnnotation(Class<? extends Annotation>... classes){
+        clsAnnotations.addAll(Arrays.asList(classes));
         return this;
     }
 
