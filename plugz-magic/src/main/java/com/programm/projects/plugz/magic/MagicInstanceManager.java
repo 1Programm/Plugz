@@ -4,10 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -264,6 +261,11 @@ class MagicInstanceManager {
     }
 
     private void registerInstance(Class<?> cls, Object instance) throws MagicInstanceException {
+        Class<?>[] interfaces = cls.getInterfaces();
+        for(Class<?> iCls : interfaces){
+            registerInstance(iCls, instance);
+        }
+
         instanceMap.put(cls, instance);
 
         List<MagicWire> mws = waitMap.get(cls);

@@ -7,6 +7,6 @@ public class APrinter implements IPrinter {
 
     @Override
     public void print(String t) {
-        System.out.println("Test");
+        System.out.println(t);
     }
 }
