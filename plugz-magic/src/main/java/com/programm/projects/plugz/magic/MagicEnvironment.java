@@ -117,6 +117,14 @@ public class MagicEnvironment {
         }
     }
 
+    public <T> T instantiateClass(Class<T> cls){
+        try {
+            return instanceManager.instantiate(cls);
+        } catch (MagicInstanceException e) {
+            throw new MagicRuntimeException("Could not instantiate class: [" + cls.getName() + "]!", e);
+        }
+    }
+
     public List<Class<?>> getAnnotatedWith(Class<? extends Annotation> cls){
         return plugz.getAnnotatedWith(cls);
     }

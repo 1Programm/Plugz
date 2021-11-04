@@ -76,17 +76,19 @@ class MagicInstanceManager {
     private final List<MagicMethod> postSetupMethods = new ArrayList<>();
     private final List<MagicMethod> preShutdownMethods = new ArrayList<>();
 
-    public void instantiate(Class<?> cls) throws MagicInstanceException{
+    public <T> T instantiate(Class<T> cls) throws MagicInstanceException{
         Object instance = instantiateFromConstructor(cls);
 
         if(instance == null){
-            return; // Must wait for other instances
+            return null; // Must wait for other instances
         }
 
         tryMagicFields(cls, instance);
         tryMagicMethods(cls, instance);
 
         registerInstance(cls, instance);
+
+        return cls.cast(instance);
     }
 
     public void checkWaitMap() throws MagicInstanceException {
