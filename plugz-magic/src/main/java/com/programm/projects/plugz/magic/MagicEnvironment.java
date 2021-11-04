@@ -58,6 +58,13 @@ public class MagicEnvironment {
         catch (MagicInstanceException e){
             throw new IllegalStateException("Could not instantiate Service classes.", e);
         }
+
+        try {
+            magicInstanter.checkWaitMap();
+        }
+        catch (MagicInstanceException e){
+            throw new IllegalStateException("Cyclic waiting dependencies could not be resolved!", e);
+        }
     }
 
     private void startupPostSetup(){

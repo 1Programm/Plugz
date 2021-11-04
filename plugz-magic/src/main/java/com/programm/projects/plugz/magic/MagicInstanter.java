@@ -46,10 +46,10 @@ class MagicInstanter {
             numEmptyArgs--;
         }
 
-        public Object tryInvoke() throws IllegalAccessException, InvocationTargetException{
-            if(numEmptyArgs > 0) return null;
+        public void tryInvoke() throws IllegalAccessException, InvocationTargetException{
+            if(numEmptyArgs > 0) return;
 
-            return method.invoke(argsArray);
+            method.invoke(argsArray);
         }
     }
 
@@ -86,6 +86,21 @@ class MagicInstanter {
         tryMagicMethods(cls, instance);
 
         registerInstance(cls, instance);
+    }
+
+    public void checkWaitMap() throws MagicInstanceException {
+        if(!waitMap.isEmpty()) {
+            StringBuilder sb = new StringBuilder();
+
+            for(Class<?> cls : waitMap.keySet()){
+                if(sb.length() != 0){
+                    sb.append(",\n");
+                }
+                sb.append("   ").append(cls.getName());
+            }
+
+            throw new MagicInstanceException("Waiting for:\n[\n" + sb + "\n]");
+        }
     }
 
     public void callPostSetup() throws MagicInstanceException{
