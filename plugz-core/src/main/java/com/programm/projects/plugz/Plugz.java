@@ -51,7 +51,6 @@ public class Plugz {
     private final List<Class<? extends Annotation>> baseClsAnnotations;
 
     private final Map<Class<? extends Annotation>, List<Class<?>>> annotationClasses = new HashMap<>();
-    private URLClassLoader classLoader;
 
     public void scan(){
         scanUrls(baseScanPaths, basePackageMap, baseClsAnnotations);
@@ -92,7 +91,7 @@ public class Plugz {
         }
 
         URL[] scanPathArray = scanPaths.toArray(new URL[0]);
-        classLoader = URLClassLoader.newInstance(scanPathArray);
+        URLClassLoader classLoader = URLClassLoader.newInstance(scanPathArray);
 
         try {
             for (URL url : scanPathArray) {
@@ -108,7 +107,5 @@ public class Plugz {
     public List<Class<?>> getAnnotatedWith(Class<? extends Annotation> cls){
         return annotationClasses.get(cls);
     }
-
-
 
 }

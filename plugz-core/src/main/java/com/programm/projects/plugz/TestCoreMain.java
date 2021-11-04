@@ -2,7 +2,7 @@ package com.programm.projects.plugz;
 
 import com.programm.projects.ioutils.log.api.out.IOutput;
 
-public class Main {
+class TestCoreMain {
 
     public static void main(String[] args) throws Exception{
         Plugz.setLogger(new IOutput() {
