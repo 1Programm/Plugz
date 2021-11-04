@@ -58,8 +58,8 @@ class MagicInstanceManager {
         private final Object instance;
         private final Method method;
 
-        public void run() throws MagicInstanceException {
-            tryInvokeMethod(instance, method);
+        public void run(boolean acceptsWait) throws MagicInstanceException {
+            tryInvokeMethod(instance, method, acceptsWait);
         }
     }
 
@@ -105,13 +105,13 @@ class MagicInstanceManager {
 
     public void callPostSetup() throws MagicInstanceException{
         for(MagicMethod mm : postSetupMethods){
-            mm.run();
+            mm.run(false);
         }
     }
 
     public void callPreShutdown() throws MagicInstanceException{
         for(MagicMethod mm : preShutdownMethods){
-            mm.run();
+            mm.run(false);
         }
     }
 
@@ -154,7 +154,7 @@ class MagicInstanceManager {
             }
 
             else if(method.isAnnotationPresent(PreSetup.class)){
-                tryInvokeMethod(instance, method);
+                tryInvokeMethod(instance, method, true);
             }
             else if(method.isAnnotationPresent(PostSetup.class)){
                 MagicMethod mm = new MagicMethod(instance, method);
@@ -300,7 +300,7 @@ class MagicInstanceManager {
         }
     }
 
-    private void tryInvokeMethod(Object instance, Method method) throws MagicInstanceException {
+    private void tryInvokeMethod(Object instance, Method method, boolean acceptsWait) throws MagicInstanceException {
         int paramCount = method.getParameterCount();
         Class<?>[] paramTypes = method.getParameterTypes();
         Object[] args = new Object[paramCount];
@@ -330,6 +330,7 @@ class MagicInstanceManager {
                 }
             };
 
+            if(!acceptsWait) throw new MagicInstanceException("Method [" + method.getDeclaringClass().getName() + "#" + method.getName() + "] expects to get all values and cannot wait for them! - Could not find value for class: [" + paramType.getName() + "]");
             waitMap.computeIfAbsent(paramType, pt -> new ArrayList<>()).add(mw);
         }
 

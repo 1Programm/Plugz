@@ -7,15 +7,9 @@ import com.programm.projects.plugz.magic.Service;
 @Service
 public class A {
 
-    private final B b;
-
-    public A(@Get B b){
-        this.b = b;
-    }
-
     @PostSetup
-    public void test(){
-        System.out.println("HELLOOO");
+    public void init(@Get IPrinter printer){
+        printer.print("HELLOOO");
     }
 
 }
