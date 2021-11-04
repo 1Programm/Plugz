@@ -100,6 +100,10 @@ public class Plugz {
         }
     }
 
+    public List<Class<?>> getAnnotatedWith(Class<? extends Annotation> cls){
+        return annotationClasses.get(cls);
+    }
+
 
 
 }
