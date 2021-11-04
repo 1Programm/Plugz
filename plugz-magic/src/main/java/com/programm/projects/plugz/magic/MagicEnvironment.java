@@ -91,16 +91,16 @@ public class MagicEnvironment {
                 throw new MagicRuntimeException("Could not instantiate Service classes.", e);
             }
         }
+    }
 
+    public void postSetup() {
         try {
             instanceManager.checkWaitMap();
         }
         catch (MagicInstanceException e){
             throw new MagicRuntimeException("Cyclic waiting dependencies could not be resolved!", e);
         }
-    }
 
-    public void postSetup(){
         try {
             instanceManager.callPostSetup();
         } catch (MagicInstanceException e){
