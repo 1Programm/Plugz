@@ -12,6 +12,10 @@ import java.util.Map;
 
 class MagicInstanceManager {
 
+    private static String getMethodString(Method method){
+        return method.getDeclaringClass().getName() + "#" + method.getName();
+    }
+
     @RequiredArgsConstructor
     private static class MissingMagicConstructor {
         final Constructor<?> con;
@@ -326,13 +330,13 @@ class MagicInstanceManager {
                 try {
                     mmm.tryInvoke();
                 } catch (IllegalAccessException e) {
-                    throw new MagicInstanceException("Method suddenly went private ... idk why :D", e);
+                    throw new MagicInstanceException("Method [" + getMethodString(method) + "] suddenly went private ... idk why :D", e);
                 } catch (InvocationTargetException e) {
-                    throw new MagicInstanceException("Underlying method threw an exception!", e);
+                    throw new MagicInstanceException("Underlying method: [" + getMethodString(method) + "] threw an exception!", e);
                 }
             };
 
-            if(!acceptsWait) throw new MagicInstanceException("Method [" + method.getDeclaringClass().getName() + "#" + method.getName() + "] expects to get all values and cannot wait for them! - Could not find value for class: [" + paramType.getName() + "]");
+            if(!acceptsWait) throw new MagicInstanceException("Method [" + getMethodString(method) + "] expects to get all values and cannot wait for them! - Could not find value for class: [" + paramType.getName() + "]");
             waitMap.computeIfAbsent(paramType, pt -> new ArrayList<>()).add(mw);
         }
 
@@ -352,9 +356,9 @@ class MagicInstanceManager {
         try {
             method.invoke(instance, args);
         } catch (IllegalAccessException e) {
-            throw new IllegalStateException("INVALID STATE: Method should not be here when it is private!");
+            throw new IllegalStateException("INVALID STATE: Method [" + getMethodString(method) + "] should not be here when it is private!");
         } catch (InvocationTargetException e) {
-            throw new MagicInstanceException("Internal exception in magic - method!", e);
+            throw new MagicInstanceException("Internal exception in magic - method: [" + getMethodString(method) + "]!", e);
         }
     }
 
