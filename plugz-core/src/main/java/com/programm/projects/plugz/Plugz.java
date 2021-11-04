@@ -86,8 +86,13 @@ public class Plugz {
     }
 
     private void scanUrls(List<URL> scanPaths, Map<URL, String> basePackageMap, List<Class<? extends Annotation>> clsAnnotations){
+        if(scanPaths.isEmpty()){
+            STATIC_LOG.println("[WARN]: No scan paths defined.");
+            return;
+        }
+
         URL[] scanPathArray = scanPaths.toArray(new URL[0]);
-        classLoader = new URLClassLoader(scanPathArray);
+        classLoader = URLClassLoader.newInstance(scanPathArray);
 
         try {
             for (URL url : scanPathArray) {
