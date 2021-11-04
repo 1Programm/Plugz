@@ -1,6 +1,6 @@
 package com.programm.projects.plugz.magic;
 
-public class MagicInstanceException extends Exception {
+class MagicInstanceException extends Exception {
 
     public MagicInstanceException() {
     }

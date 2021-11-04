@@ -9,7 +9,7 @@ public class MagicEnvironment {
 
     private final String basePackageOfCallingClass;
     private final Plugz plugz;
-    private final MagicInstanter magicInstanter;
+    private final MagicInstanceManager instanceManager;
 
     public MagicEnvironment(){
         this("");
@@ -20,13 +20,12 @@ public class MagicEnvironment {
         this.plugz = Plugz.create()
                 .addClassAnnotation(Service.class)
                 .build();
-        this.magicInstanter = new MagicInstanter();
+        this.instanceManager = new MagicInstanceManager();
     }
 
     public void startup(){
         startupScan();
         startupInstantiate();
-        startupPostSetup();
     }
 
     private void startupScan(){
@@ -52,7 +51,7 @@ public class MagicEnvironment {
 
         try {
             for (Class<?> cls : serviceClasses) {
-                magicInstanter.instantiate(cls);
+                instanceManager.instantiate(cls);
             }
         }
         catch (MagicInstanceException e){
@@ -60,16 +59,16 @@ public class MagicEnvironment {
         }
 
         try {
-            magicInstanter.checkWaitMap();
+            instanceManager.checkWaitMap();
         }
         catch (MagicInstanceException e){
             throw new IllegalStateException("Cyclic waiting dependencies could not be resolved!", e);
         }
     }
 
-    private void startupPostSetup(){
+    public void postSetup(){
         try {
-            magicInstanter.callPostSetup();
+            instanceManager.callPostSetup();
         } catch (MagicInstanceException e){
             throw new IllegalStateException("Exception while calling post setup methods.", e);
         }
@@ -78,7 +77,7 @@ public class MagicEnvironment {
     //TODO
     public void shutdown(){
         try {
-            magicInstanter.callPreShutdown();
+            instanceManager.callPreShutdown();
         } catch (MagicInstanceException e){
             throw new IllegalStateException("Exception while calling pre shutdown.", e);
         }

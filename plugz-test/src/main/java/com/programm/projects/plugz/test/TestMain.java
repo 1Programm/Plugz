@@ -7,6 +7,8 @@ public class TestMain {
     public static void main(String[] args) {
         MagicEnvironment env = new MagicEnvironment("com.programm.projects.plugz.test");
         env.startup();
+        env.postSetup();
+//        env.shutdown();
     }
 
 }
