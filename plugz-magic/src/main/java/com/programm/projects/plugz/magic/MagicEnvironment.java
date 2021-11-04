@@ -13,6 +13,7 @@ public class MagicEnvironment {
     private final MagicInstanceManager instanceManager;
     private final List<URL> additionalUrls = new ArrayList<>();
     private final Map<URL, String> additionalBases = new HashMap<>();
+    private final List<Class<? extends Annotation>> additionalAnnotations = new ArrayList<>();
     private boolean disableCallingUrl;
 
     public MagicEnvironment(){
@@ -38,6 +39,21 @@ public class MagicEnvironment {
         return this;
     }
 
+    public MagicEnvironment addSearchAnnotation(Class<? extends Annotation> cls){
+        additionalAnnotations.add(cls);
+        return this;
+    }
+
+    public MagicEnvironment registerInstance(Class<?> cls, Object instance){
+        try {
+            instanceManager.registerInstance(cls, instance);
+            return this;
+        }
+        catch (MagicInstanceException e){
+            throw new MagicRuntimeException("Could not register instance of class: [" + cls.getName() + "]!", e);
+        }
+    }
+
     public void startup(){
         startupScan();
         startupInstantiate();
@@ -56,11 +72,11 @@ public class MagicEnvironment {
                 additionalUrls.add(url);
                 bases.put(url, basePackageOfCallingClass);
             } catch (ClassNotFoundException e) {
-                e.printStackTrace();
+                throw new MagicRuntimeException("INVALID STATE: Should always calling class", e);
             }
         }
 
-        plugz.scan(additionalUrls, bases, Collections.emptyList());
+        plugz.scan(additionalUrls, bases, additionalAnnotations);
     }
 
     private void startupInstantiate(){
@@ -72,7 +88,7 @@ public class MagicEnvironment {
                     instanceManager.instantiate(cls);
                 }
             } catch (MagicInstanceException e) {
-                throw new IllegalStateException("Could not instantiate Service classes.", e);
+                throw new MagicRuntimeException("Could not instantiate Service classes.", e);
             }
         }
 
@@ -80,7 +96,7 @@ public class MagicEnvironment {
             instanceManager.checkWaitMap();
         }
         catch (MagicInstanceException e){
-            throw new IllegalStateException("Cyclic waiting dependencies could not be resolved!", e);
+            throw new MagicRuntimeException("Cyclic waiting dependencies could not be resolved!", e);
         }
     }
 
@@ -88,7 +104,7 @@ public class MagicEnvironment {
         try {
             instanceManager.callPostSetup();
         } catch (MagicInstanceException e){
-            throw new IllegalStateException("Exception while calling post setup methods.", e);
+            throw new MagicRuntimeException("Exception while calling post setup methods.", e);
         }
     }
 
@@ -97,7 +113,7 @@ public class MagicEnvironment {
         try {
             instanceManager.callPreShutdown();
         } catch (MagicInstanceException e){
-            throw new IllegalStateException("Exception while calling pre shutdown.", e);
+            throw new MagicRuntimeException("Exception while calling pre shutdown.", e);
         }
     }
 

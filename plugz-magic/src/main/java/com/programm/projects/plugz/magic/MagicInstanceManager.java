@@ -264,7 +264,7 @@ class MagicInstanceManager {
         return null;
     }
 
-    private void registerInstance(Class<?> cls, Object instance) throws MagicInstanceException {
+    void registerInstance(Class<?> cls, Object instance) throws MagicInstanceException {
         Class<?>[] interfaces = cls.getInterfaces();
         for(Class<?> iCls : interfaces){
             registerInstance(iCls, instance);
