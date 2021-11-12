@@ -285,6 +285,16 @@ class MagicInstanceManager {
         }
     }
 
+    <T> T getInstance(Class<T> cls) throws MagicInstanceException {
+        Object obj = instanceMap.get(cls);
+
+        if(obj == null){
+            throw new MagicInstanceException("No instance for class [" + cls.getName() + "] found!");
+        }
+
+        return cls.cast(obj);
+    }
+
     private Object invokeConstructor(Constructor<?> con, Object[] args) throws MagicInstanceException {
         try {
             return con.newInstance(args);

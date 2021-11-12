@@ -54,6 +54,15 @@ public class MagicEnvironment {
         }
     }
 
+    public <T> T getInstance(Class<T> cls){
+        try {
+            return instanceManager.getInstance(cls);
+        }
+        catch (MagicInstanceException e){
+            throw new MagicRuntimeException("Failed to get instance!", e);
+        }
+    }
+
     public void startup(){
         startupScan();
         startupInstantiate();
