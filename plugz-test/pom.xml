@@ -21,7 +21,7 @@
         <dependency>
             <groupId>com.programm.projects</groupId>
             <artifactId>plugz-magic</artifactId>
-            <version>0.2-SNAPSHOT</version>
+            <version>0.5-SNAPSHOT</version>
         </dependency>
     </dependencies>
 </project>

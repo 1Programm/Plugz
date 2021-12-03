@@ -1,8 +1,12 @@
 package com.programm.projects.plugz.magic;
 
 import com.programm.projects.plugz.Plugz;
+import com.programm.projects.plugz.magic.api.IMagicMethod;
+import com.programm.projects.plugz.magic.api.ISchedules;
+import com.programm.projects.plugz.magic.api.Service;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.*;
 
@@ -11,6 +15,7 @@ public class MagicEnvironment {
     private final String basePackageOfCallingClass;
     private final Plugz plugz;
     private final MagicInstanceManager instanceManager;
+    private final ScheduleManager scheduleManager;
     private final List<URL> additionalUrls = new ArrayList<>();
     private final Map<URL, String> additionalBases = new HashMap<>();
     private final List<Class<? extends Annotation>> additionalAnnotations = new ArrayList<>();
@@ -26,6 +31,9 @@ public class MagicEnvironment {
                 .addClassAnnotation(Service.class)
                 .build();
         this.instanceManager = new MagicInstanceManager();
+        this.scheduleManager = new ScheduleManager();
+
+        registerInstance(ISchedules.class, scheduleManager);
     }
 
     public MagicEnvironment disableCallingUrl(){
@@ -63,9 +71,18 @@ public class MagicEnvironment {
         }
     }
 
+    public IMagicMethod createMagicMethod(Object instance, Method method){
+        return instanceManager.createMagicMethod(instance, method);
+    }
+
     public void startup(){
         startupScan();
         startupInstantiate();
+
+        List<SchedulerMethodConfig> schedulerRunnableList = instanceManager.buildRunnableListForScheduledMethods();
+        for(SchedulerMethodConfig config : schedulerRunnableList) {
+            scheduleManager.scheduleRunnable(config);
+        }
     }
 
     private void startupScan(){
@@ -115,10 +132,14 @@ public class MagicEnvironment {
         } catch (MagicInstanceException e){
             throw new MagicRuntimeException("Exception while calling post setup methods.", e);
         }
+
+        scheduleManager.startup();
     }
 
     //TODO
     public void shutdown(){
+        scheduleManager.shutdown();
+
         try {
             instanceManager.callPreShutdown();
         } catch (MagicInstanceException e){

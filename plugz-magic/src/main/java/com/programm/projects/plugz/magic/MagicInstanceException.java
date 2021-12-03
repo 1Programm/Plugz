@@ -1,9 +1,6 @@
 package com.programm.projects.plugz.magic;
 
-class MagicInstanceException extends Exception {
-
-    public MagicInstanceException() {
-    }
+public class MagicInstanceException extends Exception {
 
     public MagicInstanceException(String message) {
         super(message);
@@ -11,9 +8,5 @@ class MagicInstanceException extends Exception {
 
     public MagicInstanceException(String message, Throwable cause) {
         super(message, cause);
-    }
-
-    public MagicInstanceException(Throwable cause) {
-        super(cause);
     }
 }

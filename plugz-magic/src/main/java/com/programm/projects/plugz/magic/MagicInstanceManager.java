@@ -1,5 +1,6 @@
 package com.programm.projects.plugz.magic;
 
+import com.programm.projects.plugz.magic.api.*;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 
@@ -10,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@RequiredArgsConstructor
 class MagicInstanceManager {
 
     private static String getMethodString(Method method){
@@ -55,19 +57,38 @@ class MagicInstanceManager {
     }
 
     @RequiredArgsConstructor
-    private class MagicMethod {
+    private class MagicMethod implements IMagicMethod {
         private final Object instance;
         private final Method method;
 
-        public void run(boolean acceptsWait) throws MagicInstanceException {
-            tryInvokeMethod(instance, method, acceptsWait);
+        @Override
+        public Object call(Object... arguments) throws MagicInstanceException {
+            return tryInvokeMethod(instance, method, false, arguments);
+        }
+
+        public void run() throws MagicInstanceException {
+            tryInvokeMethod(instance, method, false);
         }
     }
 
-    private interface MagicWire {
+    private class ScheduledMagicMethod extends SchedulerMethodConfig {
+        private final Object instance;
+        private final Method method;
 
+        public ScheduledMagicMethod(long startAfter, long repeatAfter, long stopAfter, Object instance, Method method) {
+            super(startAfter, repeatAfter, stopAfter, instance.getClass().getName() + "#" + method.getName());
+            this.instance = instance;
+            this.method = method;
+        }
+
+        @Override
+        public void run() throws MagicInstanceException {
+            tryInvokeMethod(instance, method, false);
+        }
+    }
+
+    interface MagicWire {
         void accept(Object o) throws MagicInstanceException;
-
     }
 
     private final Map<Class<?>, Object> instanceMap = new HashMap<>();
@@ -75,6 +96,8 @@ class MagicInstanceManager {
 
     private final List<MagicMethod> postSetupMethods = new ArrayList<>();
     private final List<MagicMethod> preShutdownMethods = new ArrayList<>();
+
+    private final List<SchedulerMethodConfig> scheduledMethods = new ArrayList<>();
 
     public <T> T instantiate(Class<T> cls) throws MagicInstanceException{
         Object instance = instantiateFromConstructor(cls);
@@ -108,14 +131,18 @@ class MagicInstanceManager {
 
     public void callPostSetup() throws MagicInstanceException{
         for(MagicMethod mm : postSetupMethods){
-            mm.run(false);
+            mm.run();
         }
     }
 
     public void callPreShutdown() throws MagicInstanceException{
         for(MagicMethod mm : preShutdownMethods){
-            mm.run(false);
+            mm.run();
         }
+    }
+
+    public IMagicMethod createMagicMethod(Object instance, Method method){
+        return new MagicMethod(instance, method);
     }
 
     private void tryMagicFields(Class<?> cls, Object instance){
@@ -155,17 +182,24 @@ class MagicInstanceManager {
                 MagicWire mw = o -> invokeMethod(instance, method, o);
                 waitMap.computeIfAbsent(valType, pt -> new ArrayList<>()).add(mw);
             }
+            else {
+                if(method.isAnnotationPresent(PreSetup.class)){
+                    tryInvokeMethod(instance, method, true);
+                }
+                else if(method.isAnnotationPresent(PostSetup.class)){
+                    MagicMethod mm = new MagicMethod(instance, method);
+                    postSetupMethods.add(mm);
+                }
+                else if(method.isAnnotationPresent(PreShutdown.class)){
+                    MagicMethod mm = new MagicMethod(instance, method);
+                    preShutdownMethods.add(mm);
+                }
 
-            else if(method.isAnnotationPresent(PreSetup.class)){
-                tryInvokeMethod(instance, method, true);
-            }
-            else if(method.isAnnotationPresent(PostSetup.class)){
-                MagicMethod mm = new MagicMethod(instance, method);
-                postSetupMethods.add(mm);
-            }
-            else if(method.isAnnotationPresent(PreShutdown.class)){
-                MagicMethod mm = new MagicMethod(instance, method);
-                preShutdownMethods.add(mm);
+                if(method.isAnnotationPresent(Scheduled.class)){
+                    Scheduled ann = method.getAnnotation(Scheduled.class);
+                    ScheduledMagicMethod scheduledMagicMethod = new ScheduledMagicMethod(ann.startAfter(), ann.repeat(), ann.stopAfter(), instance, method);
+                    scheduledMethods.add(scheduledMagicMethod);
+                }
             }
         }
     }
@@ -295,6 +329,10 @@ class MagicInstanceManager {
         return cls.cast(obj);
     }
 
+    List<SchedulerMethodConfig> buildRunnableListForScheduledMethods(){
+        return scheduledMethods;
+    }
+
     private Object invokeConstructor(Constructor<?> con, Object[] args) throws MagicInstanceException {
         try {
             return con.newInstance(args);
@@ -318,55 +356,80 @@ class MagicInstanceManager {
         }
     }
 
-    private void tryInvokeMethod(Object instance, Method method, boolean acceptsWait) throws MagicInstanceException {
+    private Object tryInvokeMethod(Object instance, Method method, boolean acceptsWait, Object... arguments) throws MagicInstanceException {
         int paramCount = method.getParameterCount();
         Class<?>[] paramTypes = method.getParameterTypes();
         Object[] args = new Object[paramCount];
         int missingInstances = paramCount;
 
+        int argumentIndex = 0;
+
         MissingMagicMethod mmm = new MissingMagicMethod(method, args);
 
+        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
         for(int i=0;i<paramCount;i++){
             Class<?> paramType = paramTypes[i];
+            Annotation[] paramAnnotations = parameterAnnotations[i];
 
-            Object val = instanceMap.get(paramType);
-            if(val != null){
-                args[i] = val;
-                missingInstances--;
-                continue;
+            boolean isGetNotPresent = true;
+            for(Annotation annotation : paramAnnotations){
+                if(annotation instanceof Get){
+                    isGetNotPresent = false;
+                    break;
+                }
             }
 
-            final int pos = i;
-            MagicWire mw = o -> {
-                mmm.putArg(pos, o);
-                try {
-                    mmm.tryInvoke();
-                } catch (IllegalAccessException e) {
-                    throw new MagicInstanceException("Method [" + getMethodString(method) + "] suddenly went private ... idk why :D", e);
-                } catch (InvocationTargetException e) {
-                    throw new MagicInstanceException("Underlying method: [" + getMethodString(method) + "] threw an exception!", e);
+            if(isGetNotPresent){
+                if(argumentIndex >= arguments.length){
+                    throw new MagicInstanceException("Not enough non - magic arguments inside method [" + getMethodString(method) + "].");
                 }
-            };
 
-            if(!acceptsWait) throw new MagicInstanceException("Method [" + getMethodString(method) + "] expects to get all values and cannot wait for them! - Could not find value for class: [" + paramType.getName() + "]");
-            waitMap.computeIfAbsent(paramType, pt -> new ArrayList<>()).add(mw);
-        }
-
-        if(missingInstances == 0){
-            if(args.length == 0){
-                invokeMethod(instance, method);
+                args[i] = arguments[argumentIndex++];
+                missingInstances--;
             }
             else {
-                invokeMethod(instance, method, args);
+                Object val = instanceMap.get(paramType);
+                if (val != null) {
+                    args[i] = val;
+                    missingInstances--;
+                    continue;
+                }
+
+                final int pos = i;
+                MagicWire mw = o -> {
+                    mmm.putArg(pos, o);
+                    try {
+                        mmm.tryInvoke();
+                    } catch (IllegalAccessException e) {
+                        throw new MagicInstanceException("Method [" + getMethodString(method) + "] suddenly went private ... idk why :D", e);
+                    } catch (InvocationTargetException e) {
+                        throw new MagicInstanceException("Underlying method: [" + getMethodString(method) + "] threw an exception!", e);
+                    }
+                };
+
+                if (!acceptsWait)
+                    throw new MagicInstanceException("Method [" + getMethodString(method) + "] expects to get all values and cannot wait for them! - Could not find value for class: [" + paramType.getName() + "]");
+                waitMap.computeIfAbsent(paramType, pt -> new ArrayList<>()).add(mw);
+            }
+        }
+
+        Object ret = null;
+        if(missingInstances == 0){
+            if(args.length == 0){
+                ret = invokeMethod(instance, method);
+            }
+            else {
+                ret = invokeMethod(instance, method, args);
             }
         }
 
         mmm.setNumEmptyArgs(missingInstances);
+        return ret;
     }
 
-    private void invokeMethod(Object instance, Method method, Object... args) throws MagicInstanceException{
+    private Object invokeMethod(Object instance, Method method, Object... args) throws MagicInstanceException{
         try {
-            method.invoke(instance, args);
+            return method.invoke(instance, args);
         } catch (IllegalAccessException e) {
             throw new IllegalStateException("INVALID STATE: Method [" + getMethodString(method) + "] should not be here when it is private!");
         } catch (InvocationTargetException e) {
