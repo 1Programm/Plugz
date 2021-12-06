@@ -1,5 +1,7 @@
 package com.programm.projects.plugz;
 
+import com.programm.projects.ioutils.log.api.out.ILogger;
+
 import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
@@ -14,22 +16,22 @@ import java.util.zip.ZipInputStream;
 
 class PlugzScanner {
 
-    public static void searchInUrl(URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map) throws ScanException {
+    public static void searchInUrl(ILogger log, URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map) throws ScanException {
         String fileName = url.getFile();
 
         if(fileName.endsWith(".jar")){
-            searchInJar(url, base, cl, annotationClasses, map);
+            searchInJar(log, url, base, cl, annotationClasses, map);
         }
         else if(url.getProtocol().equals("file")){
             File file = new File(url.getFile());
-            searchInFolder(file, base, cl, annotationClasses, map);
+            searchInFolder(log, file, base, cl, annotationClasses, map);
         }
         else {
             throw new IllegalStateException("Not Implemented yet!");
         }
     }
 
-    private static void searchInJar(URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map) throws ScanException {
+    private static void searchInJar(ILogger log, URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map) throws ScanException {
         if(base != null) base = base.replaceAll("\\.", "/");
 
         try (ZipInputStream zip = new ZipInputStream(url.openStream())) {
@@ -43,7 +45,7 @@ class PlugzScanner {
                     name = name.substring(0, name.length() - ".class".length());
                     name = name.replaceAll("/", ".");
 
-                    loadScanClassFromName(cl, annotationClasses, map, name);
+                    loadScanClassFromName(log, cl, annotationClasses, map, name);
                 }
             }
         }
@@ -52,7 +54,7 @@ class PlugzScanner {
         }
     }
 
-    private static void searchInFolder(File file, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map) throws ScanException {
+    private static void searchInFolder(ILogger log, File file, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map) throws ScanException {
         String rootFolder = file.getAbsolutePath();
         File cur = file;
 
@@ -98,14 +100,14 @@ class PlugzScanner {
                 String name = f.getName();
                 if(name.endsWith(".class")){
                     String fullName = getFullNameFromAbsolutePath(f.getAbsolutePath(), rootFolder);
-                    loadScanClassFromName(cl, annotationClasses, map, fullName);
+                    loadScanClassFromName(log, cl, annotationClasses, map, fullName);
                 }
             }
         }
 
     }
 
-    private static void loadScanClassFromName(URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map, String name) {
+    private static void loadScanClassFromName(ILogger log, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map, String name) {
         try{
             Class<?> cls = cl.loadClass(name);
 
@@ -115,7 +117,7 @@ class PlugzScanner {
                 }
             }
         } catch (ClassNotFoundException e) {
-            Plugz.STATIC_LOG.println("[ERROR]: Something went wrong: Class [" + name + "] could not be found!");
+            log.error("Something went wrong: Class [{}] could not be found!", name);
             e.printStackTrace();
         }
     }

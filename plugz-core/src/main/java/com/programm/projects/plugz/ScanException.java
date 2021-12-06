@@ -2,9 +2,6 @@ package com.programm.projects.plugz;
 
 public class ScanException extends Exception {
 
-    public ScanException() {
-    }
-
     public ScanException(String message) {
         super(message);
     }
@@ -13,7 +10,4 @@ public class ScanException extends Exception {
         super(message, cause);
     }
 
-    public ScanException(Throwable cause) {
-        super(cause);
-    }
 }
