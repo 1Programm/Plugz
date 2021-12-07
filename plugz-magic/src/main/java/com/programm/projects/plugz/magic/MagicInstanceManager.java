@@ -6,13 +6,15 @@ import lombok.Setter;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.net.URL;
+import java.util.*;
 
 @RequiredArgsConstructor
 class MagicInstanceManager {
+
+    public static URL getUrlFromClass(Class<?> cls){
+        return cls.getProtectionDomain().getCodeSource().getLocation();
+    }
 
     private static String getMethodString(Method method){
         return method.getDeclaringClass().getName() + "#" + method.getName();
@@ -60,69 +62,112 @@ class MagicInstanceManager {
     private class MagicMethod implements IMagicMethod {
         private final Object instance;
         private final Method method;
+        private final URL fromUrl;
 
         @Override
         public Object call(Object... arguments) throws MagicInstanceException {
-            return tryInvokeMethod(instance, method, false, arguments);
+            return tryInvokeMethod(fromUrl, instance, method, false, arguments);
         }
 
         public void run() throws MagicInstanceException {
-            tryInvokeMethod(instance, method, false);
+            tryInvokeMethod(fromUrl, instance, method, false);
         }
     }
 
     private class ScheduledMagicMethod extends SchedulerMethodConfig {
         private final Object instance;
         private final Method method;
+        private final URL fromUrl;
 
-        public ScheduledMagicMethod(long startAfter, long repeatAfter, long stopAfter, Object instance, Method method) {
+        public ScheduledMagicMethod(long startAfter, long repeatAfter, long stopAfter, Object instance, Method method, URL fromUrl) {
             super(startAfter, repeatAfter, stopAfter, instance.getClass().getName() + "#" + method.getName());
             this.instance = instance;
             this.method = method;
+            this.fromUrl = fromUrl;
         }
 
         @Override
         public void run() throws MagicInstanceException {
-            tryInvokeMethod(instance, method, false);
+            tryInvokeMethod(fromUrl, instance, method, false);
         }
     }
 
-    interface MagicWire {
+    public interface MagicWire {
         void accept(Object o) throws MagicInstanceException;
     }
 
-    private final Map<Class<?>, Object> instanceMap = new HashMap<>();
-    private final Map<Class<?>, List<MagicWire>> waitMap = new HashMap<>();
+    private final Map<URL, Map<Class<?>, Object>> instanceMap = new HashMap<>();
+    private final Map<URL, Map<Class<?>, List<MagicWire>>> waitMap = new HashMap<>();
 
-    private final List<MagicMethod> postSetupMethods = new ArrayList<>();
-    private final List<MagicMethod> preShutdownMethods = new ArrayList<>();
+    private final Map<URL, List<MagicMethod>> postSetupMethods = new HashMap<>();
+    private final Map<URL, List<MagicMethod>> preShutdownMethods = new HashMap<>();
+    private final Map<URL, List<MagicMethod>> onRemoveMethods = new HashMap<>();
 
-    private final List<SchedulerMethodConfig> scheduledMethods = new ArrayList<>();
+    final Map<URL, List<SchedulerMethodConfig>> toScheduleMethods = new HashMap<>();
+    final List<URL> removeScheduleMethods = new ArrayList<>();
+    final Map<URL, List<SchedulerMethodConfig>> scheduledMethods = new HashMap<>();
 
     public <T> T instantiate(Class<T> cls) throws MagicInstanceException{
-        Object instance = instantiateFromConstructor(cls);
+        URL url = getUrlFromClass(cls);
+
+        Object instance = instantiateFromConstructor(url, cls);
 
         if(instance == null){
             return null; // Must wait for other instances
         }
 
-        tryMagicFields(cls, instance);
-        tryMagicMethods(cls, instance);
+        tryMagicFields(url, cls, instance);
+        tryMagicMethods(url, cls, instance);
 
-        registerInstance(cls, instance);
+        registerInstance(url, cls, instance);
 
         return cls.cast(instance);
+    }
+
+    public void removeUrl(URL url, boolean notifyInstances) throws MagicInstanceException{
+        //Remove instances
+        instanceMap.remove(url);
+
+        //Remove from waitMap
+        waitMap.remove(url);
+
+        //Remove postSetupMethods
+        postSetupMethods.remove(url);
+
+        //Remove preShutdownMethods
+        preShutdownMethods.remove(url);
+
+        //Call onRemoveMethods
+        if(notifyInstances) {
+            List<MagicMethod> mms = onRemoveMethods.get(url);
+            if (mms != null) {
+                for (MagicMethod mm : mms) {
+                    mm.run();
+                }
+            }
+        }
+
+        //Remove onRemoveMethods
+        onRemoveMethods.remove(url);
+
+        if(scheduledMethods.containsKey(url)) {
+            //Remove scheduledMethods
+            removeScheduleMethods.add(url);
+        }
     }
 
     public void checkWaitMap() throws MagicInstanceException {
         if(!waitMap.isEmpty()) {
             StringBuilder sb = new StringBuilder();
 
-            for(Class<?> cls : waitMap.keySet()){
-                if(sb.length() != 0){
-                    sb.append(",\n");
+            for(URL url : waitMap.keySet()){
+                Map<Class<?>, List<MagicWire>> waits = waitMap.get(url);
+                for(Class<?> cls : waits.keySet()){
+                    if(sb.length() != 0){
+                        sb.append(",\n");
+                    }
+                    sb.append("   ").append(cls.getName());
                 }
-                sb.append("   ").append(cls.getName());
             }
 
             throw new MagicInstanceException("Waiting for:\n[\n" + sb + "\n]");
@@ -130,41 +175,52 @@ class MagicInstanceManager {
     }
 
     public void callPostSetup() throws MagicInstanceException{
-        for(MagicMethod mm : postSetupMethods){
-            mm.run();
+        callPostSetupForUrls(postSetupMethods.keySet());
+    }
+
+    public void callPostSetupForUrls(Collection<URL> urls) throws MagicInstanceException{
+        for(URL url : urls) {
+            List<MagicMethod> methods = postSetupMethods.get(url);
+            for (MagicMethod mm : methods) {
+                mm.run();
+            }
         }
     }
 
     public void callPreShutdown() throws MagicInstanceException{
-        for(MagicMethod mm : preShutdownMethods){
-            mm.run();
+        for(URL url : preShutdownMethods.keySet()) {
+            List<MagicMethod> methods = preShutdownMethods.get(url);
+            for (MagicMethod mm : methods) {
+                mm.run();
+            }
         }
     }
 
     public IMagicMethod createMagicMethod(Object instance, Method method){
-        return new MagicMethod(instance, method);
+        URL fromUrl = getUrlFromClass(instance.getClass());
+        return new MagicMethod(instance, method, fromUrl);
     }
 
-    private void tryMagicFields(Class<?> cls, Object instance){
+    private void tryMagicFields(URL fromUrl, Class<?> cls, Object instance){
         Field[] fields = cls.getDeclaredFields();
 
         for(Field field : fields){
             if(field.isAnnotationPresent(Get.class)){
                 Class<?> fieldType = field.getType();
 
-                Object val = instanceMap.get(fieldType);
+                Object val = getInstanceFromCls(fieldType);
                 if(val != null){
                     putField(instance, field, val);
                     continue;
                 }
 
                 MagicWire mw = o -> putField(instance, field, o);
-                waitMap.computeIfAbsent(fieldType, pt -> new ArrayList<>()).add(mw);
+                waitMap.computeIfAbsent(fromUrl, url -> new HashMap<>()).computeIfAbsent(fieldType, pt -> new ArrayList<>()).add(mw);
             }
         }
     }
 
-    private void tryMagicMethods(Class<?> cls, Object instance) throws MagicInstanceException{
+    private void tryMagicMethods(URL fromUrl, Class<?> cls, Object instance) throws MagicInstanceException{
         Method[] methods = cls.getDeclaredMethods();
 
         for(Method method : methods){
@@ -173,38 +229,45 @@ class MagicInstanceManager {
 
                 Class<?> valType = method.getParameterTypes()[0];
 
-                Object val = instanceMap.get(valType);
+                Object val = getInstanceFromCls(valType);
                 if(val != null){
                     invokeMethod(instance, method, val);
                     continue;
                 }
 
                 MagicWire mw = o -> invokeMethod(instance, method, o);
-                waitMap.computeIfAbsent(valType, pt -> new ArrayList<>()).add(mw);
+                waitMap.computeIfAbsent(fromUrl, url -> new HashMap<>()).computeIfAbsent(valType, pt -> new ArrayList<>()).add(mw);
             }
             else {
                 if(method.isAnnotationPresent(PreSetup.class)){
-                    tryInvokeMethod(instance, method, true);
+                    tryInvokeMethod(fromUrl, instance, method, true);
                 }
-                else if(method.isAnnotationPresent(PostSetup.class)){
-                    MagicMethod mm = new MagicMethod(instance, method);
-                    postSetupMethods.add(mm);
+
+                if(method.isAnnotationPresent(PostSetup.class)){
+                    MagicMethod mm = new MagicMethod(instance, method, fromUrl);
+                    postSetupMethods.computeIfAbsent(fromUrl, url -> new ArrayList<>()).add(mm);
                 }
-                else if(method.isAnnotationPresent(PreShutdown.class)){
-                    MagicMethod mm = new MagicMethod(instance, method);
-                    preShutdownMethods.add(mm);
+
+                if(method.isAnnotationPresent(PreShutdown.class)){
+                    MagicMethod mm = new MagicMethod(instance, method, fromUrl);
+                    preShutdownMethods.computeIfAbsent(fromUrl, url -> new ArrayList<>()).add(mm);
+                }
+
+                if(method.isAnnotationPresent(OnRemove.class)){
+                    MagicMethod mm = new MagicMethod(instance, method, fromUrl);
+                    onRemoveMethods.computeIfAbsent(fromUrl, url -> new ArrayList<>()).add(mm);
                 }
 
                 if(method.isAnnotationPresent(Scheduled.class)){
                     Scheduled ann = method.getAnnotation(Scheduled.class);
-                    ScheduledMagicMethod scheduledMagicMethod = new ScheduledMagicMethod(ann.startAfter(), ann.repeat(), ann.stopAfter(), instance, method);
-                    scheduledMethods.add(scheduledMagicMethod);
+                    ScheduledMagicMethod scheduledMagicMethod = new ScheduledMagicMethod(ann.startAfter(), ann.repeat(), ann.stopAfter(), instance, method, fromUrl);
+                    toScheduleMethods.computeIfAbsent(fromUrl, url -> new ArrayList<>()).add(scheduledMagicMethod);
                 }
             }
         }
     }
 
-    private Object instantiateFromConstructor(Class<?> cls) throws MagicInstanceException {
+    private Object instantiateFromConstructor(URL fromUrl, Class<?> cls) throws MagicInstanceException {
         try {
             Constructor<?> con = cls.getConstructor();
             try {
@@ -262,7 +325,7 @@ class MagicInstanceManager {
         for(int i=0;i<paramCount;i++){
             Class<?> paramType = paramTypes[i];
 
-            Object instance = instanceMap.get(paramType);
+            Object instance = getInstanceFromCls(paramType);
             if(instance != null){
                 instances[i] = instance;
                 missingInstances--;
@@ -276,7 +339,7 @@ class MagicInstanceManager {
                     Object oInstance = mmc.tryConstruct();
 
                     if (oInstance != null) {
-                        registerInstance(cls, oInstance);
+                        registerInstance(fromUrl, cls, oInstance);
                     }
                 } catch (InstantiationException e) {
                     throw new MagicInstanceException("Class is abstract or an Interface: [" + cls.getName() + "]!", e);
@@ -287,7 +350,7 @@ class MagicInstanceManager {
                 }
             };
 
-            waitMap.computeIfAbsent(paramType, pt -> new ArrayList<>()).add(mw);
+            waitMap.computeIfAbsent(fromUrl, url -> new HashMap<>()).computeIfAbsent(paramType, pt -> new ArrayList<>()).add(mw);
         }
 
         if(missingInstances == 0){
@@ -300,37 +363,59 @@ class MagicInstanceManager {
         return null;
     }
 
-    void registerInstance(Class<?> cls, Object instance) throws MagicInstanceException {
+    public void registerInstance(URL fromUrl, Class<?> cls, Object instance) throws MagicInstanceException {
         Class<?>[] interfaces = cls.getInterfaces();
         for(Class<?> iCls : interfaces){
-            registerInstance(iCls, instance);
+            registerInstance(fromUrl, iCls, instance);
         }
 
-        instanceMap.put(cls, instance);
+        instanceMap.computeIfAbsent(fromUrl, url -> new HashMap<>()).put(cls, instance);
 
-        List<MagicWire> mws = waitMap.get(cls);
+        Map<URL, List<MagicWire>> waitingWires = new HashMap<>();
 
-        if(mws != null){
-            for(MagicWire mw : mws){
+        for(URL url : waitMap.keySet()){
+            List<MagicWire> mws = waitMap.get(url).get(cls);
+            if(mws != null){
+                waitingWires.put(url, mws);
+            }
+        }
+
+        for(URL url : waitingWires.keySet()){
+            List<MagicWire> mws = waitingWires.get(url);
+            for(MagicWire mw : mws) {
                 mw.accept(instance);
             }
+        }
 
-            waitMap.remove(cls);
+        for(URL url : waitingWires.keySet()) {
+            Map<Class<?>, List<MagicWire>> wireMap = waitMap.get(url);
+            if(wireMap != null){
+                wireMap.remove(cls);
+            }
         }
     }
 
+    private Object getInstanceFromCls(Class<?> cls){
+        Object instance = null;
+
+        for(URL url : instanceMap.keySet()){
+            Map<Class<?>, Object> instances = instanceMap.get(url);
+            instance = instances.get(cls);
+
+            if(instance != null) break;
+        }
+
+        return instance;
+    }
+
     <T> T getInstance(Class<T> cls) throws MagicInstanceException {
-        Object obj = instanceMap.get(cls);
+        Object obj = getInstanceFromCls(cls);
 
         if(obj == null){
             throw new MagicInstanceException("No instance for class [" + cls.getName() + "] found!");
         }
 
         return cls.cast(obj);
-    }
-
-    List<SchedulerMethodConfig> buildRunnableListForScheduledMethods(){
-        return scheduledMethods;
     }
 
     private Object invokeConstructor(Constructor<?> con, Object[] args) throws MagicInstanceException {
@@ -356,7 +441,7 @@ class MagicInstanceManager {
         }
     }
 
-    private Object tryInvokeMethod(Object instance, Method method, boolean acceptsWait, Object... arguments) throws MagicInstanceException {
+    private Object tryInvokeMethod(URL fromUrl, Object instance, Method method, boolean acceptsWait, Object... arguments) throws MagicInstanceException {
         int paramCount = method.getParameterCount();
         Class<?>[] paramTypes = method.getParameterTypes();
         Object[] args = new Object[paramCount];
@@ -388,7 +473,7 @@ class MagicInstanceManager {
                 missingInstances--;
             }
             else {
-                Object val = instanceMap.get(paramType);
+                Object val = getInstanceFromCls(paramType);
                 if (val != null) {
                     args[i] = val;
                     missingInstances--;
@@ -409,7 +494,7 @@ class MagicInstanceManager {
 
                 if (!acceptsWait)
                     throw new MagicInstanceException("Method [" + getMethodString(method) + "] expects to get all values and cannot wait for them! - Could not find value for class: [" + paramType.getName() + "]");
-                waitMap.computeIfAbsent(paramType, pt -> new ArrayList<>()).add(mw);
+                waitMap.computeIfAbsent(fromUrl, url -> new HashMap<>()).computeIfAbsent(paramType, pt -> new ArrayList<>()).add(mw);
             }
         }
 
