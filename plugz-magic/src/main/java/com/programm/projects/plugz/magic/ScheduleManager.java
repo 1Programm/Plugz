@@ -25,13 +25,18 @@ class ScheduleManager implements ISchedules {
             }
         }
 
+        List<URL> urls = new ArrayList<>();
         while(running && !paused){
             try {
                 Thread.sleep(100);
 
                 now = curTime();
-                for(URL url : schedulerConfigs.keySet()) {
+                urls.clear();
+                urls.addAll(schedulerConfigs.keySet());
+
+                for(URL url : urls) {
                     List<SchedulerMethodConfig> configs = schedulerConfigs.get(url);
+                    if(configs == null) continue;
 
                     for (int i = 0; i < configs.size(); i++) {
                         try {

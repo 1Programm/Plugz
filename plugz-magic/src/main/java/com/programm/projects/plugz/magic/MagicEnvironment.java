@@ -95,16 +95,7 @@ public class MagicEnvironment {
     public void startup(){
         scan();
         instantiate();
-
-        Map<URL, List<SchedulerMethodConfig>> configs = instanceManager.toScheduleMethods;
-        for(URL url : configs.keySet()) {
-            for(SchedulerMethodConfig config : configs.get(url)) {
-                scheduleManager.scheduleRunnable(url, config);
-            }
-        }
-
-        instanceManager.scheduledMethods.putAll(configs);
-        configs.clear();
+        passScheduledMethods();
     }
 
     public void shutdown(){
@@ -130,12 +121,15 @@ public class MagicEnvironment {
 
                 scheduleManager.removeUrl(url);
                 plugz.removeUrl(url);
+                searchedUrls.remove(url);
+                searchedBases.remove(url);
             }
             else if(toSearchUrls.contains(url)){
                 toSearchUrls.remove(url);
                 toSearchBases.remove(url);
             }
         }
+        toRemoveUrls.clear();
 
         List<URL> addedUrls = new ArrayList<>(toSearchUrls);
 
@@ -170,6 +164,9 @@ public class MagicEnvironment {
         } catch (MagicInstanceException e){
             throw new MagicRuntimeException("Exception while calling post setup methods.", e);
         }
+
+        //Schedule new Methods
+        passScheduledMethods();
     }
 
     private void scan(){
@@ -226,6 +223,17 @@ public class MagicEnvironment {
                 throw new MagicRuntimeException("Could not instantiate Service classes.", e);
             }
         }
+    }
+
+    private void passScheduledMethods(){
+        Map<URL, List<SchedulerMethodConfig>> configs = instanceManager.toScheduleMethods;
+        for(URL url : configs.keySet()) {
+            for(SchedulerMethodConfig config : configs.get(url)) {
+                scheduleManager.scheduleRunnable(url, config);
+            }
+        }
+
+        configs.clear();
     }
 
     public void postSetup() {

@@ -104,8 +104,6 @@ class MagicInstanceManager {
     private final Map<URL, List<MagicMethod>> onRemoveMethods = new HashMap<>();
 
     final Map<URL, List<SchedulerMethodConfig>> toScheduleMethods = new HashMap<>();
-    final List<URL> removeScheduleMethods = new ArrayList<>();
-    final Map<URL, List<SchedulerMethodConfig>> scheduledMethods = new HashMap<>();
 
     public <T> T instantiate(Class<T> cls) throws MagicInstanceException{
         URL url = getUrlFromClass(cls);
@@ -149,11 +147,6 @@ class MagicInstanceManager {
 
         //Remove onRemoveMethods
         onRemoveMethods.remove(url);
-
-        if(scheduledMethods.containsKey(url)) {
-            //Remove scheduledMethods
-            removeScheduleMethods.add(url);
-        }
     }
 
     public void checkWaitMap() throws MagicInstanceException {
@@ -162,11 +155,13 @@ class MagicInstanceManager {
 
             for(URL url : waitMap.keySet()){
                 Map<Class<?>, List<MagicWire>> waits = waitMap.get(url);
-                for(Class<?> cls : waits.keySet()){
-                    if(sb.length() != 0){
-                        sb.append(",\n");
+                if(waits != null) {
+                    for (Class<?> cls : waits.keySet()) {
+                        if (sb.length() != 0) {
+                            sb.append(",\n");
+                        }
+                        sb.append("   ").append(cls.getName());
                     }
-                    sb.append("   ").append(cls.getName());
                 }
             }
 
@@ -181,8 +176,10 @@ class MagicInstanceManager {
     public void callPostSetupForUrls(Collection<URL> urls) throws MagicInstanceException{
         for(URL url : urls) {
             List<MagicMethod> methods = postSetupMethods.get(url);
-            for (MagicMethod mm : methods) {
-                mm.run();
+            if(methods != null) {
+                for (MagicMethod mm : methods) {
+                    mm.run();
+                }
             }
         }
     }
@@ -190,8 +187,10 @@ class MagicInstanceManager {
     public void callPreShutdown() throws MagicInstanceException{
         for(URL url : preShutdownMethods.keySet()) {
             List<MagicMethod> methods = preShutdownMethods.get(url);
-            for (MagicMethod mm : methods) {
-                mm.run();
+            if(methods != null) {
+                for (MagicMethod mm : methods) {
+                    mm.run();
+                }
             }
         }
     }
