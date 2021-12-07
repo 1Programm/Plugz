@@ -7,31 +7,30 @@ import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 class PlugzScanner {
 
-    public static void searchInUrl(ILogger log, URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map) throws ScanException {
+    final Map<Class<? extends Annotation>, List<Class<?>>> foundAnnotationClasses = new HashMap<>();
+
+    public void searchInUrl(ILogger log, URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses) throws ScanException {
         String fileName = url.getFile();
 
         if(fileName.endsWith(".jar")){
-            searchInJar(log, url, base, cl, annotationClasses, map);
+            searchInJar(log, url, base, cl, annotationClasses);
         }
         else if(url.getProtocol().equals("file")){
             File file = new File(url.getFile());
-            searchInFolder(log, file, base, cl, annotationClasses, map);
+            searchInFolder(log, file, base, cl, annotationClasses);
         }
         else {
             throw new IllegalStateException("Not Implemented yet!");
         }
     }
 
-    private static void searchInJar(ILogger log, URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map) throws ScanException {
+    private void searchInJar(ILogger log, URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses) throws ScanException {
         if(base != null) base = base.replaceAll("\\.", "/");
 
         try (ZipInputStream zip = new ZipInputStream(url.openStream())) {
@@ -45,7 +44,7 @@ class PlugzScanner {
                     name = name.substring(0, name.length() - ".class".length());
                     name = name.replaceAll("/", ".");
 
-                    loadScanClassFromName(log, cl, annotationClasses, map, name);
+                    loadScanClassFromName(log, cl, annotationClasses, name);
                 }
             }
         }
@@ -54,7 +53,7 @@ class PlugzScanner {
         }
     }
 
-    private static void searchInFolder(ILogger log, File file, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map) throws ScanException {
+    private void searchInFolder(ILogger log, File file, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses) throws ScanException {
         String rootFolder = file.getAbsolutePath();
         File cur = file;
 
@@ -100,20 +99,20 @@ class PlugzScanner {
                 String name = f.getName();
                 if(name.endsWith(".class")){
                     String fullName = getFullNameFromAbsolutePath(f.getAbsolutePath(), rootFolder);
-                    loadScanClassFromName(log, cl, annotationClasses, map, fullName);
+                    loadScanClassFromName(log, cl, annotationClasses, fullName);
                 }
             }
         }
 
     }
 
-    private static void loadScanClassFromName(ILogger log, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> map, String name) {
+    private void loadScanClassFromName(ILogger log, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, String name) {
         try{
             Class<?> cls = cl.loadClass(name);
 
             for(Class<? extends Annotation> annotationClass : annotationClasses){
                 if(cls.isAnnotationPresent(annotationClass)){
-                    map.computeIfAbsent(annotationClass, ac -> new ArrayList<>()).add(cls);
+                    foundAnnotationClasses.computeIfAbsent(annotationClass, ac -> new ArrayList<>()).add(cls);
                 }
             }
         } catch (ClassNotFoundException e) {
@@ -122,7 +121,7 @@ class PlugzScanner {
         }
     }
 
-    private static String getFullNameFromAbsolutePath(String path, String rootFolder){
+    private String getFullNameFromAbsolutePath(String path, String rootFolder){
         path = path.substring(rootFolder.length(), path.length() - ".class".length());
         if(path.startsWith("/")) path = path.substring(1);
         return path.replaceAll("/", ".");
