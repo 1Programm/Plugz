@@ -11,7 +11,6 @@
 
     <modules>
         <module>plugz-core</module>
-        <module>plugz-test</module>
         <module>plugz-magic</module>
     </modules>
 
