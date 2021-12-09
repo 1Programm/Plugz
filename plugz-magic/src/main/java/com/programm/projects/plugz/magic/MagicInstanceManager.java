@@ -394,6 +394,13 @@ class MagicInstanceManager {
             Map<Class<?>, List<MagicWire>> wireMap = waitMap.get(url);
             if(wireMap != null){
                 wireMap.remove(cls);
+
+                if(wireMap.size() == 0){
+                    waitMap.remove(url);
+                }
+            }
+            else {
+                waitMap.remove(url);
             }
         }
     }
