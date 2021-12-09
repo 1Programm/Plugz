@@ -1,7 +1,6 @@
 package com.programm.projects.plugz.magic;
 
 import com.programm.projects.ioutils.log.api.out.ILogger;
-import com.programm.projects.ioutils.log.api.out.NullLogger;
 import com.programm.projects.plugz.Plugz;
 import com.programm.projects.plugz.ScanException;
 import com.programm.projects.plugz.magic.api.IMagicMethod;
@@ -108,21 +107,30 @@ public class MagicEnvironment {
         }
     }
 
-    public void refresh(){
+    public Changes refresh(){
+        Changes changes = new Changes();
+
         //Remove urls
         for(URL url : toRemoveUrls){
             if(searchedUrls.contains(url)){
                 try {
-                    instanceManager.removeUrl(url, notifyClassesFromRemovedUrl);
+                    Map<Class<?>, Object> removedInstances = instanceManager.removeUrl(url, notifyClassesFromRemovedUrl);
+                    if(removedInstances != null){
+                        changes.removedInstancesMap.put(url, removedInstances);
+                    }
                 }
                 catch (MagicInstanceException e){
                     throw new MagicRuntimeException("Failed to remove url [" + url + "].", e);
                 }
 
                 scheduleManager.removeUrl(url);
-                plugz.removeUrl(url);
                 searchedUrls.remove(url);
                 searchedBases.remove(url);
+
+                Map<Class<? extends Annotation>, List<Class<?>>> removedAnnotatedClasses = plugz.removeUrl(url);
+                if(removedAnnotatedClasses != null){
+                    changes.removedAnnotationClassesMap.put(url, removedAnnotatedClasses);
+                }
             }
             else if(toSearchUrls.contains(url)){
                 toSearchUrls.remove(url);
@@ -134,7 +142,7 @@ public class MagicEnvironment {
         List<URL> addedUrls = new ArrayList<>(toSearchUrls);
 
         //Scan urls
-        scan();
+        changes.newAnnotatedClassesMap = scan();
 
         //Instantiate
         for(URL url : addedUrls){
@@ -142,7 +150,8 @@ public class MagicEnvironment {
             if(classes != null){
                 try {
                     for (Class<?> cls : classes) {
-                        instanceManager.instantiate(cls);
+                        Object instance = instanceManager.instantiate(cls);
+                        changes.addedInstancesMap.computeIfAbsent(url, u -> new HashMap<>()).put(cls, instance);
                     }
                 } catch (MagicInstanceException e) {
                     throw new MagicRuntimeException("Could not instantiate Service classes from url: [" + url + "].", e);
@@ -166,10 +175,12 @@ public class MagicEnvironment {
         }
 
         //Schedule new Methods
-        passScheduledMethods();
+        changes.addedScheduledMethods = passScheduledMethods();
+
+        return changes;
     }
 
-    private void scan(){
+    private Map<URL, Map<Class<? extends Annotation>, List<Class<?>>>> scan(){
         List<URL> urls = new ArrayList<>(this.toSearchUrls);
         Map<URL, String> bases = new HashMap<>(this.toSearchBases);
         toSearchUrls.clear();
@@ -199,9 +210,11 @@ public class MagicEnvironment {
             }
         }
 
+        Map<URL, Map<Class<? extends Annotation>, List<Class<?>>>> newAnnotatedClassesMap = null;
+
         if(newUrls.size() > 0) {
             try {
-                plugz.scan(newUrls, newBases, searchedAnnotations);
+                newAnnotatedClassesMap = plugz.scan(newUrls, newBases, searchedAnnotations);
             } catch (ScanException e) {
                 throw new IllegalStateException("Failed to execute scan: " + e.getMessage(), e);
             }
@@ -209,6 +222,8 @@ public class MagicEnvironment {
             searchedUrls.addAll(newUrls);
             searchedBases.putAll(newBases);
         }
+
+        return newAnnotatedClassesMap;
     }
 
     private void instantiate(){
@@ -225,15 +240,17 @@ public class MagicEnvironment {
         }
     }
 
-    private void passScheduledMethods(){
-        Map<URL, List<SchedulerMethodConfig>> configs = instanceManager.toScheduleMethods;
+    private Map<URL, List<SchedulerMethodConfig>> passScheduledMethods(){
+        Map<URL, List<SchedulerMethodConfig>> configs = new HashMap<>(instanceManager.toScheduleMethods);
+        instanceManager.toScheduleMethods.clear();
+
         for(URL url : configs.keySet()) {
             for(SchedulerMethodConfig config : configs.get(url)) {
                 scheduleManager.scheduleRunnable(url, config);
             }
         }
 
-        configs.clear();
+        return configs;
     }
 
     public void postSetup() {

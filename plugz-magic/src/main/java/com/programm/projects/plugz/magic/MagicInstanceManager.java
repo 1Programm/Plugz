@@ -5,11 +5,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.*;
 
-@RequiredArgsConstructor
 class MagicInstanceManager {
 
     public static URL getUrlFromClass(Class<?> cls){
@@ -122,9 +124,9 @@ class MagicInstanceManager {
         return cls.cast(instance);
     }
 
-    public void removeUrl(URL url, boolean notifyInstances) throws MagicInstanceException{
+    public Map<Class<?>, Object> removeUrl(URL url, boolean notifyInstances) throws MagicInstanceException{
         //Remove instances
-        instanceMap.remove(url);
+        Map<Class<?>, Object> removedInstances = instanceMap.remove(url);
 
         //Remove from waitMap
         waitMap.remove(url);
@@ -147,6 +149,8 @@ class MagicInstanceManager {
 
         //Remove onRemoveMethods
         onRemoveMethods.remove(url);
+
+        return removedInstances;
     }
 
     public void checkWaitMap() throws MagicInstanceException {
