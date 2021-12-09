@@ -16,26 +16,40 @@ public class Plugz {
     public final Map<URL, PlugzScanner> urlScannerMap = new HashMap<>();
     private ILogger log = new NullLogger();
 
-    public void scan(List<URL> scanPaths, Map<URL, String> basePackageMap, List<Class<? extends Annotation>> clsAnnotations) throws ScanException {
+    public Map<URL, Map<Class<? extends Annotation>, List<Class<?>>>> scan(List<URL> scanPaths, Map<URL, String> basePackageMap, List<Class<? extends Annotation>> clsAnnotations) throws ScanException {
         if(scanPaths.isEmpty()){
             log.warn("No scan paths defined.");
-            return;
+            return null;
         }
+
+        Map<URL, Map<Class<? extends Annotation>, List<Class<?>>>> newAnnotatedClassesMap = new HashMap<>();
 
         URL[] scanPathArray = scanPaths.toArray(new URL[0]);
         URLClassLoader classLoader = URLClassLoader.newInstance(scanPathArray);
 
         for (URL url : scanPathArray) {
-            PlugzScanner scanner = new PlugzScanner();
-            urlScannerMap.put(url, scanner);
+            PlugzScanner scanner = urlScannerMap.get(url);
+
+            if(scanner == null) {
+                scanner = new PlugzScanner();
+                urlScannerMap.put(url, scanner);
+            }
 
             String basePackage = basePackageMap.getOrDefault(url, "");
-            scanner.searchInUrl(log, url, basePackage, classLoader, clsAnnotations);
+            Map<Class<? extends Annotation>, List<Class<?>>> newAnnotatedClasses = scanner.searchInUrl(log, url, basePackage, classLoader, clsAnnotations);
+
+            newAnnotatedClassesMap.put(url, newAnnotatedClasses);
         }
+
+        return newAnnotatedClassesMap;
     }
 
-    public void removeUrl(URL url){
-        urlScannerMap.remove(url);
+    public Map<Class<? extends Annotation>, List<Class<?>>> removeUrl(URL url){
+        PlugzScanner scanner = urlScannerMap.remove(url);
+
+        if(scanner == null) return null;
+
+        return scanner.foundAnnotationClasses;
     }
 
     public List<Class<?>> getAnnotatedWith(Class<? extends Annotation> cls){

@@ -15,22 +15,26 @@ class PlugzScanner {
 
     final Map<Class<? extends Annotation>, List<Class<?>>> foundAnnotationClasses = new HashMap<>();
 
-    public void searchInUrl(ILogger log, URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses) throws ScanException {
+    public Map<Class<? extends Annotation>, List<Class<?>>> searchInUrl(ILogger log, URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses) throws ScanException {
+        Map<Class<? extends Annotation>, List<Class<?>>> newAnnotatedClasses = new HashMap<>();
+
         String fileName = url.getFile();
 
         if(fileName.endsWith(".jar")){
-            searchInJar(log, url, base, cl, annotationClasses);
+            searchInJar(log, url, base, cl, annotationClasses, newAnnotatedClasses);
         }
         else if(url.getProtocol().equals("file")){
             File file = new File(url.getFile());
-            searchInFolder(log, file, base, cl, annotationClasses);
+            searchInFolder(log, file, base, cl, annotationClasses, newAnnotatedClasses);
         }
         else {
             throw new IllegalStateException("Not Implemented yet!");
         }
+
+        return newAnnotatedClasses;
     }
 
-    private void searchInJar(ILogger log, URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses) throws ScanException {
+    private void searchInJar(ILogger log, URL url, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> newAnnotatedClasses) throws ScanException {
         if(base != null) base = base.replaceAll("\\.", "/");
 
         try (ZipInputStream zip = new ZipInputStream(url.openStream())) {
@@ -44,7 +48,7 @@ class PlugzScanner {
                     name = name.substring(0, name.length() - ".class".length());
                     name = name.replaceAll("/", ".");
 
-                    loadScanClassFromName(log, cl, annotationClasses, name);
+                    loadScanClassFromName(log, cl, annotationClasses, name, newAnnotatedClasses);
                 }
             }
         }
@@ -53,7 +57,7 @@ class PlugzScanner {
         }
     }
 
-    private void searchInFolder(ILogger log, File file, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses) throws ScanException {
+    private void searchInFolder(ILogger log, File file, String base, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, Map<Class<? extends Annotation>, List<Class<?>>> newAnnotatedClasses) throws ScanException {
         String rootFolder = file.getAbsolutePath();
         File cur = file;
 
@@ -99,20 +103,25 @@ class PlugzScanner {
                 String name = f.getName();
                 if(name.endsWith(".class")){
                     String fullName = getFullNameFromAbsolutePath(f.getAbsolutePath(), rootFolder);
-                    loadScanClassFromName(log, cl, annotationClasses, fullName);
+                    loadScanClassFromName(log, cl, annotationClasses, fullName, newAnnotatedClasses);
                 }
             }
         }
 
     }
 
-    private void loadScanClassFromName(ILogger log, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, String name) {
+    private void loadScanClassFromName(ILogger log, URLClassLoader cl, List<Class<? extends Annotation>> annotationClasses, String name, Map<Class<? extends Annotation>, List<Class<?>>> newAnnotatedClasses) {
         try{
             Class<?> cls = cl.loadClass(name);
 
             for(Class<? extends Annotation> annotationClass : annotationClasses){
                 if(cls.isAnnotationPresent(annotationClass)){
-                    foundAnnotationClasses.computeIfAbsent(annotationClass, ac -> new ArrayList<>()).add(cls);
+                    List<Class<?>> classes = foundAnnotationClasses.computeIfAbsent(annotationClass, ac -> new ArrayList<>());
+
+                    if(!classes.contains(cls)){
+                        classes.add(cls);
+                        newAnnotatedClasses.computeIfAbsent(annotationClass, c -> new ArrayList<>()).add(cls);
+                    }
                 }
             }
         } catch (ClassNotFoundException e) {
