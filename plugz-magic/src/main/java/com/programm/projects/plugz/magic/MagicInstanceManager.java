@@ -342,6 +342,8 @@ class MagicInstanceManager {
                     Object oInstance = mmc.tryConstruct();
 
                     if (oInstance != null) {
+                        tryMagicFields(fromUrl, cls, oInstance);
+                        tryMagicMethods(fromUrl, cls, oInstance);
                         registerInstance(fromUrl, cls, oInstance);
                     }
                 } catch (InstantiationException e) {
