@@ -1,6 +1,7 @@
 package com.programm.projects.plugz.magic;
 
 import com.programm.projects.ioutils.log.api.out.ILogger;
+import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.plugz.Plugz;
 import com.programm.projects.plugz.ScanException;
 import com.programm.projects.plugz.magic.api.IMagicMethod;
@@ -12,6 +13,7 @@ import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.*;
 
+@Logger("Magic-Environment")
 public class MagicEnvironment {
 
     private final Plugz plugz = new Plugz();
@@ -39,7 +41,7 @@ public class MagicEnvironment {
     public MagicEnvironment(String basePackage){
         this.plugz.setLogger(log);
         this.instanceManager = new MagicInstanceManager();
-        this.scheduleManager = new ScheduleManager();
+        this.scheduleManager = new ScheduleManager(log);
         this.basePackageOfCallingClass = basePackage;
 
         this.searchedAnnotations.add(Service.class);
@@ -49,6 +51,7 @@ public class MagicEnvironment {
     }
 
     public MagicEnvironment disableCallingUrl(){
+        log.debug("Disabling caller url.");
         disableCallingUrl = true;
         return this;
     }
@@ -83,7 +86,7 @@ public class MagicEnvironment {
             return instanceManager.getInstance(cls);
         }
         catch (MagicInstanceException e){
-            throw new MagicRuntimeException("Failed to get instance!", e);
+            throw new MagicRuntimeException("Failed to get instance for class [" + cls + "]!", e);
         }
     }
 
@@ -92,64 +95,86 @@ public class MagicEnvironment {
     }
 
     public void startup(){
+        log.info("Starting up environment.");
+
+        log.debug("Scanning for annotations...");
         scan();
+
+        log.debug("Instantiating found classes.");
         instantiate();
+
+        log.debug("Passing scheduler methods to Schedule-Manager.");
         passScheduledMethods();
     }
 
     public void shutdown(){
+        log.info("Shutting down environment.");
+
+        log.debug("Shutting down Schedule-Manager...");
         scheduleManager.shutdown();
 
         try {
+            log.debug("Calling pre shutdown methods...");
             instanceManager.callPreShutdown();
         } catch (MagicInstanceException e){
             throw new MagicRuntimeException("Exception while calling pre shutdown.", e);
         }
+
+        log.debug("Finished shutting down.");
     }
 
     public Changes refresh(){
+        log.info("[RE]: Refreshing the environment...");
         Changes changes = new Changes();
 
         //Remove urls
-        for(URL url : toRemoveUrls){
-            if(searchedUrls.contains(url)){
-                try {
-                    Map<Class<?>, Object> removedInstances = instanceManager.removeUrl(url, notifyClassesFromRemovedUrl);
-                    if(removedInstances != null){
-                        changes.removedInstancesMap.put(url, removedInstances);
+        if(toRemoveUrls.size() > 0) {
+            log.debug("[RE]: Removing [{}] urls from the environment...", toRemoveUrls.size());
+            for (URL url : toRemoveUrls) {
+                if (searchedUrls.contains(url)) {
+                    log.trace("[RE]: Removing url [{}]...", url);
+
+                    try {
+                        Map<Class<?>, Object> removedInstances = instanceManager.removeUrl(url, notifyClassesFromRemovedUrl);
+                        if (removedInstances != null) {
+                            changes.removedInstancesMap.put(url, removedInstances);
+                        }
+                    } catch (MagicInstanceException e) {
+                        throw new MagicRuntimeException("Failed to remove url [" + url + "].", e);
                     }
-                }
-                catch (MagicInstanceException e){
-                    throw new MagicRuntimeException("Failed to remove url [" + url + "].", e);
-                }
 
-                scheduleManager.removeUrl(url);
-                searchedUrls.remove(url);
-                searchedBases.remove(url);
+                    scheduleManager.removeUrl(url);
+                    searchedUrls.remove(url);
+                    searchedBases.remove(url);
 
-                Map<Class<? extends Annotation>, List<Class<?>>> removedAnnotatedClasses = plugz.removeUrl(url);
-                if(removedAnnotatedClasses != null){
-                    changes.removedAnnotationClassesMap.put(url, removedAnnotatedClasses);
+                    Map<Class<? extends Annotation>, List<Class<?>>> removedAnnotatedClasses = plugz.removeUrl(url);
+                    if (removedAnnotatedClasses != null) {
+                        changes.removedAnnotationClassesMap.put(url, removedAnnotatedClasses);
+                    }
+                } else if (toSearchUrls.contains(url)) {
+                    toSearchUrls.remove(url);
+                    toSearchBases.remove(url);
                 }
             }
-            else if(toSearchUrls.contains(url)){
-                toSearchUrls.remove(url);
-                toSearchBases.remove(url);
-            }
+
+            toRemoveUrls.clear();
         }
-        toRemoveUrls.clear();
 
         List<URL> addedUrls = new ArrayList<>(toSearchUrls);
 
         //Scan urls
+        log.debug("[RE]: Scanning for annotations...");
         changes.newAnnotatedClassesMap = scan();
 
         //Instantiate
         for(URL url : addedUrls){
             List<Class<?>> classes = plugz.getAnnotatedWithFromUrl(Service.class, url);
+            log.debug("[RE]: Instantiating [{}] @Service classes from [{}].", (classes == null ? 0 : classes.size()), url);
+
             if(classes != null){
                 try {
                     for (Class<?> cls : classes) {
+                        log.trace("[RE]: Instantiating [{}]...", cls.toString());
                         Object instance = instanceManager.instantiate(cls);
                         changes.addedInstancesMap.computeIfAbsent(url, u -> new HashMap<>()).put(cls, instance);
                     }
@@ -162,6 +187,7 @@ public class MagicEnvironment {
 
         //Post setup phase
         try {
+            log.debug("[RE]: Checking wait map...");
             instanceManager.checkWaitMap();
         }
         catch (MagicInstanceException e){
@@ -169,12 +195,14 @@ public class MagicEnvironment {
         }
 
         try {
+            log.debug("[RE]: Calling post setup methods...");
             instanceManager.callPostSetupForUrls(addedUrls);
         } catch (MagicInstanceException e){
             throw new MagicRuntimeException("Exception while calling post setup methods.", e);
         }
 
         //Schedule new Methods
+        log.debug("[RE]: Passing scheduler methods to Schedule-Manager.");
         changes.addedScheduledMethods = passScheduledMethods();
 
         return changes;
@@ -213,6 +241,8 @@ public class MagicEnvironment {
         Map<URL, Map<Class<? extends Annotation>, List<Class<?>>>> newAnnotatedClassesMap = null;
 
         if(newUrls.size() > 0) {
+            log.debug("Searching through [{}] new urls.", newUrls.size());
+
             try {
                 newAnnotatedClassesMap = plugz.scan(newUrls, newBases, searchedAnnotations);
             } catch (ScanException e) {
@@ -230,8 +260,10 @@ public class MagicEnvironment {
         List<Class<?>> serviceClasses = plugz.getAnnotatedWith(Service.class);
 
         if(serviceClasses != null) {
+            log.debug("Instantiating [{}] @Service classes.", serviceClasses.size());
             try {
                 for (Class<?> cls : serviceClasses) {
+                    log.trace("Instantiating [{}]...", cls.toString());
                     instanceManager.instantiate(cls);
                 }
             } catch (MagicInstanceException e) {
@@ -254,7 +286,10 @@ public class MagicEnvironment {
     }
 
     public void postSetup() {
+        log.info("Starting post setup phase.");
+
         try {
+            log.debug("Checking wait map...");
             instanceManager.checkWaitMap();
         }
         catch (MagicInstanceException e){
@@ -262,11 +297,13 @@ public class MagicEnvironment {
         }
 
         try {
+            log.debug("Calling post setup methods...");
             instanceManager.callPostSetup();
         } catch (MagicInstanceException e){
             throw new MagicRuntimeException("Exception while calling post setup methods.", e);
         }
 
+        log.debug("Starting Schedule-Manager...");
         scheduleManager.startup();
     }
 

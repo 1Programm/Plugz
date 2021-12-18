@@ -43,6 +43,7 @@ class MagicInstanceManager {
 
     @RequiredArgsConstructor
     private static class MissingMagicMethod {
+        final Object instance;
         final Method method;
         final Object[] argsArray;
         @Setter
@@ -56,7 +57,7 @@ class MagicInstanceManager {
         public void tryInvoke() throws IllegalAccessException, InvocationTargetException{
             if(numEmptyArgs > 0) return;
 
-            method.invoke(argsArray);
+            method.invoke(instance, argsArray);
         }
     }
 
@@ -461,7 +462,7 @@ class MagicInstanceManager {
 
         int argumentIndex = 0;
 
-        MissingMagicMethod mmm = new MissingMagicMethod(method, args);
+        MissingMagicMethod mmm = new MissingMagicMethod(instance, method, args);
 
         Annotation[][] parameterAnnotations = method.getParameterAnnotations();
         for(int i=0;i<paramCount;i++){
@@ -526,7 +527,13 @@ class MagicInstanceManager {
 
     private Object invokeMethod(Object instance, Method method, Object... args) throws MagicInstanceException{
         try {
-            return method.invoke(instance, args);
+            boolean canAccess = method.canAccess(instance);
+
+            if(!canAccess) method.setAccessible(true);
+            Object ret = method.invoke(instance, args);
+            if(!canAccess) method.setAccessible(false);
+
+            return ret;
         } catch (IllegalAccessException e) {
             throw new IllegalStateException("INVALID STATE: Method [" + getMethodString(method) + "] should not be here when it is private!");
         } catch (InvocationTargetException e) {

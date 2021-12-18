@@ -1,6 +1,9 @@
 package com.programm.projects.plugz.magic;
 
+import com.programm.projects.ioutils.log.api.out.ILogger;
+import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.plugz.magic.api.ISchedules;
+import lombok.RequiredArgsConstructor;
 
 import java.net.URL;
 import java.util.ArrayList;
@@ -8,11 +11,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@RequiredArgsConstructor
+@Logger("Scheduler")
 class ScheduleManager implements ISchedules {
+
+    private static final long MIN_SLEEP = 100L;
 
     private final Thread schedulerThread = new Thread(this::run, "Scheduler#1");
     private final Map<URL, List<SchedulerMethodConfig>> schedulerConfigs = new HashMap<>();
     private final Map<String, SchedulerMethodConfig> mappedBeanConfigs = new HashMap<>();
+    private final ILogger log;
 
     private boolean running;
     private boolean paused;
@@ -28,7 +36,7 @@ class ScheduleManager implements ISchedules {
         List<URL> urls = new ArrayList<>();
         while(running && !paused){
             try {
-                Thread.sleep(100);
+                Thread.sleep(MIN_SLEEP);
 
                 now = curTime();
                 urls.clear();
@@ -73,9 +81,22 @@ class ScheduleManager implements ISchedules {
             }
             catch (InterruptedException ignore){}
 
-            if(schedulerConfigs.size() == 0){
+            int runningConfigs = 0;
+            for(URL url : schedulerConfigs.keySet()){
+                List<SchedulerMethodConfig> configs = schedulerConfigs.get(url);
+                runningConfigs += configs == null ? 0 : configs.size();
+            }
+
+            if(runningConfigs == 0){
                 paused = true;
             }
+        }
+
+        if(!running) {
+            log.info("Shutdown.");
+        }
+        else {
+            log.info("Paused and will wake up if a new Scheduled method is detected.");
         }
     }
 
@@ -88,6 +109,8 @@ class ScheduleManager implements ISchedules {
         running = true;
         paused = false;
 
+
+        log.info("Started.");
         schedulerThread.start();
     }
 
@@ -97,11 +120,18 @@ class ScheduleManager implements ISchedules {
     }
 
     public void scheduleRunnable(URL fromUrl, SchedulerMethodConfig config){
+        log.debug("Scheduling method: [{}].", config.beanString);
+
+        if(config.repeatAfter < MIN_SLEEP){
+            log.warn("Scheduled method ({}) cannot run faster than every {} milliseconds!", config.beanString, MIN_SLEEP);
+        }
+
         schedulerConfigs.computeIfAbsent(fromUrl, url -> new ArrayList<>()).add(config);
         mappedBeanConfigs.put(config.beanString, config);
 
         if(running && paused) {
             paused = false;
+            log.info("Restarting paused thread for scheduling.");
             schedulerThread.start();
         }
 
@@ -112,12 +142,16 @@ class ScheduleManager implements ISchedules {
     }
 
     public void removeUrl(URL url){
+        log.debug("Removing url: [{}].", url);
+
         List<SchedulerMethodConfig> configs = schedulerConfigs.remove(url);
 
         if(configs != null){
             for(SchedulerMethodConfig config : configs){
                 mappedBeanConfigs.remove(config.beanString);
             }
+
+            log.debug("Removed {} scheduled methods.", configs.size(), url);
         }
     }
 
