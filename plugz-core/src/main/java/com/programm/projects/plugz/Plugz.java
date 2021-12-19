@@ -1,6 +1,7 @@
 package com.programm.projects.plugz;
 
 import com.programm.projects.ioutils.log.api.out.ILogger;
+import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.ioutils.log.api.out.NullLogger;
 
 import java.lang.annotation.Annotation;
@@ -11,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@Logger("Plugz")
 public class Plugz {
 
     public final Map<URL, PlugzScanner> urlScannerMap = new HashMap<>();
@@ -28,6 +30,7 @@ public class Plugz {
         URLClassLoader classLoader = URLClassLoader.newInstance(scanPathArray);
 
         for (URL url : scanPathArray) {
+            log.debug("Scanning url: [{}]...", url);
             PlugzScanner scanner = urlScannerMap.get(url);
 
             if(scanner == null) {

@@ -1,6 +1,7 @@
 package com.programm.projects.plugz;
 
 import com.programm.projects.ioutils.log.api.out.ILogger;
+import com.programm.projects.ioutils.log.api.out.Logger;
 
 import java.io.File;
 import java.io.IOException;
@@ -11,6 +12,7 @@ import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+@Logger("Plugz-Scanner")
 class PlugzScanner {
 
     final Map<Class<? extends Annotation>, List<Class<?>>> foundAnnotationClasses = new HashMap<>();
@@ -21,9 +23,11 @@ class PlugzScanner {
         String fileName = url.getFile();
 
         if(fileName.endsWith(".jar")){
+            log.trace("Scanning [jar]...");
             searchInJar(log, url, base, cl, annotationClasses, newAnnotatedClasses);
         }
         else if(url.getProtocol().equals("file")){
+            log.trace("Scanning [class folder]...");
             File file = new File(url.getFile());
             searchInFolder(log, file, base, cl, annotationClasses, newAnnotatedClasses);
         }
@@ -48,6 +52,7 @@ class PlugzScanner {
                     name = name.substring(0, name.length() - ".class".length());
                     name = name.replaceAll("/", ".");
 
+                    log.trace("# Found class: [{}]", name);
                     loadScanClassFromName(log, cl, annotationClasses, name, newAnnotatedClasses);
                 }
             }
@@ -103,6 +108,8 @@ class PlugzScanner {
                 String name = f.getName();
                 if(name.endsWith(".class")){
                     String fullName = getFullNameFromAbsolutePath(f.getAbsolutePath(), rootFolder);
+
+                    log.trace("# Found class: [{}]", fullName);
                     loadScanClassFromName(log, cl, annotationClasses, fullName, newAnnotatedClasses);
                 }
             }
@@ -119,8 +126,12 @@ class PlugzScanner {
                     List<Class<?>> classes = foundAnnotationClasses.computeIfAbsent(annotationClass, ac -> new ArrayList<>());
 
                     if(!classes.contains(cls)){
+                        log.trace("### Is Annotated with: [{}].", annotationClass.getSimpleName());
                         classes.add(cls);
                         newAnnotatedClasses.computeIfAbsent(annotationClass, c -> new ArrayList<>()).add(cls);
+                    }
+                    else {
+                        log.trace("### Is Annotated with: [{}] but was already found.", annotationClass.getSimpleName());
                     }
                 }
             }
