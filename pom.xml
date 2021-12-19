@@ -12,6 +12,7 @@
     <modules>
         <module>plugz-core</module>
         <module>plugz-magic</module>
+        <module>plugz-test</module>
     </modules>
 
     <properties>
