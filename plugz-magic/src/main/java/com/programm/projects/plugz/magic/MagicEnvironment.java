@@ -30,9 +30,10 @@ public class MagicEnvironment {
     private final List<URL> toRemoveUrls = new ArrayList<>();
 
     private final String basePackageOfCallingClass;
-    private boolean disableCallingUrl;
 
+    private boolean disableCallingUrl;
     private boolean notifyClassesFromRemovedUrl = true;
+    private boolean addShutdownHook = true;
 
     public MagicEnvironment(){
         this("");
@@ -96,6 +97,11 @@ public class MagicEnvironment {
 
     public void startup(){
         log.info("Starting up environment.");
+
+        if(addShutdownHook){
+            log.debug("Adding shutdown-hook...");
+            addShutdownHook();
+        }
 
         log.debug("Scanning for annotations...");
         scan();
@@ -206,6 +212,13 @@ public class MagicEnvironment {
         changes.addedScheduledMethods = passScheduledMethods();
 
         return changes;
+    }
+
+    private void addShutdownHook(){
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            log.debug("Caught shutdown...");
+            shutdown();
+        }));
     }
 
     private Map<URL, Map<Class<? extends Annotation>, List<Class<?>>>> scan(){
@@ -325,6 +338,10 @@ public class MagicEnvironment {
 
     public void setNotifyClassesFromRemovedUrl(boolean notify){
         this.notifyClassesFromRemovedUrl = notify;
+    }
+
+    public void disableShutdownHook(){
+        this.addShutdownHook = false;
     }
 
 }
