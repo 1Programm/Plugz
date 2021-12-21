@@ -2,7 +2,7 @@ package com.programm.projects.plugz.magic.resource;
 
 import com.programm.projects.plugz.magic.api.IValueFallback;
 
-public class ResourceDefaultFallback implements IValueFallback {
+public class DefaultValueFallback implements IValueFallback {
 
     @Override
     public Object fallback(Class<?> expectedType, String resourceName, Object source) {
