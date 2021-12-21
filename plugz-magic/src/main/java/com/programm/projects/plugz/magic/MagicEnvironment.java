@@ -161,7 +161,6 @@ public class MagicEnvironment {
                 }
             }
 
-
             List<Class<?>> resourceClasses = plugz.getAnnotatedWithFromUrl(Resource.class, url);
 
             if(resourceClasses != null) {
@@ -178,6 +177,26 @@ public class MagicEnvironment {
                     }
                     catch (MagicResourceException e) {
                         throw new MagicRuntimeException("Could not instantiate Resource class: [" + cls.getName() + "] from url: [" + url + "].", e);
+                    }
+                }
+            }
+
+            List<Class<?>> resourceMergedClasses = plugz.getAnnotatedWithFromUrl(Resources.class, url);
+
+            if(resourceMergedClasses != null) {
+                log.debug("[RE]: Instantiating [{}] @Resources or classes with multiple @Resource annotations.", resourceMergedClasses.size());
+                for (Class<?> cls : resourceMergedClasses) {
+                    try {
+                        log.trace("[RE]: Building merged resource [{}]...", cls.toString());
+                        Object resourceObject = resourcesManager.buildMergedResourceObject(cls);
+
+                        if(resourceObject != null) {
+                            registerInstance(cls, resourceObject);
+                            changes.addedInstancesMap.computeIfAbsent(url, u -> new HashMap<>()).put(cls, resourceObject);
+                        }
+                    }
+                    catch (MagicResourceException e) {
+                        throw new MagicRuntimeException("Could not instantiate merged Resource class: [" + cls.getName() + "].", e);
                     }
                 }
             }
