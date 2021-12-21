@@ -14,10 +14,6 @@ import java.util.*;
 
 class MagicInstanceManager {
 
-    public static URL getUrlFromClass(Class<?> cls){
-        return cls.getProtectionDomain().getCodeSource().getLocation();
-    }
-
     private static String getMethodString(Method method){
         return method.getDeclaringClass().getName() + "#" + method.getName();
     }
@@ -109,7 +105,7 @@ class MagicInstanceManager {
     final Map<URL, List<SchedulerMethodConfig>> toScheduleMethods = new HashMap<>();
 
     public <T> T instantiate(Class<T> cls) throws MagicInstanceException{
-        URL url = getUrlFromClass(cls);
+        URL url = Utils.getUrlFromClass(cls);
 
         Object instance = instantiateFromConstructor(url, cls);
 
@@ -201,7 +197,7 @@ class MagicInstanceManager {
     }
 
     public IMagicMethod createMagicMethod(Object instance, Method method){
-        URL fromUrl = getUrlFromClass(instance.getClass());
+        URL fromUrl = Utils.getUrlFromClass(instance.getClass());
         return new MagicMethod(instance, method, fromUrl);
     }
 
@@ -276,11 +272,14 @@ class MagicInstanceManager {
             Constructor<?> con = cls.getConstructor();
             try {
                 return con.newInstance();
-            } catch (InstantiationException e) {
+            }
+            catch (InstantiationException e) {
                 throw new MagicInstanceException("Class is abstract or an Interface: [" + cls.getName() + "]!", e);
-            }  catch (InvocationTargetException e) {
+            }
+            catch (InvocationTargetException e) {
                 throw new MagicInstanceException("Empty constructor threw an Exception!", e);
-            } catch (IllegalAccessException ignore) {}
+            }
+            catch (IllegalAccessException ignore) {}
         }
         catch (NoSuchMethodException ignore){}
 
@@ -347,11 +346,14 @@ class MagicInstanceManager {
                         tryMagicMethods(fromUrl, cls, oInstance);
                         registerInstance(fromUrl, cls, oInstance);
                     }
-                } catch (InstantiationException e) {
+                }
+                catch (InstantiationException e) {
                     throw new MagicInstanceException("Class is abstract or an Interface: [" + cls.getName() + "]!", e);
-                } catch (IllegalAccessException e) {
+                }
+                catch (IllegalAccessException e) {
                     throw new MagicInstanceException("Constructor suddenly went private ... idk why :D", e);
-                } catch (InvocationTargetException e) {
+                }
+                catch (InvocationTargetException e) {
                     throw new MagicInstanceException("Underlying constructor threw an exception!", e);
                 }
             };
@@ -434,11 +436,14 @@ class MagicInstanceManager {
     private Object invokeConstructor(Constructor<?> con, Object[] args) throws MagicInstanceException {
         try {
             return con.newInstance(args);
-        } catch (InstantiationException e) {
+        }
+        catch (InstantiationException e) {
             throw new IllegalStateException("INVALID STATE: Constructor should not be here when class is abstract!");
-        } catch (IllegalAccessException e) {
+        }
+        catch (IllegalAccessException e) {
             throw new IllegalStateException("INVALID STATE: Constructor should not be here when it is private!");
-        } catch (InvocationTargetException e) {
+        }
+        catch (InvocationTargetException e) {
             throw new MagicInstanceException("Internal exception in magic - constructor!", e);
         }
     }
@@ -449,7 +454,8 @@ class MagicInstanceManager {
             if(!access) field.setAccessible(true);
             field.set(instance, val);
             if(!access) field.setAccessible(false);
-        } catch (IllegalAccessException e) {
+        }
+        catch (IllegalAccessException e) {
             throw new IllegalStateException("INVALID STATE: Field should not be private!");
         }
     }
@@ -498,15 +504,16 @@ class MagicInstanceManager {
                     mmm.putArg(pos, o);
                     try {
                         mmm.tryInvoke();
-                    } catch (IllegalAccessException e) {
+                    }
+                    catch (IllegalAccessException e) {
                         throw new MagicInstanceException("Method [" + getMethodString(method) + "] suddenly went private ... idk why :D", e);
-                    } catch (InvocationTargetException e) {
+                    }
+                    catch (InvocationTargetException e) {
                         throw new MagicInstanceException("Underlying method: [" + getMethodString(method) + "] threw an exception!", e);
                     }
                 };
 
-                if (!acceptsWait)
-                    throw new MagicInstanceException("Method [" + getMethodString(method) + "] expects to get all values and cannot wait for them! - Could not find value for class: [" + paramType.getName() + "]");
+                if (!acceptsWait) throw new MagicInstanceException("Method [" + getMethodString(method) + "] expects to get all values and cannot wait for them! - Could not find value for class: [" + paramType.getName() + "]");
                 waitMap.computeIfAbsent(fromUrl, url -> new HashMap<>()).computeIfAbsent(paramType, pt -> new ArrayList<>()).add(mw);
             }
         }
@@ -534,9 +541,11 @@ class MagicInstanceManager {
             if(!canAccess) method.setAccessible(false);
 
             return ret;
-        } catch (IllegalAccessException e) {
+        }
+        catch (IllegalAccessException e) {
             throw new IllegalStateException("INVALID STATE: Method [" + getMethodString(method) + "] should not be here when it is private!");
-        } catch (InvocationTargetException e) {
+        }
+        catch (InvocationTargetException e) {
             throw new MagicInstanceException("Internal exception in magic - method: [" + getMethodString(method) + "]!", e);
         }
     }

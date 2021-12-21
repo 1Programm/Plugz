@@ -117,6 +117,10 @@ class ScheduleManager implements ISchedules {
     public void shutdown(){
         running = false;
         schedulerThread.interrupt();
+        try {
+            schedulerThread.join(100);
+        }
+        catch (InterruptedException ignore) {}
     }
 
     public void scheduleRunnable(URL fromUrl, SchedulerMethodConfig config){

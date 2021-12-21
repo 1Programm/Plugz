@@ -4,9 +4,8 @@ import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.plugz.Plugz;
 import com.programm.projects.plugz.ScanException;
-import com.programm.projects.plugz.magic.api.IMagicMethod;
-import com.programm.projects.plugz.magic.api.ISchedules;
-import com.programm.projects.plugz.magic.api.Service;
+import com.programm.projects.plugz.magic.api.*;
+import com.programm.projects.plugz.magic.resource.MagicResourceException;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
@@ -20,6 +19,7 @@ public class MagicEnvironment {
     private final ProxyLogger log = new ProxyLogger();
     private final MagicInstanceManager instanceManager;
     private final ScheduleManager scheduleManager;
+    private final ResourcesManager resourcesManager;
 
     private final List<URL> searchedUrls = new ArrayList<>();
     private final Map<URL, String> searchedBases = new HashMap<>();
@@ -40,59 +40,19 @@ public class MagicEnvironment {
     }
 
     public MagicEnvironment(String basePackage){
+        this.basePackageOfCallingClass = basePackage;
+
         this.plugz.setLogger(log);
         this.instanceManager = new MagicInstanceManager();
         this.scheduleManager = new ScheduleManager(log);
-        this.basePackageOfCallingClass = basePackage;
+        this.resourcesManager = new ResourcesManager(log, instanceManager);
 
         this.searchedAnnotations.add(Service.class);
+        this.searchedAnnotations.add(Resources.class);
+        this.searchedAnnotations.add(Resource.class);
 
         registerInstance(ISchedules.class, scheduleManager);
         registerInstance(ILogger.class, log);
-    }
-
-    public MagicEnvironment disableCallingUrl(){
-        log.debug("Disabling caller url.");
-        disableCallingUrl = true;
-        return this;
-    }
-
-    public void addUrl(URL url, String basePackage){
-        toSearchUrls.add(url);
-        toSearchBases.put(url, basePackage);
-    }
-
-    public void removeUrl(URL url){
-        toRemoveUrls.add(url);
-    }
-
-    public MagicEnvironment addSearchAnnotation(Class<? extends Annotation> cls){
-        searchedAnnotations.add(cls);
-        return this;
-    }
-
-    public MagicEnvironment registerInstance(Class<?> cls, Object instance){
-        try {
-            URL fromUrl = MagicInstanceManager.getUrlFromClass(instance.getClass());
-            instanceManager.registerInstance(fromUrl, cls, instance);
-            return this;
-        }
-        catch (MagicInstanceException e){
-            throw new MagicRuntimeException("Could not register instance of class: [" + cls.getName() + "]!", e);
-        }
-    }
-
-    public <T> T getInstance(Class<T> cls){
-        try {
-            return instanceManager.getInstance(cls);
-        }
-        catch (MagicInstanceException e){
-            throw new MagicRuntimeException("Failed to get instance for class [" + cls + "]!", e);
-        }
-    }
-
-    public IMagicMethod createMagicMethod(Object instance, Method method){
-        return instanceManager.createMagicMethod(instance, method);
     }
 
     public void startup(){
@@ -122,8 +82,17 @@ public class MagicEnvironment {
         try {
             log.debug("Calling pre shutdown methods...");
             instanceManager.callPreShutdown();
-        } catch (MagicInstanceException e){
+        }
+        catch (MagicInstanceException e){
             throw new MagicRuntimeException("Exception while calling pre shutdown.", e);
+        }
+
+        try {
+            log.debug("Shutting down Resources-Manager...");
+            resourcesManager.shutdown();
+        }
+        catch (MagicResourceException e){
+            throw new MagicRuntimeException("Exception while shutting down Resources-Manager.", e);
         }
 
         log.debug("Finished shutting down.");
@@ -145,7 +114,8 @@ public class MagicEnvironment {
                         if (removedInstances != null) {
                             changes.removedInstancesMap.put(url, removedInstances);
                         }
-                    } catch (MagicInstanceException e) {
+                    }
+                    catch (MagicInstanceException e) {
                         throw new MagicRuntimeException("Failed to remove url [" + url + "].", e);
                     }
 
@@ -157,7 +127,8 @@ public class MagicEnvironment {
                     if (removedAnnotatedClasses != null) {
                         changes.removedAnnotationClassesMap.put(url, removedAnnotatedClasses);
                     }
-                } else if (toSearchUrls.contains(url)) {
+                }
+                else if (toSearchUrls.contains(url)) {
                     toSearchUrls.remove(url);
                     toSearchBases.remove(url);
                 }
@@ -174,18 +145,40 @@ public class MagicEnvironment {
 
         //Instantiate
         for(URL url : addedUrls){
-            List<Class<?>> classes = plugz.getAnnotatedWithFromUrl(Service.class, url);
-            log.debug("[RE]: Instantiating [{}] @Service classes from [{}].", (classes == null ? 0 : classes.size()), url);
+            List<Class<?>> serviceClasses = plugz.getAnnotatedWithFromUrl(Service.class, url);
 
-            if(classes != null){
-                try {
-                    for (Class<?> cls : classes) {
+            if(serviceClasses != null){
+                log.debug("[RE]: Instantiating [{}] @Service classes from [{}].", serviceClasses.size(), url);
+                for (Class<?> cls : serviceClasses) {
+                    try {
                         log.trace("[RE]: Instantiating [{}]...", cls.toString());
                         Object instance = instanceManager.instantiate(cls);
                         changes.addedInstancesMap.computeIfAbsent(url, u -> new HashMap<>()).put(cls, instance);
                     }
-                } catch (MagicInstanceException e) {
-                    throw new MagicRuntimeException("Could not instantiate Service classes from url: [" + url + "].", e);
+                    catch (MagicInstanceException e) {
+                        throw new MagicRuntimeException("Could not instantiate Service class: [" + cls.getName() + "] from url: [" + url + "].", e);
+                    }
+                }
+            }
+
+
+            List<Class<?>> resourceClasses = plugz.getAnnotatedWithFromUrl(Resource.class, url);
+
+            if(resourceClasses != null) {
+                log.debug("[RE]: Instantiating [{}] @Resource classes from [{}].", resourceClasses.size(), url);
+                for (Class<?> cls : resourceClasses) {
+                    try {
+                        log.trace("[RE]: Building resource [{}]...", cls.toString());
+                        Object resourceObject = resourcesManager.buildResourceObject(cls);
+
+                        if(resourceObject != null) {
+                            registerInstance(cls, resourceObject);
+                            changes.addedInstancesMap.computeIfAbsent(url, u -> new HashMap<>()).put(cls, resourceObject);
+                        }
+                    }
+                    catch (MagicResourceException e) {
+                        throw new MagicRuntimeException("Could not instantiate Resource class: [" + cls.getName() + "] from url: [" + url + "].", e);
+                    }
                 }
             }
         }
@@ -203,7 +196,8 @@ public class MagicEnvironment {
         try {
             log.debug("[RE]: Calling post setup methods...");
             instanceManager.callPostSetupForUrls(addedUrls);
-        } catch (MagicInstanceException e){
+        }
+        catch (MagicInstanceException e){
             throw new MagicRuntimeException("Exception while calling post setup methods.", e);
         }
 
@@ -235,7 +229,8 @@ public class MagicEnvironment {
                 URL url = callingClass.getProtectionDomain().getCodeSource().getLocation();
                 urls.add(url);
                 bases.put(url, basePackageOfCallingClass);
-            } catch (ClassNotFoundException e) {
+            }
+            catch (ClassNotFoundException e) {
                 throw new MagicRuntimeException("INVALID STATE: Should always calling class", e);
             }
         }
@@ -258,7 +253,8 @@ public class MagicEnvironment {
 
             try {
                 newAnnotatedClassesMap = plugz.scan(newUrls, newBases, searchedAnnotations);
-            } catch (ScanException e) {
+            }
+            catch (ScanException e) {
                 throw new IllegalStateException("Failed to execute scan: " + e.getMessage(), e);
             }
 
@@ -274,13 +270,52 @@ public class MagicEnvironment {
 
         if(serviceClasses != null) {
             log.debug("Instantiating [{}] @Service classes.", serviceClasses.size());
-            try {
-                for (Class<?> cls : serviceClasses) {
+            for (Class<?> cls : serviceClasses) {
+                try {
                     log.trace("Instantiating [{}]...", cls.toString());
                     instanceManager.instantiate(cls);
                 }
-            } catch (MagicInstanceException e) {
-                throw new MagicRuntimeException("Could not instantiate Service classes.", e);
+                catch (MagicInstanceException e) {
+                    throw new MagicRuntimeException("Could not instantiate Service class: [" + cls.getName() + "].", e);
+                }
+            }
+        }
+
+        List<Class<?>> resourceClasses = plugz.getAnnotatedWith(Resource.class);
+
+        if(resourceClasses != null) {
+            log.debug("Instantiating [{}] @Resource classes.", resourceClasses.size());
+            for (Class<?> cls : resourceClasses) {
+                try {
+                    log.trace("Building resource [{}]...", cls.toString());
+                    Object resourceObject = resourcesManager.buildResourceObject(cls);
+
+                    if(resourceObject != null) {
+                        registerInstance(cls, resourceObject);
+                    }
+                }
+                catch (MagicResourceException e) {
+                    throw new MagicRuntimeException("Could not instantiate Resource class: [" + cls.getName() + "].", e);
+                }
+            }
+        }
+
+        List<Class<?>> resourceMergedClasses = plugz.getAnnotatedWith(Resources.class);
+
+        if(resourceMergedClasses != null) {
+            log.debug("Instantiating [{}] @Resources or classes with multiple @Resource annotations.", resourceMergedClasses.size());
+            for (Class<?> cls : resourceMergedClasses) {
+                try {
+                    log.trace("Building merged resource [{}]...", cls.toString());
+                    Object resourceObject = resourcesManager.buildMergedResourceObject(cls);
+
+                    if(resourceObject != null) {
+                        registerInstance(cls, resourceObject);
+                    }
+                }
+                catch (MagicResourceException e) {
+                    throw new MagicRuntimeException("Could not instantiate merged Resource class: [" + cls.getName() + "].", e);
+                }
             }
         }
     }
@@ -312,7 +347,8 @@ public class MagicEnvironment {
         try {
             log.debug("Calling post setup methods...");
             instanceManager.callPostSetup();
-        } catch (MagicInstanceException e){
+        }
+        catch (MagicInstanceException e){
             throw new MagicRuntimeException("Exception while calling post setup methods.", e);
         }
 
@@ -323,9 +359,54 @@ public class MagicEnvironment {
     public <T> T instantiateClass(Class<T> cls){
         try {
             return instanceManager.instantiate(cls);
-        } catch (MagicInstanceException e) {
+        }
+        catch (MagicInstanceException e) {
             throw new MagicRuntimeException("Could not instantiate class: [" + cls.getName() + "]!", e);
         }
+    }
+
+    public MagicEnvironment disableCallingUrl(){
+        log.debug("Disabling caller url.");
+        disableCallingUrl = true;
+        return this;
+    }
+
+    public void addUrl(URL url, String basePackage){
+        toSearchUrls.add(url);
+        toSearchBases.put(url, basePackage);
+    }
+
+    public void removeUrl(URL url){
+        toRemoveUrls.add(url);
+    }
+
+    public MagicEnvironment addSearchAnnotation(Class<? extends Annotation> cls){
+        searchedAnnotations.add(cls);
+        return this;
+    }
+
+    public MagicEnvironment registerInstance(Class<?> cls, Object instance){
+        try {
+            URL fromUrl = Utils.getUrlFromClass(instance.getClass());
+            instanceManager.registerInstance(fromUrl, cls, instance);
+            return this;
+        }
+        catch (MagicInstanceException e){
+            throw new MagicRuntimeException("Could not register instance of class: [" + cls.getName() + "]!", e);
+        }
+    }
+
+    public <T> T getInstance(Class<T> cls){
+        try {
+            return instanceManager.getInstance(cls);
+        }
+        catch (MagicInstanceException e){
+            throw new MagicRuntimeException("Failed to get instance for class [" + cls + "]!", e);
+        }
+    }
+
+    public IMagicMethod createMagicMethod(Object instance, Method method){
+        return instanceManager.createMagicMethod(instance, method);
     }
 
     public List<Class<?>> getAnnotatedWith(Class<? extends Annotation> cls){
