@@ -125,7 +125,7 @@ class ResourcesManager {
                     saveResource(entry);
                 }
                 catch (MagicResourceException e){
-                    log.error("Error while saving resources [{}]: {}", Arrays.toString(entry.names), e.getMessage());
+                    log.error("Error while saving merged resources [{}]: {}", Arrays.toString(entry.names), e.getMessage());
                 }
             }
         }
