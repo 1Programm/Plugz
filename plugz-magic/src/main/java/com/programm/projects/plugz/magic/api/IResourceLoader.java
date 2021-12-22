@@ -1,5 +1,7 @@
 package com.programm.projects.plugz.magic.api;
 
+import com.programm.projects.plugz.magic.resource.MagicResourceException;
+
 import java.util.List;
 
 public interface IResourceLoader {
@@ -10,6 +12,12 @@ public interface IResourceLoader {
         IValueFallback fallback();
     }
 
-    Object[] loadFields(String resourceName, boolean staticResource, int notFound, List<Entry> entries);
+    interface Result {
+        int size();
+        Object get(int i);
+        void save(String[] names, Object[] values) throws MagicResourceException;
+    }
+
+    Result loadFields(String resourceName, int notFound, List<Entry> entries);
 
 }

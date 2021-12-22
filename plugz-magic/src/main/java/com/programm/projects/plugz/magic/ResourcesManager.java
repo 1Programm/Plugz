@@ -31,11 +31,35 @@ class ResourcesManager {
     };
 
     @RequiredArgsConstructor
+    private static abstract class AbstractResult implements IResourceLoader.Result {
+        final Object[] values;
+
+        @Override
+        public int size() {
+            return values.length;
+        }
+
+        @Override
+        public Object get(int i) {
+            return values[i];
+        }
+    }
+
+    @RequiredArgsConstructor
     private static class ResourceEntry {
         final Object instance;
         final String name;
-        final boolean isRuntimeResource;
         final List<TypeEntry> resourceTypes;
+        final IResourceLoader.Result result;
+    }
+
+    @RequiredArgsConstructor
+    private static class MergedResourceEntry {
+        final Object instance;
+        final String[] names;
+        final List<TypeEntry> resourceTypes;
+        final IResourceLoader.Result[] results;
+        final int[] onCloseStates;
     }
 
     @RequiredArgsConstructor
@@ -67,6 +91,7 @@ class ResourcesManager {
     private final MagicInstanceManager instanceManager;
 
     private final Map<URL, List<ResourceEntry>> saveOnExitMap = new HashMap<>();
+    private final Map<URL, List<MergedResourceEntry>> saveOnExitMergedMap = new HashMap<>();
 
     public void shutdown() throws MagicResourceException {
         for(URL url : saveOnExitMap.keySet()) {
@@ -86,6 +111,24 @@ class ResourcesManager {
                 }
             }
         }
+
+        for(URL url : saveOnExitMergedMap.keySet()) {
+            List<MergedResourceEntry> entries = saveOnExitMergedMap.get(url);
+
+            log.debug("Saving [{}] resources from url [{}]...", entries.size(), url);
+
+            for(int i=0;i<entries.size();i++){
+                MergedResourceEntry entry = entries.get(i);
+
+                log.trace("#{} saving merged files: {}...", i, Arrays.toString(entry.names));
+                try {
+                    saveResource(entry);
+                }
+                catch (MagicResourceException e){
+                    log.error("Error while saving resources [{}]: {}", Arrays.toString(entry.names), e.getMessage());
+                }
+            }
+        }
     }
 
     public Object buildMergedResourceObject(Class<?> cls) throws MagicResourceException {
@@ -93,12 +136,16 @@ class ResourcesManager {
 
         if(resourceMergedAnnotation == null) throw new IllegalStateException("INVALID STATE: Class: [" + cls.getName() + "] should be annotated with @Resources or multiple @Resource but was not.");
 
+        URL url = Utils.getUrlFromClass(cls);
+
         List<TypeEntry> resourceTypes = collectTypeEntries(cls);
         Object[] sources = new Object[resourceTypes.size()];
-
+        IResourceLoader.Result[] saveResults = new IResourceLoader.Result[resourceTypes.size()];
+        String[] resultNames = new String[resourceTypes.size()];
+        int[] onCloseStates = new int[resourceTypes.size()];
 
         IResourceMerger merger = null;
-        Object[] mergedResourceFields = null;
+        Object[] mergedResourceFields = new Object[resourceTypes.size()];
 
         for(Resource resourceAnnotation : resourceMergedAnnotation.value()){
             Class<? extends IResourceMerger> resMergerClass = resourceAnnotation.merger();
@@ -122,50 +169,38 @@ class ResourcesManager {
             }
 
             String resName = getResourceName(resourceAnnotation, cls);
-            boolean resIsRunResource = resourceAnnotation.path().isEmpty();
             int resOnClose = resourceAnnotation.onexit();
             int resNotFound = resourceAnnotation.notfound();
             Class<? extends IResourceLoader> resLoader = resourceAnnotation.loader();
 
-            if(resOnClose == Resource.ONEXIT_SAVE){
-                log.error("Cannot save merge resources!");
-            }
-
             Object[] sourceBack = new Object[1];
-            Object[] resourceFields = getResourceFields(resName, resIsRunResource, resNotFound, resourceTypes, resLoader, sourceBack);
+            IResourceLoader.Result result = getResourceFields(resName, resNotFound, resourceTypes, resLoader, sourceBack);
 
-            if(resourceFields == null){
+            if(result == null){
                 continue;
             }
 
-            if(mergedResourceFields == null){
-                mergedResourceFields = resourceFields;
-                Arrays.fill(sources, sourceBack[0]);
-            }
-            else {
-                for(int i=0;i<resourceTypes.size();i++){
-                    Object origValue = mergedResourceFields[i];
-                    Object mergeValue = resourceFields[i];
 
-                    if(origValue == null) mergedResourceFields[i] = mergeValue;
+            for(int i=0;i<result.size();i++){
+                Object origValue = mergedResourceFields[i];
+                Object mergeValue = result.get(i);
+                TypeEntry entry = resourceTypes.get(i);
 
-                    TypeEntry entry = resourceTypes.get(i);
+                mergedResourceFields[i] = merger.mergeValues(entry.name, mergedResourceFields[i], mergeValue);
 
-                    mergedResourceFields[i] = merger.mergeValues(entry.name, mergedResourceFields[i], mergeValue);
-
-                    if(mergedResourceFields[i] == mergeValue){
-                        sources[i] = sourceBack[0];
-                    }
-                    else if(mergedResourceFields[i] != origValue){
-                        sources[i] = null;
-                    }
+                if(mergedResourceFields[i] == mergeValue){
+                    sources[i] = sourceBack[0];
+                    saveResults[i] = result;
+                    resultNames[i] = resName;
+                    onCloseStates[i] = resOnClose;
+                }
+                else if(mergedResourceFields[i] != origValue){
+                    sources[i] = null;
+                    saveResults[i] = null;
+                    resultNames[i] = null;
+                    onCloseStates[i] = -1;
                 }
             }
-
-        }
-
-        if(mergedResourceFields == null){
-            throw new IllegalStateException("INVALID STATE: Array should not be null!");
         }
 
         for(int i=0;i<resourceTypes.size();i++){
@@ -188,9 +223,17 @@ class ResourcesManager {
 
         boolean[] flag = new boolean[1];
         Object instance = instantiateFromConstructor(cls, resourceTypes, mergedResourceFields, flag);
+        MergedResourceEntry instanceEntry = new MergedResourceEntry(instance, resultNames, resourceTypes, saveResults, onCloseStates);
 
         if(!flag[0]) {
             initInstance(cls, instance, resourceTypes, mergedResourceFields);
+        }
+
+        for (int onCloseState : onCloseStates) {
+            if (onCloseState == Resource.ONEXIT_SAVE) {
+                saveOnExitMergedMap.computeIfAbsent(url, u -> new ArrayList<>()).add(instanceEntry);
+                break;
+            }
         }
 
         return instance;
@@ -202,7 +245,7 @@ class ResourcesManager {
         if(resourceAnnotation == null) throw new IllegalStateException("INVALID STATE: Class: [" + cls.getName() + "] should be annotated with @Resource but was not.");
 
         String resName = getResourceName(resourceAnnotation, cls);
-        boolean resIsRunResource = resourceAnnotation.path().isEmpty();
+//        boolean resIsRunResource = resourceAnnotation.path().isEmpty();
         int resOnClose = resourceAnnotation.onexit();
         int resNotFound = resourceAnnotation.notfound();
         Class<? extends IResourceLoader> resLoader = resourceAnnotation.loader();
@@ -211,14 +254,16 @@ class ResourcesManager {
 
         List<TypeEntry> resourceTypes = collectTypeEntries(cls);
         Object[] sourceBack = new Object[1];
-        Object[] resourceFields = getResourceFields(resName, resIsRunResource, resNotFound, resourceTypes, resLoader, sourceBack);
+        IResourceLoader.Result result = getResourceFields(resName, resNotFound, resourceTypes, resLoader, sourceBack);
 
-        if(resourceFields == null) {
+        if(result == null) {
             return null;
         }
 
-        for(int i=0;i<resourceFields.length;i++){
-            if(resourceFields[i] == null){
+        Object[] resourceFields = new Object[result.size()];
+        for(int i=0;i<result.size();i++){
+            Object value = result.get(i);
+            if(value == null){
                 TypeEntry entry = resourceTypes.get(i);
 
                 Object fallbackValue = null;
@@ -233,35 +278,36 @@ class ResourcesManager {
 
                 resourceFields[i] = fallbackValue;
             }
+            else {
+                resourceFields[i] = value;
+            }
         }
 
         boolean[] flag = new boolean[1];
         Object instance = instantiateFromConstructor(cls, resourceTypes, resourceFields, flag);
-        ResourceEntry instanceEntry = new ResourceEntry(instance, resName, resIsRunResource, resourceTypes);
+        ResourceEntry instanceEntry = new ResourceEntry(instance, resName, resourceTypes, result);
 
         if(!flag[0]) {
             initInstance(cls, instance, resourceTypes, resourceFields);
         }
 
         if(resOnClose == Resource.ONEXIT_SAVE) {
-            if(resIsRunResource){
-                log.error("Cannot register resource to save it because it is a static runtime resource!");
-            }
-            else {
+//            if(resIsRunResource){
+//                log.error("Cannot register resource to save it because it is a static runtime resource!");
+//            }
+//            else {
                 log.debug("Registering resource class: [{}] to save on shutdown.", cls.getName());
                 saveOnExitMap.computeIfAbsent(url, u -> new ArrayList<>()).add(instanceEntry);
-            }
+//            }
         }
 
         return instance;
     }
 
     @SuppressWarnings("unchecked")
-    private Object[] getResourceFields(String resName, boolean resIsRunResource, int resNotFound, List<TypeEntry> resourceTypes, Class<? extends IResourceLoader> resLoader, Object[] sourceBack) throws MagicResourceException{
-        Object[] resourceFields;
-
+    private IResourceLoader.Result getResourceFields(String resName, int resNotFound, List<TypeEntry> resourceTypes, Class<? extends IResourceLoader> resLoader, Object[] sourceBack) throws MagicResourceException{
         if(resLoader == IResourceLoader.class) {
-            resourceFields = loadResourceFields(resName, resIsRunResource, resNotFound, resourceTypes, sourceBack);
+            return loadResourceFields(resName, resNotFound, resourceTypes, sourceBack);
         }
         else {
             IResourceLoader loader;
@@ -278,10 +324,8 @@ class ResourcesManager {
                 }
             }
 
-            resourceFields = loader.loadFields(resName, resIsRunResource, resNotFound, (List<IResourceLoader.Entry>)(List<?>)resourceTypes);
+            return loader.loadFields(resName, resNotFound, (List<IResourceLoader.Entry>)(List<?>)resourceTypes);
         }
-
-        return resourceFields;
     }
 
     private List<TypeEntry> collectTypeEntries(Class<?> cls) throws MagicResourceException {
@@ -325,53 +369,58 @@ class ResourcesManager {
         return resourceTypes;
     }
 
-    private Object[] loadResourceFields(String name, boolean isRuntime, int notFound, List<TypeEntry> types, Object[] sourceBack) throws MagicResourceException {
-        if(isRuntime){
-            if(name.startsWith("/")) name = name.substring(1);
-            InputStream is = ResourcesManager.class.getResourceAsStream("/" + name);
+    private IResourceLoader.Result loadResourceFields(String name, int notFound, List<TypeEntry> types, Object[] sourceBack) throws MagicResourceException {
+        InputStream is;
 
-            if(is == null){
-                switch (notFound){
-                    case Resource.NOTFOUND_ERROR:
-                        throw new MagicResourceException("Resource [" + name + "] could not be found!");
-                    case Resource.NOTFOUND_IGNORE:
-                        log.debug("Could not find resource [{}] but was ignored.", name);
-                        return null;
-                    case Resource.NOTFOUND_CREATE:
-                        throw new MagicResourceException("Static Runtime resources cannot be created!");
-                }
-            }
-
-            return loadResourceFieldsFromInputStream(is, name, types, sourceBack);
+        if(name.startsWith("/")){
+            is = ResourcesManager.class.getResourceAsStream(name);
         }
         else {
-            File file = new File(name);
+            is = ResourcesManager.class.getResourceAsStream("/" + name);
+        }
 
-            if(!file.exists()){
-                switch (notFound){
-                    case Resource.NOTFOUND_ERROR:
-                        throw new MagicResourceException("Resource [" + name + "] could not be found!");
-                    case Resource.NOTFOUND_IGNORE:
-                        log.debug("Could not find resource [{}] but was ignored.", name);
-                        return null;
-                    case Resource.NOTFOUND_CREATE:
-                        try {
-                            if(!file.createNewFile()){
-                                throw new MagicResourceException("Could not create file: [" + name + "]!");
-                            }
-                        } catch (IOException e) {
-                            throw new MagicResourceException("Could not create file: [" + name + "]!", e);
-                        }
-                        break;
+        if(is != null){
+            Object[] values = loadResourceFieldsFromInputStream(is, name, types, sourceBack);
+            return new AbstractResult(values) {
+                @Override
+                public void save(String[] names, Object[] values) throws MagicResourceException {
+                    throw new MagicResourceException("Cannot save the static resource [" + name + "].");
                 }
-            }
+            };
+        }
 
-            try(InputStream is = new FileInputStream(file)){
-                return loadResourceFieldsFromInputStream(is, name, types, sourceBack);
+        File file = new File(name);
+
+        if(!file.exists()){
+            switch (notFound){
+                case Resource.NOTFOUND_ERROR:
+                    throw new MagicResourceException("Resource [" + name + "] could not be found!");
+                case Resource.NOTFOUND_IGNORE:
+                    log.debug("Could not find resource [{}] but was ignored.", name);
+                    return null;
+                case Resource.NOTFOUND_CREATE:
+                    try {
+                        if(!file.createNewFile()){
+                            throw new MagicResourceException("Could not create file: [" + name + "]!");
+                        }
+                    } catch (IOException e) {
+                        throw new MagicResourceException("Could not create file: [" + name + "]!", e);
+                    }
+                    break;
             }
-            catch (IOException e){
-                throw new MagicResourceException("Could not read from file: [" + name + "]!", e);
-            }
+        }
+
+        try(InputStream in = new FileInputStream(file)){
+            Object[] values = loadResourceFieldsFromInputStream(in, name, types, sourceBack);
+            return new AbstractResult(values) {
+                @Override
+                public void save(String[] names, Object[] values) throws MagicResourceException {
+                    saveResource(file.getAbsolutePath(), names, values);
+                }
+            };
+        }
+        catch (IOException e){
+            throw new MagicResourceException("Could not read from file: [" + name + "]!", e);
         }
     }
 
@@ -486,7 +535,9 @@ class ResourcesManager {
         return _val;
     }
 
-    private String deserializeType(Class<?> type, Object val) {
+    private String deserializeType(Object val) {
+        Class<?> type = val.getClass();
+
         if(type == Boolean.TYPE){
             return Boolean.toString((boolean)val);
         }
@@ -517,10 +568,6 @@ class ResourcesManager {
 
     private String getResourceName(Resource annotation, Class<?> cls){
         String name = annotation.value();
-
-        if(name.isEmpty()){
-            name = annotation.path();
-        }
 
         if(name.isEmpty()){
             name = cls.getSimpleName();
@@ -631,39 +678,124 @@ class ResourcesManager {
         }
     }
 
-    private void saveResource(ResourceEntry entry) throws MagicResourceException {
-        String name = entry.name;
-        File file = new File(name);
+//    private void saveResource(ResourceEntry entry) throws MagicResourceException {
+//        String name = entry.name;
+//        File file = new File(name);
+//
+//        if(!file.exists()){
+//            throw new MagicResourceException("Resource file: [" + name + "] does not exist and cannot save!");
+//        }
+//
+//        try(BufferedWriter bw = new BufferedWriter(new FileWriter(file))){
+//            if(name.endsWith(".properties")){
+//                saveToPropertyFile(bw, entry);
+//            }
+//        }
+//        catch (IOException e){
+//            throw new MagicResourceException("Could not write to file: [" + name + "]!", e);
+//        }
+//    }
 
-        if(!file.exists()){
-            throw new MagicResourceException("Resource file: [" + name + "] does not exist and cannot save!");
+//    private void saveToPropertyFile(BufferedWriter bw, ResourceEntry entry) throws IOException, MagicResourceException {
+//        Properties properties = new Properties();
+//        Object instance = entry.instance;
+//        List<TypeEntry> resourceTypes = entry.resourceTypes;
+//
+//        for(TypeEntry typeEntry : resourceTypes){
+//            Object value = getForEntry(instance, typeEntry);
+//            String _value = "";//deserializeType(typeEntry.type, value);
+//
+//            String key = Utils.allToDots(typeEntry.name);
+//
+//            properties.setProperty(key, _value);
+//        }
+//
+//        properties.store(bw, null);
+//    }
+
+    private void saveResource(ResourceEntry entry) throws MagicResourceException {
+        List<TypeEntry> resourceTypes = entry.resourceTypes;
+        String[] names = new String[resourceTypes.size()];
+        Object[] values = new Object[resourceTypes.size()];
+
+        for(int i=0;i<names.length;i++){
+            TypeEntry typeEntry = resourceTypes.get(i);
+            names[i] = Utils.allToDots(typeEntry.name);
+            values[i] = getForEntry(entry.instance, typeEntry);
         }
 
-        try(BufferedWriter bw = new BufferedWriter(new FileWriter(file))){
-            if(name.endsWith(".properties")){
-                saveToPropertyFile(bw, entry);
+        entry.result.save(names, values);
+    }
+
+    private void saveResource(MergedResourceEntry entry) throws MagicResourceException {
+        List<TypeEntry> resourceTypes = entry.resourceTypes;
+
+        @RequiredArgsConstructor
+        class BiSet {
+            final String name;
+            final Object value;
+        }
+
+        Map<IResourceLoader.Result, List<BiSet>> map = new HashMap<>();
+
+        for(int i=0;i<resourceTypes.size();i++){
+            if(entry.onCloseStates[i] == Resource.ONEXIT_SAVE) {
+                TypeEntry typeEntry = resourceTypes.get(i);
+                String name = Utils.allToDots(typeEntry.name);
+                Object value = getForEntry(entry.instance, typeEntry);
+
+                IResourceLoader.Result res = entry.results[i];
+                map.computeIfAbsent(res, r -> new ArrayList<>()).add(new BiSet(name, value));
             }
         }
-        catch (IOException e){
-            throw new MagicResourceException("Could not write to file: [" + name + "]!", e);
+
+        for(IResourceLoader.Result res : map.keySet()){
+            List<BiSet> sets = map.get(res);
+            String[] names = new String[sets.size()];
+            Object[] values = new Object[sets.size()];
+
+            for(int i=0;i<sets.size();i++){
+                names[i] = sets.get(i).name;
+                values[i] = sets.get(i).value;
+            }
+
+            res.save(names, values);
         }
     }
 
-    private void saveToPropertyFile(BufferedWriter bw, ResourceEntry entry) throws IOException, MagicResourceException {
-        Properties properties = new Properties();
-        Object instance = entry.instance;
-        List<TypeEntry> resourceTypes = entry.resourceTypes;
+    private void saveResource(String path, String[] names, Object[] values) throws MagicResourceException {
+        File file = new File(path);
 
-        for(TypeEntry typeEntry : resourceTypes){
-            Object value = getForEntry(instance, typeEntry);
-            String _value = deserializeType(typeEntry.type, value);
-
-            String key = Utils.allToDots(typeEntry.name);
-
-            properties.setProperty(key, _value);
+        if(!file.exists()){
+            throw new MagicResourceException("Resource file: [" + path + "] does not exist and cannot save!");
         }
 
-        properties.store(bw, null);
+        if(path.endsWith(".properties")){
+            saveToPropertyFile(file, names, values);
+        }
+    }
+
+    private void saveToPropertyFile(File file, String[] names, Object[] values) throws MagicResourceException {
+        Properties properties = new Properties();
+
+        try(InputStream is = new FileInputStream(file)){
+            properties.load(is);
+        }
+        catch (IOException e){
+            throw new MagicResourceException("Could not read file: [" + file.getAbsolutePath() + "]!", e);
+        }
+
+        try(BufferedWriter bw = new BufferedWriter(new FileWriter(file))){
+            for(int i=0;i<names.length;i++){
+                String _value = deserializeType(values[i]);
+                properties.setProperty(names[i], _value);
+            }
+
+            properties.store(bw, null);
+        }
+        catch (IOException e){
+            throw new MagicResourceException("Could not write to file: [" + file.getAbsolutePath() + "]!", e);
+        }
     }
 
     private Object getForEntry(Object instance, TypeEntry entry) throws MagicResourceException {

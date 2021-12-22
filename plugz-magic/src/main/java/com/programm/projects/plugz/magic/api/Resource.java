@@ -15,16 +15,10 @@ public @interface Resource {
     int ONEXIT_SAVE = 1;
 
     /**
-     * @return a name representing this resource.
+     * @return a name or path representing this resource.
      * If the name is left empty it will try to find a suitable resource based on the class name.
      */
     String value() default "";
-
-    /**
-     * @return a path where the resource is located.
-     * If the path is left empty it will search through runtime resources.
-     */
-    String path() default "";
 
     /**
      * @return a state of which {@link Resource#NOTFOUND_ERROR} will throw en exception if the resource is not found.
