@@ -6,24 +6,43 @@ import com.programm.projects.plugz.magic.api.*;
 @Service
 public class MyService {
 
-    private int i;
+    @Get private ILogger log;
 
-    @Get private ISchedules schedules;
-    @Get private MyResource res;
+    private long time;
 
     @PostSetup
-    public void started(@Get ILogger log) {
-        log.info("Is Started: " + res);
+    public void setup(){
+        time = System.currentTimeMillis();
+
+        log("Starting...");
     }
 
-    @Scheduled(repeat = 1000)
-    public void test(@Get ILogger log){
-        i++;
-        log.info("Bla: " + i);
-
-        if(i == 10){
-            schedules.stopScheduler();
-        }
+    @PostSetup
+    @Async(delay = 1000)
+    public void a(){
+        log("a");
     }
+
+    @PostSetup
+    @Async(delay = 1100)
+    public void b(){
+        log("b");
+    }
+
+//    @Scheduled(repeat = 1000)
+//    public void test() throws Exception{
+//        log("Test Start.");
+//        Thread.sleep(5000);
+//        log("Test End.");
+//    }
+
+    private void log(String s){
+        long t = System.currentTimeMillis() - time;
+        log.info("[%4<({})]: {}", t, s);
+    }
+
+
+
+
 
 }
