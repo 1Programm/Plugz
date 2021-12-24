@@ -12,6 +12,7 @@ import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.*;
 
+@RequiredArgsConstructor
 class MagicInstanceManager {
 
     private static String getMethodString(Method method){
@@ -38,10 +39,12 @@ class MagicInstanceManager {
     }
 
     @RequiredArgsConstructor
-    private static class MissingMagicMethod {
+    private class MissingMagicMethod {
         final Object instance;
         final Method method;
+        final Async async;
         final Object[] argsArray;
+
         @Setter
         int numEmptyArgs;
 
@@ -50,10 +53,10 @@ class MagicInstanceManager {
             numEmptyArgs--;
         }
 
-        public void tryInvoke() throws IllegalAccessException, InvocationTargetException{
+        public void tryInvoke() throws MagicInstanceException {
             if(numEmptyArgs > 0) return;
 
-            method.invoke(instance, argsArray);
+            invokeMethod(instance, method, async, argsArray);
         }
     }
 
@@ -62,14 +65,15 @@ class MagicInstanceManager {
         private final Object instance;
         private final Method method;
         private final URL fromUrl;
+        private final Async async;
 
         @Override
         public Object call(Object... arguments) throws MagicInstanceException {
-            return tryInvokeMethod(fromUrl, instance, method, false, arguments);
+            return tryInvokeMethod(fromUrl, instance, method, async, false, arguments);
         }
 
         public void run() throws MagicInstanceException {
-            tryInvokeMethod(fromUrl, instance, method, false);
+            tryInvokeMethod(fromUrl, instance, method, async, false);
         }
     }
 
@@ -78,8 +82,8 @@ class MagicInstanceManager {
         private final Method method;
         private final URL fromUrl;
 
-        public ScheduledMagicMethod(long startAfter, long repeatAfter, long stopAfter, Object instance, Method method, URL fromUrl) {
-            super(startAfter, repeatAfter, stopAfter, instance.getClass().getName() + "#" + method.getName());
+        public ScheduledMagicMethod(long startAfter, long repeatAfter, long stopAfter, Object instance, Method method, URL fromUrl, Async async) {
+            super(startAfter, repeatAfter, stopAfter, instance.getClass().getName() + "#" + method.getName(), async);
             this.instance = instance;
             this.method = method;
             this.fromUrl = fromUrl;
@@ -87,7 +91,7 @@ class MagicInstanceManager {
 
         @Override
         public void run() throws MagicInstanceException {
-            tryInvokeMethod(fromUrl, instance, method, false);
+            tryInvokeMethod(fromUrl, instance, method, async, false);
         }
     }
 
@@ -103,6 +107,8 @@ class MagicInstanceManager {
     private final Map<URL, List<MagicMethod>> onRemoveMethods = new HashMap<>();
 
     final Map<URL, List<SchedulerMethodConfig>> toScheduleMethods = new HashMap<>();
+
+    private final ThreadPoolManager threadPoolManager;
 
     public <T> T instantiate(Class<T> cls) throws MagicInstanceException{
         URL url = Utils.getUrlFromClass(cls);
@@ -198,7 +204,7 @@ class MagicInstanceManager {
 
     public IMagicMethod createMagicMethod(Object instance, Method method){
         URL fromUrl = Utils.getUrlFromClass(instance.getClass());
-        return new MagicMethod(instance, method, fromUrl);
+        return new MagicMethod(instance, method, fromUrl, null);
     }
 
     private void tryMagicFields(URL fromUrl, Class<?> cls, Object instance){
@@ -224,6 +230,8 @@ class MagicInstanceManager {
         Method[] methods = cls.getDeclaredMethods();
 
         for(Method method : methods){
+            final Async asyncAnnotation = method.getAnnotation(Async.class);
+
             if(method.isAnnotationPresent(Get.class)){
                 if(method.getParameterCount() != 1) throw new MagicInstanceException("Method annotated with @Get should be treated like a setter and have only one argument!");
 
@@ -231,36 +239,36 @@ class MagicInstanceManager {
 
                 Object val = getInstanceFromCls(valType);
                 if(val != null){
-                    invokeMethod(instance, method, val);
+                    invokeMethod(instance, method, asyncAnnotation, val);
                     continue;
                 }
 
-                MagicWire mw = o -> invokeMethod(instance, method, o);
+                MagicWire mw = o -> invokeMethod(instance, method, asyncAnnotation, o);
                 waitMap.computeIfAbsent(fromUrl, url -> new HashMap<>()).computeIfAbsent(valType, pt -> new ArrayList<>()).add(mw);
             }
             else {
                 if(method.isAnnotationPresent(PreSetup.class)){
-                    tryInvokeMethod(fromUrl, instance, method, true);
+                    tryInvokeMethod(fromUrl, instance, method, asyncAnnotation, true);
                 }
 
                 if(method.isAnnotationPresent(PostSetup.class)){
-                    MagicMethod mm = new MagicMethod(instance, method, fromUrl);
+                    MagicMethod mm = new MagicMethod(instance, method, fromUrl, asyncAnnotation);
                     postSetupMethods.computeIfAbsent(fromUrl, url -> new ArrayList<>()).add(mm);
                 }
 
                 if(method.isAnnotationPresent(PreShutdown.class)){
-                    MagicMethod mm = new MagicMethod(instance, method, fromUrl);
+                    MagicMethod mm = new MagicMethod(instance, method, fromUrl, asyncAnnotation);
                     preShutdownMethods.computeIfAbsent(fromUrl, url -> new ArrayList<>()).add(mm);
                 }
 
                 if(method.isAnnotationPresent(OnRemove.class)){
-                    MagicMethod mm = new MagicMethod(instance, method, fromUrl);
+                    MagicMethod mm = new MagicMethod(instance, method, fromUrl, asyncAnnotation);
                     onRemoveMethods.computeIfAbsent(fromUrl, url -> new ArrayList<>()).add(mm);
                 }
 
                 if(method.isAnnotationPresent(Scheduled.class)){
                     Scheduled ann = method.getAnnotation(Scheduled.class);
-                    ScheduledMagicMethod scheduledMagicMethod = new ScheduledMagicMethod(ann.startAfter(), ann.repeat(), ann.stopAfter(), instance, method, fromUrl);
+                    ScheduledMagicMethod scheduledMagicMethod = new ScheduledMagicMethod(ann.startAfter(), ann.repeat(), ann.stopAfter(), instance, method, fromUrl, asyncAnnotation);
                     toScheduleMethods.computeIfAbsent(fromUrl, url -> new ArrayList<>()).add(scheduledMagicMethod);
                 }
             }
@@ -460,7 +468,7 @@ class MagicInstanceManager {
         }
     }
 
-    private Object tryInvokeMethod(URL fromUrl, Object instance, Method method, boolean acceptsWait, Object... arguments) throws MagicInstanceException {
+    private Object tryInvokeMethod(URL fromUrl, Object instance, Method method, Async async, boolean acceptsWait, Object... arguments) throws MagicInstanceException {
         int paramCount = method.getParameterCount();
         Class<?>[] paramTypes = method.getParameterTypes();
         Object[] args = new Object[paramCount];
@@ -468,7 +476,7 @@ class MagicInstanceManager {
 
         int argumentIndex = 0;
 
-        MissingMagicMethod mmm = new MissingMagicMethod(instance, method, args);
+        MissingMagicMethod mmm = new MissingMagicMethod(instance, method, async, args);
 
         Annotation[][] parameterAnnotations = method.getParameterAnnotations();
         for(int i=0;i<paramCount;i++){
@@ -502,15 +510,7 @@ class MagicInstanceManager {
                 final int pos = i;
                 MagicWire mw = o -> {
                     mmm.putArg(pos, o);
-                    try {
-                        mmm.tryInvoke();
-                    }
-                    catch (IllegalAccessException e) {
-                        throw new MagicInstanceException("Method [" + getMethodString(method) + "] suddenly went private ... idk why :D", e);
-                    }
-                    catch (InvocationTargetException e) {
-                        throw new MagicInstanceException("Underlying method: [" + getMethodString(method) + "] threw an exception!", e);
-                    }
+                    mmm.tryInvoke();
                 };
 
                 if (!acceptsWait) throw new MagicInstanceException("Method [" + getMethodString(method) + "] expects to get all values and cannot wait for them! - Could not find value for class: [" + paramType.getName() + "]");
@@ -521,10 +521,10 @@ class MagicInstanceManager {
         Object ret = null;
         if(missingInstances == 0){
             if(args.length == 0){
-                ret = invokeMethod(instance, method);
+                ret = invokeMethod(instance, method, async);
             }
             else {
-                ret = invokeMethod(instance, method, args);
+                ret = invokeMethod(instance, method, async, args);
             }
         }
 
@@ -532,12 +532,38 @@ class MagicInstanceManager {
         return ret;
     }
 
-    private Object invokeMethod(Object instance, Method method, Object... args) throws MagicInstanceException{
+    private Object invokeMethod(Object instance, Method method, Async async, Object... args) throws MagicInstanceException{
+        if(async == null){
+            return doInvokeMethod(instance, method, args);
+        }
+        else {
+            threadPoolManager.runAsyncTask(new Runnable(){
+                public void run() {
+                    try {
+                        doInvokeMethod(instance, method, args);
+                    } catch (MagicInstanceException e) {
+                        throw new MagicRuntimeException(e);
+                    }
+                }
+
+                @Override
+                public String toString() {
+                    return method.toString();
+                }
+            }, async.delay());
+
+            return null;
+        }
+    }
+
+    private Object doInvokeMethod(Object instance, Method method, Object... args) throws MagicInstanceException {
         try {
             boolean canAccess = method.canAccess(instance);
 
             if(!canAccess) method.setAccessible(true);
+
             Object ret = method.invoke(instance, args);
+
             if(!canAccess) method.setAccessible(false);
 
             return ret;

@@ -15,8 +15,12 @@ import java.util.*;
 @Logger("Magic-Environment")
 public class MagicEnvironment {
 
+    private static final int MAX_ASYNC_WORKERS = 5;
+    private static final long MAX_WORKER_SLEEP_TIME = 5000;
+
     private final Plugz plugz = new Plugz();
     private final ProxyLogger log = new ProxyLogger();
+    private final ThreadPoolManager threadPoolManager;
     private final MagicInstanceManager instanceManager;
     private final ScheduleManager scheduleManager;
     private final ResourcesManager resourcesManager;
@@ -43,8 +47,9 @@ public class MagicEnvironment {
         this.basePackageOfCallingClass = basePackage;
 
         this.plugz.setLogger(log);
-        this.instanceManager = new MagicInstanceManager();
-        this.scheduleManager = new ScheduleManager(log);
+        this.threadPoolManager = new ThreadPoolManager(log, MAX_ASYNC_WORKERS, MAX_WORKER_SLEEP_TIME);
+        this.instanceManager = new MagicInstanceManager(threadPoolManager);
+        this.scheduleManager = new ScheduleManager(log, threadPoolManager);
         this.resourcesManager = new ResourcesManager(log, instanceManager);
 
         this.searchedAnnotations.add(Service.class);
@@ -78,6 +83,9 @@ public class MagicEnvironment {
 
         log.debug("Shutting down Schedule-Manager...");
         scheduleManager.shutdown();
+
+        log.debug("Shutting down Thread-Pool-Manager");
+        threadPoolManager.shutdown();
 
         try {
             log.debug("Calling pre shutdown methods...");
@@ -363,6 +371,9 @@ public class MagicEnvironment {
             throw new MagicRuntimeException("Cyclic waiting dependencies could not be resolved!", e);
         }
 
+        log.debug("Starting Schedule-Manager...");
+        scheduleManager.startup();
+
         try {
             log.debug("Calling post setup methods...");
             instanceManager.callPostSetup();
@@ -370,9 +381,6 @@ public class MagicEnvironment {
         catch (MagicInstanceException e){
             throw new MagicRuntimeException("Exception while calling post setup methods.", e);
         }
-
-        log.debug("Starting Schedule-Manager...");
-        scheduleManager.startup();
     }
 
     public <T> T instantiateClass(Class<T> cls){

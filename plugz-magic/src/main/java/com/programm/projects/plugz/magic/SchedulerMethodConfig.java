@@ -1,5 +1,6 @@
 package com.programm.projects.plugz.magic;
 
+import com.programm.projects.plugz.magic.api.Async;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
@@ -11,6 +12,7 @@ public abstract class SchedulerMethodConfig {
     final long repeatAfter;
     final long stopAfter;
     final String beanString;
+    final Async async;
 
-    abstract void run() throws MagicInstanceException;
+    protected abstract void run() throws MagicInstanceException;
 }

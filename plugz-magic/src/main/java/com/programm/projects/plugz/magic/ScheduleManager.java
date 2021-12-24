@@ -13,19 +13,20 @@ import java.util.Map;
 
 @RequiredArgsConstructor
 @Logger("Scheduler")
-class ScheduleManager implements ISchedules {
+class ScheduleManager implements ISchedules, Runnable {
 
     private static final long MIN_SLEEP = 100L;
 
-    private final Thread schedulerThread = new Thread(this::run, "Scheduler#1");
     private final Map<URL, List<SchedulerMethodConfig>> schedulerConfigs = new HashMap<>();
     private final Map<String, SchedulerMethodConfig> mappedBeanConfigs = new HashMap<>();
     private final ILogger log;
+    private final ThreadPoolManager threadPoolManager;
 
     private boolean running;
     private boolean paused;
 
-    private void run(){
+    @Override
+    public void run(){
         long now = curTime();
         for(URL url : schedulerConfigs.keySet()) {
             for (SchedulerMethodConfig config : schedulerConfigs.get(url)) {
@@ -34,8 +35,9 @@ class ScheduleManager implements ISchedules {
         }
 
         List<URL> urls = new ArrayList<>();
-        while(running && !paused){
-            try {
+
+        try {
+            while(running && !paused){
                 Thread.sleep(MIN_SLEEP);
 
                 now = curTime();
@@ -47,49 +49,47 @@ class ScheduleManager implements ISchedules {
                     if(configs == null) continue;
 
                     for (int i = 0; i < configs.size(); i++) {
-                        try {
-                            SchedulerMethodConfig config = configs.get(i);
-                            if (!config.started) {
-                                if (config.startedAt + config.startAfter < now) {
-                                    config.started = true;
-                                    config.startedAt = now;
-                                    config.startedLast = now;
-                                    config.run();
-                                    if (config.repeatAfter <= 0) {
-                                        configs.remove(i);
-                                        i--;
-                                    }
-                                }
-                            } else {
-                                if (config.startedLast + config.repeatAfter < now) {
-                                    config.startedLast = now;
-                                    config.run();
-                                }
-                            }
-
-                            if (config.stopAfter != 0) {
-                                if (config.startedAt + config.stopAfter < now) {
+                        SchedulerMethodConfig config = configs.get(i);
+                        if (!config.started) {
+                            if (config.startedAt + config.startAfter < now) {
+                                config.started = true;
+                                config.startedAt = now;
+                                config.startedLast = now;
+                                runConfig(config);
+                                if (config.repeatAfter <= 0) {
                                     configs.remove(i);
                                     i--;
                                 }
                             }
-                        } catch (MagicInstanceException e) {
-                            e.printStackTrace();
+                        } else {
+                            if (config.startedLast + config.repeatAfter < now) {
+                                config.startedLast = now;
+                                runConfig(config);
+                            }
+                        }
+
+                        if (config.stopAfter != 0) {
+                            if (config.startedAt + config.stopAfter < now) {
+                                configs.remove(i);
+                                i--;
+                            }
                         }
                     }
                 }
-            }
-            catch (InterruptedException ignore){}
 
-            int runningConfigs = 0;
-            for(URL url : schedulerConfigs.keySet()){
-                List<SchedulerMethodConfig> configs = schedulerConfigs.get(url);
-                runningConfigs += configs == null ? 0 : configs.size();
-            }
+                int runningConfigs = 0;
+                for(URL url : schedulerConfigs.keySet()){
+                    List<SchedulerMethodConfig> configs = schedulerConfigs.get(url);
+                    runningConfigs += configs == null ? 0 : configs.size();
+                }
 
-            if(runningConfigs == 0){
-                paused = true;
+                if(runningConfigs == 0){
+                    paused = true;
+                }
             }
+        }
+        catch (InterruptedException e){
+            log.debug("Interrupted and will shut down.");
         }
 
         if(!running) {
@@ -97,6 +97,14 @@ class ScheduleManager implements ISchedules {
         }
         else {
             log.info("Paused and will wake up if a new Scheduled method is detected.");
+        }
+    }
+
+    private void runConfig(SchedulerMethodConfig config) {
+        try {
+            config.run();
+        } catch (MagicInstanceException e) {
+            throw new MagicRuntimeException(e);
         }
     }
 
@@ -111,16 +119,11 @@ class ScheduleManager implements ISchedules {
 
 
         log.info("Started.");
-        schedulerThread.start();
+        threadPoolManager.runAsyncVipTask(this, 0);
     }
 
     public void shutdown(){
         running = false;
-        schedulerThread.interrupt();
-        try {
-            schedulerThread.join(100);
-        }
-        catch (InterruptedException ignore) {}
     }
 
     public void scheduleRunnable(URL fromUrl, SchedulerMethodConfig config){
@@ -136,7 +139,7 @@ class ScheduleManager implements ISchedules {
         if(running && paused) {
             paused = false;
             log.info("Restarting paused thread for scheduling.");
-            schedulerThread.start();
+            threadPoolManager.runAsyncVipTask(this, 0);
         }
 
 
@@ -174,5 +177,10 @@ class ScheduleManager implements ISchedules {
             List<SchedulerMethodConfig> configs = schedulerConfigs.get(url);
             if(configs.remove(config)) break;
         }
+    }
+
+    @Override
+    public String toString() {
+        return "Scheduler";
     }
 }

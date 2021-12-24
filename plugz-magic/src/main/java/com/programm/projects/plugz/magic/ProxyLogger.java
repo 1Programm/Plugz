@@ -2,36 +2,39 @@ package com.programm.projects.plugz.magic;
 
 import com.programm.projects.ioutils.log.api.out.ILogger;
 
+/**
+ * All Methods must be synchronized as the ThreadPoolManager and the async workers will log stuff and could end up overlapping logs.
+ */
 class ProxyLogger implements ILogger {
 
     private ILogger logger;
 
     @Override
-    public void trace(String s, Object... objects) {
+    public synchronized void trace(String s, Object... objects) {
         if(logger == null) return;
         logger.trace(s, objects);
     }
 
     @Override
-    public void debug(String s, Object... objects) {
+    public synchronized void debug(String s, Object... objects) {
         if(logger == null) return;
         logger.debug(s, objects);
     }
 
     @Override
-    public void info(String s, Object... objects) {
+    public synchronized void info(String s, Object... objects) {
         if(logger == null) return;
         logger.info(s, objects);
     }
 
     @Override
-    public void warn(String s, Object... objects) {
+    public synchronized void warn(String s, Object... objects) {
         if(logger == null) return;
         logger.warn(s, objects);
     }
 
     @Override
-    public void error(String s, Object... objects) {
+    public synchronized void error(String s, Object... objects) {
         if(logger == null) return;
         logger.error(s, objects);
     }
