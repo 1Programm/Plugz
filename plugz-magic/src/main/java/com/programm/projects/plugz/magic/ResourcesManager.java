@@ -1,5 +1,10 @@
 package com.programm.projects.plugz.magic;
 
+import com.programm.projects.ioutils.file.types.TypeParseException;
+import com.programm.projects.ioutils.file.types.props.Props;
+import com.programm.projects.ioutils.file.types.props.PropsBuilder;
+import com.programm.projects.ioutils.file.types.xml.XmlBuilder;
+import com.programm.projects.ioutils.file.types.xml.XmlNode;
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.plugz.magic.api.*;
@@ -425,35 +430,42 @@ class ResourcesManager {
     }
 
     private Object[] loadResourceFieldsFromInputStream(InputStream is, String name, List<TypeEntry> types, Object[] sourceBack) throws MagicResourceException {
-        if(name.endsWith(".properties")){
-            Properties properties = new Properties();
-            try {
-                properties.load(is);
+        int lastDot = name.lastIndexOf('.');
+        String fileType = name.substring(lastDot == -1 ? name.length() : lastDot + 1);
+        try {
+            if(fileType.equals("properties")) {
+                Props props = PropsBuilder.fromInputStream(is);
+                sourceBack[0] = props;
+                return loadResourceFieldsFromProps(props, types);
             }
-            catch (IOException e){
-                throw new MagicResourceException("Could not load resource [" + name + "] from properties file.", e);
+            else if(fileType.equals("xml")){
+                XmlNode node = XmlBuilder.fromInputStream(is);
+                sourceBack[0] = node;
+                return loadResourceFieldsFromXmlNode(node, types);
             }
-
-            sourceBack[0] = properties;
-
-            return loadResourceFieldsFromProperties(properties, types);
+        }
+        catch (IOException e){
+            throw new MagicResourceException("Could not load resource [" + name + "] from " + fileType + " file.", e);
+        }
+        catch (TypeParseException e){
+            throw new MagicResourceException("Failed to parse the resource [" + name + "]!", e);
         }
 
-        return null;
+        throw new MagicResourceException("Invalid resource type: [" + fileType + "]!");
     }
 
-    private Object[] loadResourceFieldsFromProperties(Properties properties, List<TypeEntry> types) throws MagicResourceException {
+    private Object[] loadResourceFieldsFromProps(Props props, List<TypeEntry> types) throws MagicResourceException {
         Object[] values = new Object[types.size()];
 
         for(int i=0;i<types.size();i++){
             TypeEntry entry = types.get(i);
             String name = entry.name;
-            String _val = properties.getProperty(name);
+            String _val = props.get(name);
 
             if(_val == null){
                 for(NameFallback nameFallback : NAME_FALLBACK_TRIES){
                     String _name = nameFallback.parse(name);
-                    _val = properties.getProperty(_name);
+                    _val = props.get(_name);
 
                     if(_val != null){
                         break;
@@ -470,6 +482,64 @@ class ResourcesManager {
         }
 
         return values;
+    }
+
+    private Object[] loadResourceFieldsFromXmlNode(XmlNode node, List<TypeEntry> types) throws MagicResourceException {
+        Object[] values = new Object[types.size()];
+
+        for(int i=0;i<types.size();i++){
+            TypeEntry entry = types.get(i);
+            String name = entry.name;
+            String _val = getValueFromXmlNode(node, name);
+
+            if(_val == null){
+                for(NameFallback nameFallback : NAME_FALLBACK_TRIES){
+                    String _name = nameFallback.parse(name);
+                    _val = getValueFromXmlNode(node, _name);
+
+                    if(_val != null){
+                        break;
+                    }
+                }
+            }
+
+            if(_val == null){
+                continue;
+            }
+
+            Object val = serializeType(entry.type, _val);
+            values[i] = val;
+        }
+
+        return values;
+    }
+
+    private String getValueFromXmlNode(XmlNode node, String key){
+        XmlNode res = node.get(key);
+
+        if(res != null){
+            return res.value();
+        }
+
+        int last = key.length();
+        while(true) {
+            int lastDot = key.lastIndexOf('.', last);
+
+            if (lastDot == -1) {
+                return null;
+            } else {
+                String nodeName = key.substring(0, lastDot);
+                String newKey = key.substring(lastDot + 1);
+
+                res = node.get(nodeName);
+
+                if(res != null){
+                    return getValueFromXmlNode(res, newKey);
+                }
+
+                last = lastDot - 1;
+            }
+        }
     }
 
     private Object serializeType(Class<?> type, String _val) throws MagicResourceException {
