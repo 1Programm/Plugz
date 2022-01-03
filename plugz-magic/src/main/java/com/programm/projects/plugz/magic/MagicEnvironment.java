@@ -25,7 +25,7 @@ public class MagicEnvironment {
     private final ProxyLogger log = new ProxyLogger();
     private final ThreadPoolManager threadPoolManager;
     private final MagicInstanceManager instanceManager;
-    private final ScheduleManager scheduleManager;
+    private IScheduleManager scheduleManager;
     private IResourcesManager resourcesManager;
     private final InjectManager injectionManager;
 
@@ -53,7 +53,6 @@ public class MagicEnvironment {
         this.plugz.setLogger(log);
         this.threadPoolManager = new ThreadPoolManager(log, MAX_ASYNC_WORKERS, MAX_WORKER_SLEEP_TIME);
         this.instanceManager = new MagicInstanceManager(threadPoolManager);
-        this.scheduleManager = new ScheduleManager(log, threadPoolManager);
         this.injectionManager = new InjectManager("com.programm.projects.plugz");
         this.injectionManager.setLogger(log);
 
@@ -61,7 +60,6 @@ public class MagicEnvironment {
         this.searchedAnnotations.add(Resources.class);
         this.searchedAnnotations.add(Resource.class);
 
-        registerInstance(ISchedules.class, scheduleManager);
         registerInstance(ILogger.class, log);
     }
 
@@ -85,15 +83,17 @@ public class MagicEnvironment {
         log.debug("Instantiating found classes.");
         instantiate();
 
-        log.debug("Passing scheduler methods to Schedule-Manager.");
+        if(scheduleManager != null) log.debug("Passing scheduler methods to Schedule-Manager.");
         passScheduledMethods();
     }
 
     public void shutdown(){
         log.info("Shutting down environment.");
 
-        log.debug("Shutting down Schedule-Manager...");
-        scheduleManager.shutdown();
+        if(scheduleManager != null) {
+            log.debug("Shutting down Schedule-Manager...");
+            scheduleManager.shutdown();
+        }
 
         log.debug("Shutting down Thread-Pool-Manager");
         threadPoolManager.shutdown();
@@ -139,8 +139,8 @@ public class MagicEnvironment {
                         throw new MagicRuntimeException("Failed to remove url [" + url + "].", e);
                     }
 
-                    resourcesManager.removeUrl(url);
-                    scheduleManager.removeUrl(url);
+                    if(resourcesManager != null) resourcesManager.removeUrl(url);
+                    if(scheduleManager != null) scheduleManager.removeUrl(url);
                     searchedUrls.remove(url);
                     searchedBases.remove(url);
 
@@ -250,7 +250,7 @@ public class MagicEnvironment {
         }
 
         //Schedule new Methods
-        log.debug("[RE]: Passing scheduler methods to Schedule-Manager.");
+        if(scheduleManager != null) log.debug("[RE]: Passing scheduler methods to Schedule-Manager.");
         changes.addedScheduledMethods = passScheduledMethods();
 
         return changes;
@@ -269,6 +269,7 @@ public class MagicEnvironment {
         //Needed instances for subsystems
         registerInstance(subsystemInstanceManger, ILogger.class, log);
         registerInstance(subsystemInstanceManger, IInstanceManager.class, instanceManager);
+        registerInstance(subsystemInstanceManger, IAsyncManager.class, threadPoolManager);
 
         //Find implementations
         try {
@@ -276,6 +277,30 @@ public class MagicEnvironment {
         }
         catch (IOException e){
             throw new MagicRuntimeException("Injection Manager failed to scan.", e);
+        }
+
+        List<Class<? extends IScheduleManager>> scheduleManagers = injectionManager.findImplementations(IScheduleManager.class);
+
+        if(scheduleManagers.size() == 1){
+            Class<? extends IScheduleManager> scheduleManagerCls = scheduleManagers.get(0);
+
+            log.debug("Found implementation for subsystem [schedule-manager]: {}.", scheduleManagerCls);
+
+            try {
+                this.scheduleManager = subsystemInstanceManger.instantiate(scheduleManagerCls);
+
+                ISchedules schedulesHandle = scheduleManager.getScheduleHandle();
+                registerInstance(ISchedules.class, schedulesHandle);
+            }
+            catch (MagicInstanceException e){
+                throw new MagicRuntimeException("Failed to instantiate subsystem [schedule-manager]:", e);
+            }
+        }
+        else if(scheduleManagers.size() == 0){
+            log.warn("No implementation found for subsystem [schedule-manager]!");
+        }
+        else {
+            throw new MagicRuntimeException("Multiple possible implementations found for subsystem [schedule-manager]:\n" + scheduleManagers);
         }
 
         List<Class<? extends IResourcesManager>> resManagers = injectionManager.findImplementations(IResourcesManager.class);
@@ -307,21 +332,6 @@ public class MagicEnvironment {
             } catch (MagicResourceException e) {
                 throw new MagicRuntimeException("Failed to start subsystem [resources-manager].", e);
             }
-        }
-    }
-
-    private <T> T instantiateSubsystem(Class<T> cls) throws MagicInstanceException {
-        try {
-            Constructor<T> con = cls.getConstructor();
-            return con.newInstance();
-        } catch (NoSuchMethodException e) {
-            throw new MagicInstanceException("No empty constructor found for class [" + cls.getName() + "]!", e);
-        } catch (InvocationTargetException e) {
-            throw new MagicInstanceException("Empty constructor for class [" + cls.getName() + "] threw an exception:", e);
-        } catch (InstantiationException e) {
-            throw new MagicInstanceException("Class [" + cls.getName() + "] could not be instantiated.", e);
-        } catch (IllegalAccessException e) {
-            throw new MagicInstanceException("Empty constructor for class [" + cls.getName() + "] cannot be accessed!");
         }
     }
 
@@ -438,13 +448,18 @@ public class MagicEnvironment {
         }
     }
 
-    private Map<URL, List<SchedulerMethodConfig>> passScheduledMethods(){
-        Map<URL, List<SchedulerMethodConfig>> configs = new HashMap<>(instanceManager.toScheduleMethods);
+    private Map<URL, List<ScheduledMethodConfig>> passScheduledMethods(){
+        Map<URL, List<ScheduledMethodConfig>> configs = new HashMap<>(instanceManager.toScheduleMethods);
         instanceManager.toScheduleMethods.clear();
 
-        for(URL url : configs.keySet()) {
-            for(SchedulerMethodConfig config : configs.get(url)) {
-                scheduleManager.scheduleRunnable(url, config);
+        if(!configs.isEmpty() && scheduleManager == null){
+            log.error("No [schedule-manager] available, so no @Scheduled methods can be run.");
+        }
+        else {
+            for (URL url : configs.keySet()) {
+                for (ScheduledMethodConfig config : configs.get(url)) {
+                    scheduleManager.scheduleRunnable(url, config);
+                }
             }
         }
 
@@ -462,8 +477,10 @@ public class MagicEnvironment {
             throw new MagicRuntimeException("Waiting dependencies could not be resolved. " + e.getMessage());
         }
 
-        log.debug("Starting Schedule-Manager...");
-        scheduleManager.startup();
+        if(scheduleManager != null) {
+            log.debug("Starting Schedule-Manager...");
+            scheduleManager.startup();
+        }
 
         try {
             log.debug("Calling post setup methods...");

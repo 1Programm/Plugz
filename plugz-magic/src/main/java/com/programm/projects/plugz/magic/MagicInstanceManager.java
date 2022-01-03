@@ -77,7 +77,7 @@ class MagicInstanceManager implements IInstanceManager {
         }
     }
 
-    private class ScheduledMagicMethod extends SchedulerMethodConfig {
+    private class ScheduledMagicMethod extends ScheduledMethodConfig {
         private final Object instance;
         private final Method method;
         private final URL fromUrl;
@@ -106,7 +106,7 @@ class MagicInstanceManager implements IInstanceManager {
     private final Map<URL, List<MagicMethod>> preShutdownMethods = new HashMap<>();
     private final Map<URL, List<MagicMethod>> onRemoveMethods = new HashMap<>();
 
-    final Map<URL, List<SchedulerMethodConfig>> toScheduleMethods = new HashMap<>();
+    final Map<URL, List<ScheduledMethodConfig>> toScheduleMethods = new HashMap<>();
 
     private final ThreadPoolManager threadPoolManager;
 

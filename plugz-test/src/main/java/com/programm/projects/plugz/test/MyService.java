@@ -3,6 +3,7 @@ package com.programm.projects.plugz.test;
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.plugz.magic.api.Get;
 import com.programm.projects.plugz.magic.api.PostSetup;
+import com.programm.projects.plugz.magic.api.Scheduled;
 import com.programm.projects.plugz.magic.api.Service;
 
 @Service
@@ -15,6 +16,11 @@ public class MyService {
     public void setup(){
         log.info("Starting...");
         log.info("Hello: {}", res);
+    }
+
+    @Scheduled(repeat = 1000)
+    public void bla(){
+        log.info("Hi");
     }
 
 }

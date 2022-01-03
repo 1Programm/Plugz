@@ -2,6 +2,7 @@ package com.programm.projects.plugz.magic;
 
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
+import com.programm.projects.plugz.magic.api.IAsyncManager;
 import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;
@@ -11,7 +12,7 @@ import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 
 @Logger("Thread-Pool-Manager")
-class ThreadPoolManager {
+class ThreadPoolManager implements IAsyncManager {
 
     @RequiredArgsConstructor
     private class Worker {
@@ -87,6 +88,7 @@ class ThreadPoolManager {
         this.queuedTasks = new LinkedBlockingDeque<>();
     }
 
+    @Override
     public void runAsyncVipTask(Runnable task, long delay){
         log.trace("Running async VIP task: [{}].", task);
 
@@ -123,6 +125,7 @@ class ThreadPoolManager {
         }
     }
 
+    @Override
     public void runAsyncTask(Runnable task, long delay){
         log.trace("Running async task: [{}].", task);
 
@@ -157,6 +160,7 @@ class ThreadPoolManager {
         }
     }
 
+    @Override
     public void shutdown(){
         for(Worker worker : sleepingWorkers){
             if(worker.running) {

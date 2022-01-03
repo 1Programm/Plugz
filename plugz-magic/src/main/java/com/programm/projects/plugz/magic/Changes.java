@@ -1,5 +1,7 @@
 package com.programm.projects.plugz.magic;
 
+import com.programm.projects.plugz.magic.api.ScheduledMethodConfig;
+
 import java.lang.annotation.Annotation;
 import java.net.URL;
 import java.util.ArrayList;
@@ -13,7 +15,7 @@ public class Changes {
     final Map<URL, Map<Class<? extends Annotation>, List<Class<?>>>> removedAnnotationClassesMap = new HashMap<>();
     Map<URL, Map<Class<? extends Annotation>, List<Class<?>>>> newAnnotatedClassesMap = null;
     final Map<URL, Map<Class<?>, Object>> addedInstancesMap = new HashMap<>();
-    Map<URL, List<SchedulerMethodConfig>> addedScheduledMethods = null;
+    Map<URL, List<ScheduledMethodConfig>> addedScheduledMethods = null;
 
     public List<Object> getRemovedInstances(){
         List<Object> instances = new ArrayList<>();

@@ -16,6 +16,7 @@
         <module>plugz-inject</module>
         <module>plugz-simple-resources</module>
         <module>plugz-magic-api</module>
+        <module>plugz-simple-schedules</module>
     </modules>
 
     <properties>

@@ -1,11 +1,8 @@
-package com.programm.projects.plugz.magic;
+package com.programm.projects.plugz.simple.schedules;
 
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
-import com.programm.projects.plugz.magic.api.ISchedules;
-import com.programm.projects.plugz.magic.api.MagicInstanceException;
-import com.programm.projects.plugz.magic.api.MagicRuntimeException;
-import lombok.RequiredArgsConstructor;
+import com.programm.projects.plugz.magic.api.*;
 
 import java.net.URL;
 import java.util.ArrayList;
@@ -13,16 +10,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-@RequiredArgsConstructor
-@Logger("Scheduler")
-class ScheduleManager implements ISchedules, Runnable {
+@Logger("Simple-Scheduler")
+public class ScheduleManager implements IScheduleManager, ISchedules, Runnable {
 
     private static final long MIN_SLEEP = 100L;
 
-    private final Map<URL, List<SchedulerMethodConfig>> schedulerConfigs = new HashMap<>();
-    private final Map<String, SchedulerMethodConfig> mappedBeanConfigs = new HashMap<>();
-    private final ILogger log;
-    private final ThreadPoolManager threadPoolManager;
+    private final Map<URL, List<ScheduledMethodConfig>> schedulerConfigs = new HashMap<>();
+    private final Map<String, ScheduledMethodConfig> mappedBeanConfigs = new HashMap<>();
+    @Get private ILogger log;
+    @Get private IAsyncManager asyncManager;
 
     private boolean running;
     private boolean paused;
@@ -31,7 +27,7 @@ class ScheduleManager implements ISchedules, Runnable {
     public void run(){
         long now = curTime();
         for(URL url : schedulerConfigs.keySet()) {
-            for (SchedulerMethodConfig config : schedulerConfigs.get(url)) {
+            for (ScheduledMethodConfig config : schedulerConfigs.get(url)) {
                 config.startedAt = now;
             }
         }
@@ -47,11 +43,11 @@ class ScheduleManager implements ISchedules, Runnable {
                 urls.addAll(schedulerConfigs.keySet());
 
                 for(URL url : urls) {
-                    List<SchedulerMethodConfig> configs = schedulerConfigs.get(url);
+                    List<ScheduledMethodConfig> configs = schedulerConfigs.get(url);
                     if(configs == null) continue;
 
                     for (int i = 0; i < configs.size(); i++) {
-                        SchedulerMethodConfig config = configs.get(i);
+                        ScheduledMethodConfig config = configs.get(i);
                         if (!config.started) {
                             if (config.startedAt + config.startAfter < now) {
                                 config.started = true;
@@ -81,7 +77,7 @@ class ScheduleManager implements ISchedules, Runnable {
 
                 int runningConfigs = 0;
                 for(URL url : schedulerConfigs.keySet()){
-                    List<SchedulerMethodConfig> configs = schedulerConfigs.get(url);
+                    List<ScheduledMethodConfig> configs = schedulerConfigs.get(url);
                     runningConfigs += configs == null ? 0 : configs.size();
                 }
 
@@ -102,7 +98,7 @@ class ScheduleManager implements ISchedules, Runnable {
         }
     }
 
-    private void runConfig(SchedulerMethodConfig config) {
+    private void runConfig(ScheduledMethodConfig config) {
         try {
             config.run();
         } catch (MagicInstanceException e) {
@@ -114,6 +110,7 @@ class ScheduleManager implements ISchedules, Runnable {
         return System.currentTimeMillis();
     }
 
+    @Override
     public void startup(){
         if(running) return;
         running = true;
@@ -121,14 +118,16 @@ class ScheduleManager implements ISchedules, Runnable {
 
 
         log.info("Started.");
-        threadPoolManager.runAsyncVipTask(this, 0);
+        asyncManager.runAsyncVipTask(this, 0);
     }
 
+    @Override
     public void shutdown(){
         running = false;
     }
 
-    public void scheduleRunnable(URL fromUrl, SchedulerMethodConfig config){
+    @Override
+    public void scheduleRunnable(URL fromUrl, ScheduledMethodConfig config){
         log.debug("Scheduling method: [{}].", config.beanString);
 
         if(config.repeatAfter < MIN_SLEEP){
@@ -141,7 +140,7 @@ class ScheduleManager implements ISchedules, Runnable {
         if(running && paused) {
             paused = false;
             log.info("Restarting paused thread for scheduling.");
-            threadPoolManager.runAsyncVipTask(this, 0);
+            asyncManager.runAsyncVipTask(this, 0);
         }
 
 
@@ -150,13 +149,14 @@ class ScheduleManager implements ISchedules, Runnable {
         }
     }
 
+    @Override
     public void removeUrl(URL url){
         log.debug("Removing url: [{}].", url);
 
-        List<SchedulerMethodConfig> configs = schedulerConfigs.remove(url);
+        List<ScheduledMethodConfig> configs = schedulerConfigs.remove(url);
 
         if(configs != null){
-            for(SchedulerMethodConfig config : configs){
+            for(ScheduledMethodConfig config : configs){
                 mappedBeanConfigs.remove(config.beanString);
             }
 
@@ -165,18 +165,23 @@ class ScheduleManager implements ISchedules, Runnable {
     }
 
     @Override
+    public ISchedules getScheduleHandle() {
+        return this;
+    }
+
+    @Override
     public void stopScheduler() {
         StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
         StackTraceElement element = stackTraceElements[2];
         String beanName = element.getClassName() + "#" + element.getMethodName();
-        SchedulerMethodConfig config = mappedBeanConfigs.remove(beanName);
+        ScheduledMethodConfig config = mappedBeanConfigs.remove(beanName);
 
         if(config == null){
             throw new IllegalStateException("No scheduler for bean with name: [" + beanName + "] found!");
         }
 
         for(URL url : schedulerConfigs.keySet()) {
-            List<SchedulerMethodConfig> configs = schedulerConfigs.get(url);
+            List<ScheduledMethodConfig> configs = schedulerConfigs.get(url);
             if(configs.remove(config)) break;
         }
     }
