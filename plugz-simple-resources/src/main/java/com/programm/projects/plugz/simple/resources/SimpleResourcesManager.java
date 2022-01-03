@@ -6,6 +6,7 @@ import com.programm.projects.ioutils.file.types.props.PropsBuilder;
 import com.programm.projects.ioutils.file.types.xml.XmlBuilder;
 import com.programm.projects.ioutils.file.types.xml.XmlNode;
 import com.programm.projects.ioutils.log.api.out.ILogger;
+import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.plugz.magic.api.*;
 
 import java.io.*;
@@ -13,6 +14,7 @@ import java.lang.reflect.*;
 import java.net.URL;
 import java.util.*;
 
+@Logger("Simple-Resources-Manager")
 public class SimpleResourcesManager implements IResourcesManager {
 
     private interface NameFallback {
@@ -113,11 +115,21 @@ public class SimpleResourcesManager implements IResourcesManager {
     private final Map<URL, List<SimpleResourcesManager.ResourceEntry>> saveOnExitMap = new HashMap<>();
     private final Map<URL, List<SimpleResourcesManager.MergedResourceEntry>> saveOnExitMergedMap = new HashMap<>();
 
-    private ILogger log;
-    private IInstanceManager instanceManager;
+    @Get private ILogger log;
+    @Get private IInstanceManager instanceManager;
+
+    public SimpleResourcesManager() {}
+
+    public SimpleResourcesManager(ILogger log, IInstanceManager instanceManager) {
+        this.log = log;
+        this.instanceManager = instanceManager;
+    }
 
     @Override
-    public void startup() {}
+    public void startup() {
+        if(log == null) throw new IllegalStateException("Logger must be set!");
+        if(instanceManager == null) throw new IllegalStateException("Instance manager must be set!");
+    }
 
     @Override
     public void shutdown() throws MagicResourceException {
@@ -274,14 +286,17 @@ public class SimpleResourcesManager implements IResourcesManager {
         if(resourceAnnotation == null) throw new IllegalStateException("INVALID STATE: Class: [" + cls.getName() + "] should be annotated with @Resource but was not.");
 
         String resName = getResourceName(resourceAnnotation, cls);
-//        boolean resIsRunResource = resourceAnnotation.path().isEmpty();
         int resOnClose = resourceAnnotation.onexit();
         int resNotFound = resourceAnnotation.notfound();
         Class<? extends IResourceLoader> resLoader = resourceAnnotation.loader();
 
         URL url = Utils.getUrlFromClass(cls);
 
+        log.debug("Building resource class: [{}] for resource name [{}].", cls.getName(), resName);
+
         List<SimpleResourcesManager.TypeEntry> resourceTypes = collectTypeEntries(cls);
+        log.trace("Found [{}] resource fields that need to be set.", resourceTypes.size());
+
         Object[] sourceBack = new Object[1];
         IResourceLoader.Result result = getResourceFields(resName, resNotFound, resourceTypes, resLoader, sourceBack);
 
@@ -336,6 +351,7 @@ public class SimpleResourcesManager implements IResourcesManager {
     @SuppressWarnings("unchecked")
     private IResourceLoader.Result getResourceFields(String resName, int resNotFound, List<SimpleResourcesManager.TypeEntry> resourceTypes, Class<? extends IResourceLoader> resLoader, Object[] sourceBack) throws MagicResourceException{
         if(resLoader == IResourceLoader.class) {
+            log.debug("Using default resource loader.");
             return loadResourceFields(resName, resNotFound, resourceTypes, sourceBack);
         }
         else {
@@ -353,6 +369,7 @@ public class SimpleResourcesManager implements IResourcesManager {
                 }
             }
 
+            log.debug("Using custom resource loader: [{}].", resLoader.getName());
             return loader.loadFields(resName, resNotFound, (List<IResourceLoader.Entry>)(List<?>)resourceTypes);
         }
     }
@@ -409,6 +426,7 @@ public class SimpleResourcesManager implements IResourcesManager {
         }
 
         if(is != null){
+            log.debug("Loading resource fields from a static resource [{}].", name);
             Object[] values = loadResourceFieldsFromInputStream(is, name, types, sourceBack);
             return new SimpleResourcesManager.AbstractResult(values) {
                 @Override
@@ -440,8 +458,9 @@ public class SimpleResourcesManager implements IResourcesManager {
         }
 
         try(InputStream in = new FileInputStream(file)){
+            log.debug("Loading resource fields from a file resource [{}].", name);
             Object[] values = loadResourceFieldsFromInputStream(in, name, types, sourceBack);
-            return new SimpleResourcesManager.AbstractResult(values) {
+            return new AbstractResult(values) {
                 @Override
                 public void save(String[] names, Object[] values) throws MagicResourceException {
                     saveResource(file.getAbsolutePath(), names, values);
@@ -665,6 +684,7 @@ public class SimpleResourcesManager implements IResourcesManager {
 
         if(name.isEmpty()){
             name = cls.getSimpleName();
+            log.trace("No name specified for resource, using class name [{}] as fallback.", name);
         }
 
         return name;
