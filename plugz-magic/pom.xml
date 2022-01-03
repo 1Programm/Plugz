@@ -10,7 +10,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>plugz-magic</artifactId>
-    <version>0.8</version>
+    <version>0.9-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>11</maven.compiler.source>
@@ -21,17 +21,17 @@
         <dependency>
             <groupId>com.programm.projects</groupId>
             <artifactId>plugz-core</artifactId>
-            <version>0.5</version>
+            <version>0.6-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.programm.projects</groupId>
             <artifactId>plugz-magic-api</artifactId>
-            <version>0.1</version>
+            <version>0.2-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.programm.projects</groupId>
             <artifactId>plugz-inject</artifactId>
-            <version>0.1</version>
+            <version>0.2-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.programm.projects</groupId>
