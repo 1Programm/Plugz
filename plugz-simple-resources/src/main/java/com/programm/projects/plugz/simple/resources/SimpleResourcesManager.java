@@ -21,7 +21,7 @@ public class SimpleResourcesManager implements IResourcesManager {
         String parse(String name);
     }
 
-    private static final SimpleResourcesManager.NameFallback[] NAME_FALLBACK_TRIES = new SimpleResourcesManager.NameFallback[]{
+    private static final NameFallback[] NAME_FALLBACK_TRIES = new NameFallback[]{
             String::toUpperCase,
             Utils::camelCaseToDots,
             Utils::camelCaseToDotsUpper,
@@ -52,7 +52,7 @@ public class SimpleResourcesManager implements IResourcesManager {
     private static class ResourceEntry {
         final Object instance;
         final String name;
-        final List<SimpleResourcesManager.TypeEntry> resourceTypes;
+        final List<TypeEntry> resourceTypes;
         final IResourceLoader.Result result;
 
         public ResourceEntry(Object instance, String name, List<TypeEntry> resourceTypes, IResourceLoader.Result result) {
@@ -66,7 +66,7 @@ public class SimpleResourcesManager implements IResourcesManager {
     private static class MergedResourceEntry {
         final Object instance;
         final String[] names;
-        final List<SimpleResourcesManager.TypeEntry> resourceTypes;
+        final List<TypeEntry> resourceTypes;
         final IResourceLoader.Result[] results;
         final int[] onCloseStates;
 
@@ -112,8 +112,8 @@ public class SimpleResourcesManager implements IResourcesManager {
         }
     }
 
-    private final Map<URL, List<SimpleResourcesManager.ResourceEntry>> saveOnExitMap = new HashMap<>();
-    private final Map<URL, List<SimpleResourcesManager.MergedResourceEntry>> saveOnExitMergedMap = new HashMap<>();
+    private final Map<URL, List<ResourceEntry>> saveOnExitMap = new HashMap<>();
+    private final Map<URL, List<MergedResourceEntry>> saveOnExitMergedMap = new HashMap<>();
 
     @Get private ILogger log;
     @Get private IInstanceManager instanceManager;
@@ -132,41 +132,64 @@ public class SimpleResourcesManager implements IResourcesManager {
     }
 
     @Override
-    public void shutdown() throws MagicResourceException {
+    public void shutdown() {
         for(URL url : saveOnExitMap.keySet()) {
-            List<SimpleResourcesManager.ResourceEntry> entries = saveOnExitMap.get(url);
+            List<ResourceEntry> entries = saveOnExitMap.get(url);
 
             log.debug("Saving [{}] resources from url [{}]...", entries.size(), url);
-
-            for(int i=0;i<entries.size();i++){
-                SimpleResourcesManager.ResourceEntry entry = entries.get(i);
-
-                log.trace("#{} saving [{}]...", i, entry.name);
-                try {
-                    saveResource(entry);
-                }
-                catch (MagicResourceException e){
-                    log.error("Error while saving resource [{}]: {}", entry.name, e.getMessage());
-                }
-            }
+            saveEntries(entries);
         }
 
         for(URL url : saveOnExitMergedMap.keySet()) {
-            List<SimpleResourcesManager.MergedResourceEntry> entries = saveOnExitMergedMap.get(url);
+            List<MergedResourceEntry> entries = saveOnExitMergedMap.get(url);
 
             log.debug("Saving [{}] resources from url [{}]...", entries.size(), url);
+            saveMergedEntries(entries);
+        }
+    }
 
-            for(int i=0;i<entries.size();i++){
-                SimpleResourcesManager.MergedResourceEntry entry = entries.get(i);
+    private void saveEntries(List<ResourceEntry> entries){
+        for(int i=0;i<entries.size();i++){
+            ResourceEntry entry = entries.get(i);
 
-                log.trace("#{} saving merged files: {}...", i, Arrays.toString(entry.names));
-                try {
-                    saveResource(entry);
-                }
-                catch (MagicResourceException e){
-                    log.error("Error while saving merged resources [{}]: {}", Arrays.toString(entry.names), e.getMessage());
-                }
+            log.trace("#{} saving [{}]...", i, entry.name);
+            try {
+                saveResource(entry);
             }
+            catch (MagicResourceException e){
+                log.error("Error while saving resource [{}]: {}", entry.name, e.getMessage());
+            }
+        }
+    }
+
+    private void saveMergedEntries(List<MergedResourceEntry> entries){
+        for(int i=0;i<entries.size();i++){
+            MergedResourceEntry entry = entries.get(i);
+
+            log.trace("#{} saving merged files: {}...", i, Arrays.toString(entry.names));
+            try {
+                saveResource(entry);
+            }
+            catch (MagicResourceException e){
+                log.error("Error while saving merged resources [{}]: {}", Arrays.toString(entry.names), e.getMessage());
+            }
+        }
+    }
+
+    @Override
+    public void removeUrl(URL url) {
+        List<ResourceEntry> entries = saveOnExitMap.remove(url);
+
+        if(entries != null){
+            log.debug("Saving [{}] removed resources from url [{}]...", entries.size(), url);
+            saveEntries(entries);
+        }
+
+        List<MergedResourceEntry> mergedEntries = saveOnExitMergedMap.remove(url);
+
+        if(mergedEntries != null){
+            log.debug("Saving [{}] removed merged resources from url [{}]...", mergedEntries.size(), url);
+            saveMergedEntries(mergedEntries);
         }
     }
 
@@ -178,7 +201,7 @@ public class SimpleResourcesManager implements IResourcesManager {
 
         URL url = Utils.getUrlFromClass(cls);
 
-        List<SimpleResourcesManager.TypeEntry> resourceTypes = collectTypeEntries(cls);
+        List<TypeEntry> resourceTypes = collectTypeEntries(cls);
         Object[] sources = new Object[resourceTypes.size()];
         IResourceLoader.Result[] saveResults = new IResourceLoader.Result[resourceTypes.size()];
         String[] resultNames = new String[resourceTypes.size()];
@@ -224,7 +247,7 @@ public class SimpleResourcesManager implements IResourcesManager {
             for(int i=0;i<result.size();i++){
                 Object origValue = mergedResourceFields[i];
                 Object mergeValue = result.get(i);
-                SimpleResourcesManager.TypeEntry entry = resourceTypes.get(i);
+                TypeEntry entry = resourceTypes.get(i);
 
                 mergedResourceFields[i] = merger.mergeValues(entry.name, mergedResourceFields[i], mergeValue);
 
@@ -245,7 +268,7 @@ public class SimpleResourcesManager implements IResourcesManager {
 
         for(int i=0;i<resourceTypes.size();i++){
             if(mergedResourceFields[i] == null){
-                SimpleResourcesManager.TypeEntry entry = resourceTypes.get(i);
+                TypeEntry entry = resourceTypes.get(i);
 
                 Object fallbackValue = null;
 
@@ -263,7 +286,7 @@ public class SimpleResourcesManager implements IResourcesManager {
 
         boolean[] flag = new boolean[1];
         Object instance = instantiateFromConstructor(cls, resourceTypes, mergedResourceFields, flag);
-        SimpleResourcesManager.MergedResourceEntry instanceEntry = new SimpleResourcesManager.MergedResourceEntry(instance, resultNames, resourceTypes, saveResults, onCloseStates);
+        MergedResourceEntry instanceEntry = new MergedResourceEntry(instance, resultNames, resourceTypes, saveResults, onCloseStates);
 
         if(!flag[0]) {
             initInstance(cls, instance, resourceTypes, mergedResourceFields);
@@ -294,7 +317,7 @@ public class SimpleResourcesManager implements IResourcesManager {
 
         log.debug("Building resource class: [{}] for resource name [{}].", cls.getName(), resName);
 
-        List<SimpleResourcesManager.TypeEntry> resourceTypes = collectTypeEntries(cls);
+        List<TypeEntry> resourceTypes = collectTypeEntries(cls);
         log.trace("Found [{}] resource fields that need to be set.", resourceTypes.size());
 
         Object[] sourceBack = new Object[1];
@@ -308,7 +331,7 @@ public class SimpleResourcesManager implements IResourcesManager {
         for(int i=0;i<result.size();i++){
             Object value = result.get(i);
             if(value == null){
-                SimpleResourcesManager.TypeEntry entry = resourceTypes.get(i);
+                TypeEntry entry = resourceTypes.get(i);
 
                 Object fallbackValue = null;
 
@@ -329,27 +352,22 @@ public class SimpleResourcesManager implements IResourcesManager {
 
         boolean[] flag = new boolean[1];
         Object instance = instantiateFromConstructor(cls, resourceTypes, resourceFields, flag);
-        SimpleResourcesManager.ResourceEntry instanceEntry = new SimpleResourcesManager.ResourceEntry(instance, resName, resourceTypes, result);
+        ResourceEntry instanceEntry = new ResourceEntry(instance, resName, resourceTypes, result);
 
         if(!flag[0]) {
             initInstance(cls, instance, resourceTypes, resourceFields);
         }
 
         if(resOnClose == Resource.ONEXIT_SAVE) {
-//            if(resIsRunResource){
-//                log.error("Cannot register resource to save it because it is a static runtime resource!");
-//            }
-//            else {
             log.debug("Registering resource class: [{}] to save on shutdown.", cls.getName());
             saveOnExitMap.computeIfAbsent(url, u -> new ArrayList<>()).add(instanceEntry);
-//            }
         }
 
         return instance;
     }
 
     @SuppressWarnings("unchecked")
-    private IResourceLoader.Result getResourceFields(String resName, int resNotFound, List<SimpleResourcesManager.TypeEntry> resourceTypes, Class<? extends IResourceLoader> resLoader, Object[] sourceBack) throws MagicResourceException{
+    private IResourceLoader.Result getResourceFields(String resName, int resNotFound, List<TypeEntry> resourceTypes, Class<? extends IResourceLoader> resLoader, Object[] sourceBack) throws MagicResourceException{
         if(resLoader == IResourceLoader.class) {
             log.debug("Using default resource loader.");
             return loadResourceFields(resName, resNotFound, resourceTypes, sourceBack);
@@ -374,8 +392,8 @@ public class SimpleResourcesManager implements IResourcesManager {
         }
     }
 
-    private List<SimpleResourcesManager.TypeEntry> collectTypeEntries(Class<?> cls) throws MagicResourceException {
-        List<SimpleResourcesManager.TypeEntry> resourceTypes = new ArrayList<>();
+    private List<TypeEntry> collectTypeEntries(Class<?> cls) throws MagicResourceException {
+        List<TypeEntry> resourceTypes = new ArrayList<>();
 
         Field[] fields = cls.getDeclaredFields();
         for(Field field : fields){
@@ -408,14 +426,14 @@ public class SimpleResourcesManager implements IResourcesManager {
                     }
                 }
 
-                resourceTypes.add(new SimpleResourcesManager.TypeEntry(field, field.getType(), name, Modifier.isFinal(mods), Modifier.isPrivate(mods), fallback));
+                resourceTypes.add(new TypeEntry(field, field.getType(), name, Modifier.isFinal(mods), Modifier.isPrivate(mods), fallback));
             }
         }
 
         return resourceTypes;
     }
 
-    private IResourceLoader.Result loadResourceFields(String name, int notFound, List<SimpleResourcesManager.TypeEntry> types, Object[] sourceBack) throws MagicResourceException {
+    private IResourceLoader.Result loadResourceFields(String name, int notFound, List<TypeEntry> types, Object[] sourceBack) throws MagicResourceException {
         InputStream is;
 
         if(name.startsWith("/")){
@@ -428,7 +446,7 @@ public class SimpleResourcesManager implements IResourcesManager {
         if(is != null){
             log.debug("Loading resource fields from a static resource [{}].", name);
             Object[] values = loadResourceFieldsFromInputStream(is, name, types, sourceBack);
-            return new SimpleResourcesManager.AbstractResult(values) {
+            return new AbstractResult(values) {
                 @Override
                 public void save(String[] names, Object[] values) throws MagicResourceException {
                     throw new MagicResourceException("Cannot save the static resource [" + name + "].");
@@ -472,7 +490,7 @@ public class SimpleResourcesManager implements IResourcesManager {
         }
     }
 
-    private Object[] loadResourceFieldsFromInputStream(InputStream is, String name, List<SimpleResourcesManager.TypeEntry> types, Object[] sourceBack) throws MagicResourceException {
+    private Object[] loadResourceFieldsFromInputStream(InputStream is, String name, List<TypeEntry> types, Object[] sourceBack) throws MagicResourceException {
         int lastDot = name.lastIndexOf('.');
         String fileType = name.substring(lastDot == -1 ? name.length() : lastDot + 1);
         try {
@@ -497,16 +515,16 @@ public class SimpleResourcesManager implements IResourcesManager {
         throw new MagicResourceException("Invalid resource type: [" + fileType + "]!");
     }
 
-    private Object[] loadResourceFieldsFromProps(Props props, List<SimpleResourcesManager.TypeEntry> types) throws MagicResourceException {
+    private Object[] loadResourceFieldsFromProps(Props props, List<TypeEntry> types) throws MagicResourceException {
         Object[] values = new Object[types.size()];
 
         for(int i=0;i<types.size();i++){
-            SimpleResourcesManager.TypeEntry entry = types.get(i);
+            TypeEntry entry = types.get(i);
             String name = entry.name;
             String _val = props.get(name);
 
             if(_val == null){
-                for(SimpleResourcesManager.NameFallback nameFallback : NAME_FALLBACK_TRIES){
+                for(NameFallback nameFallback : NAME_FALLBACK_TRIES){
                     String _name = nameFallback.parse(name);
                     _val = props.get(_name);
 
@@ -527,16 +545,16 @@ public class SimpleResourcesManager implements IResourcesManager {
         return values;
     }
 
-    private Object[] loadResourceFieldsFromXmlNode(XmlNode node, List<SimpleResourcesManager.TypeEntry> types) throws MagicResourceException {
+    private Object[] loadResourceFieldsFromXmlNode(XmlNode node, List<TypeEntry> types) throws MagicResourceException {
         Object[] values = new Object[types.size()];
 
         for(int i=0;i<types.size();i++){
-            SimpleResourcesManager.TypeEntry entry = types.get(i);
+            TypeEntry entry = types.get(i);
             String name = entry.name;
             String _val = getValueFromXmlNode(node, name);
 
             if(_val == null){
-                for(SimpleResourcesManager.NameFallback nameFallback : NAME_FALLBACK_TRIES){
+                for(NameFallback nameFallback : NAME_FALLBACK_TRIES){
                     String _name = nameFallback.parse(name);
                     _val = getValueFromXmlNode(node, _name);
 
@@ -690,12 +708,12 @@ public class SimpleResourcesManager implements IResourcesManager {
         return name;
     }
 
-    private Object instantiateFromConstructor(Class<?> cls, List<SimpleResourcesManager.TypeEntry> resourceTypes, Object[] resourceFields, boolean[] flag) throws MagicResourceException {
+    private Object instantiateFromConstructor(Class<?> cls, List<TypeEntry> resourceTypes, Object[] resourceFields, boolean[] flag) throws MagicResourceException {
         Class<?>[] paramTypeArray = new Class<?>[resourceTypes.size()];
         List<Class<?>> requiredTypes = new ArrayList<>();
         List<Object> requiredFields = new ArrayList<>();
         for(int i=0;i<resourceTypes.size();i++){
-            SimpleResourcesManager.TypeEntry entry = resourceTypes.get(i);
+            TypeEntry entry = resourceTypes.get(i);
             paramTypeArray[i] = entry.type;
             if(entry.isFinal){
                 requiredTypes.add(entry.type);
@@ -744,9 +762,9 @@ public class SimpleResourcesManager implements IResourcesManager {
         }
     }
 
-    private void initInstance(Class<?> cls, Object instance, List<SimpleResourcesManager.TypeEntry> types, Object[] values) throws MagicResourceException {
+    private void initInstance(Class<?> cls, Object instance, List<TypeEntry> types, Object[] values) throws MagicResourceException {
         for(int i=0;i<types.size();i++){
-            SimpleResourcesManager.TypeEntry entry = types.get(i);
+            TypeEntry entry = types.get(i);
 
             if(entry.isFinal) continue;
 
@@ -792,48 +810,13 @@ public class SimpleResourcesManager implements IResourcesManager {
         }
     }
 
-//    private void saveResource(ResourceEntry entry) throws MagicResourceException {
-//        String name = entry.name;
-//        File file = new File(name);
-//
-//        if(!file.exists()){
-//            throw new MagicResourceException("Resource file: [" + name + "] does not exist and cannot save!");
-//        }
-//
-//        try(BufferedWriter bw = new BufferedWriter(new FileWriter(file))){
-//            if(name.endsWith(".properties")){
-//                saveToPropertyFile(bw, entry);
-//            }
-//        }
-//        catch (IOException e){
-//            throw new MagicResourceException("Could not write to file: [" + name + "]!", e);
-//        }
-//    }
-
-//    private void saveToPropertyFile(BufferedWriter bw, ResourceEntry entry) throws IOException, MagicResourceException {
-//        Properties properties = new Properties();
-//        Object instance = entry.instance;
-//        List<TypeEntry> resourceTypes = entry.resourceTypes;
-//
-//        for(TypeEntry typeEntry : resourceTypes){
-//            Object value = getForEntry(instance, typeEntry);
-//            String _value = "";//deserializeType(typeEntry.type, value);
-//
-//            String key = Utils.allToDots(typeEntry.name);
-//
-//            properties.setProperty(key, _value);
-//        }
-//
-//        properties.store(bw, null);
-//    }
-
-    private void saveResource(SimpleResourcesManager.ResourceEntry entry) throws MagicResourceException {
-        List<SimpleResourcesManager.TypeEntry> resourceTypes = entry.resourceTypes;
+    private void saveResource(ResourceEntry entry) throws MagicResourceException {
+        List<TypeEntry> resourceTypes = entry.resourceTypes;
         String[] names = new String[resourceTypes.size()];
         Object[] values = new Object[resourceTypes.size()];
 
         for(int i=0;i<names.length;i++){
-            SimpleResourcesManager.TypeEntry typeEntry = resourceTypes.get(i);
+            TypeEntry typeEntry = resourceTypes.get(i);
             names[i] = Utils.allToDots(typeEntry.name);
             values[i] = getForEntry(entry.instance, typeEntry);
         }
@@ -841,8 +824,8 @@ public class SimpleResourcesManager implements IResourcesManager {
         entry.result.save(names, values);
     }
 
-    private void saveResource(SimpleResourcesManager.MergedResourceEntry entry) throws MagicResourceException {
-        List<SimpleResourcesManager.TypeEntry> resourceTypes = entry.resourceTypes;
+    private void saveResource(MergedResourceEntry entry) throws MagicResourceException {
+        List<TypeEntry> resourceTypes = entry.resourceTypes;
 
         class BiSet {
             final String name;
@@ -858,7 +841,7 @@ public class SimpleResourcesManager implements IResourcesManager {
 
         for(int i=0;i<resourceTypes.size();i++){
             if(entry.onCloseStates[i] == Resource.ONEXIT_SAVE) {
-                SimpleResourcesManager.TypeEntry typeEntry = resourceTypes.get(i);
+                TypeEntry typeEntry = resourceTypes.get(i);
                 String name = Utils.allToDots(typeEntry.name);
                 Object value = getForEntry(entry.instance, typeEntry);
 
@@ -916,7 +899,7 @@ public class SimpleResourcesManager implements IResourcesManager {
         }
     }
 
-    private Object getForEntry(Object instance, SimpleResourcesManager.TypeEntry entry) throws MagicResourceException {
+    private Object getForEntry(Object instance, TypeEntry entry) throws MagicResourceException {
         Class<?> type = entry.type;
         String origName = entry.field.getName();
         Method theGetter = null;
