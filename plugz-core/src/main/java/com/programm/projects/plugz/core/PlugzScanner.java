@@ -1,4 +1,4 @@
-package com.programm.projects.plugz;
+package com.programm.projects.plugz.core;
 
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;

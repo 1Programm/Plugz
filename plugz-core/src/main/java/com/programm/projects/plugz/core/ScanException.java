@@ -1,4 +1,4 @@
-package com.programm.projects.plugz;
+package com.programm.projects.plugz.core;
 
 public class ScanException extends Exception {
 
