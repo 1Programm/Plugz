@@ -139,6 +139,7 @@ public class MagicEnvironment {
                         throw new MagicRuntimeException("Failed to remove url [" + url + "].", e);
                     }
 
+                    resourcesManager.removeUrl(url);
                     scheduleManager.removeUrl(url);
                     searchedUrls.remove(url);
                     searchedBases.remove(url);
