@@ -1,4 +1,4 @@
-package com.programm.projects.plugz.magic.resource;
+package com.programm.projects.plugz.simple.resources;
 
 import com.programm.projects.plugz.magic.api.IValueFallback;
 

@@ -6,9 +6,6 @@ import com.programm.projects.plugz.Plugz;
 import com.programm.projects.plugz.ScanException;
 import com.programm.projects.plugz.inject.InjectManager;
 import com.programm.projects.plugz.magic.api.*;
-import com.programm.projects.plugz.magic.resource.MagicResourceException;
-import com.programm.projects.plugz.magic.subsystems.IInstanceManager;
-import com.programm.projects.plugz.magic.subsystems.IResourcesManager;
 
 import java.io.IOException;
 import java.lang.annotation.Annotation;

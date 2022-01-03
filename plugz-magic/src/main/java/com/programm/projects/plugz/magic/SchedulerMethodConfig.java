@@ -1,6 +1,7 @@
 package com.programm.projects.plugz.magic;
 
 import com.programm.projects.plugz.magic.api.Async;
+import com.programm.projects.plugz.magic.api.MagicInstanceException;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor

@@ -6,12 +6,7 @@ import com.programm.projects.ioutils.file.types.props.PropsBuilder;
 import com.programm.projects.ioutils.file.types.xml.XmlBuilder;
 import com.programm.projects.ioutils.file.types.xml.XmlNode;
 import com.programm.projects.ioutils.log.api.out.ILogger;
-import com.programm.projects.plugz.magic.MagicInstanceException;
 import com.programm.projects.plugz.magic.api.*;
-import com.programm.projects.plugz.magic.resource.DefaultResourceMerger;
-import com.programm.projects.plugz.magic.resource.MagicResourceException;
-import com.programm.projects.plugz.magic.subsystems.IInstanceManager;
-import com.programm.projects.plugz.magic.subsystems.IResourcesManager;
 
 import java.io.*;
 import java.lang.reflect.*;
@@ -118,8 +113,8 @@ public class SimpleResourcesManager implements IResourcesManager {
     private final Map<URL, List<SimpleResourcesManager.ResourceEntry>> saveOnExitMap = new HashMap<>();
     private final Map<URL, List<SimpleResourcesManager.MergedResourceEntry>> saveOnExitMergedMap = new HashMap<>();
 
-    @Get private ILogger log;
-    @Get private IInstanceManager instanceManager;
+    private ILogger log;
+    private IInstanceManager instanceManager;
 
     @Override
     public void startup() {}

@@ -3,6 +3,8 @@ package com.programm.projects.plugz.magic;
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.plugz.magic.api.ISchedules;
+import com.programm.projects.plugz.magic.api.MagicInstanceException;
+import com.programm.projects.plugz.magic.api.MagicRuntimeException;
 import lombok.RequiredArgsConstructor;
 
 import java.net.URL;

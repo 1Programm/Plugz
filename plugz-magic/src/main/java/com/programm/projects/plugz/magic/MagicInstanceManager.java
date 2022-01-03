@@ -1,7 +1,6 @@
 package com.programm.projects.plugz.magic;
 
 import com.programm.projects.plugz.magic.api.*;
-import com.programm.projects.plugz.magic.subsystems.IInstanceManager;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 

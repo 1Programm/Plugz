@@ -20,8 +20,18 @@
     <dependencies>
         <dependency>
             <groupId>com.programm.projects</groupId>
-            <artifactId>plugz-magic</artifactId>
-            <version>0.8-SNAPSHOT</version>
+            <artifactId>plugz-magic-api</artifactId>
+            <version>0.1-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.programm.projects</groupId>
+            <artifactId>ioutils-log-api</artifactId>
+            <version>1.2</version>
+        </dependency>
+        <dependency>
+            <groupId>com.programm.projects</groupId>
+            <artifactId>ioutils-file-types</artifactId>
+            <version>1.0</version>
         </dependency>
     </dependencies>
 
