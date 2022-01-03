@@ -2,8 +2,8 @@ package com.programm.projects.plugz.magic;
 
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
-import com.programm.projects.plugz.Plugz;
-import com.programm.projects.plugz.ScanException;
+import com.programm.projects.plugz.core.Plugz;
+import com.programm.projects.plugz.core.ScanException;
 import com.programm.projects.plugz.inject.InjectManager;
 import com.programm.projects.plugz.magic.api.*;
 
