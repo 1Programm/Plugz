@@ -4,10 +4,16 @@ import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.plugz.Plugz;
 import com.programm.projects.plugz.ScanException;
+import com.programm.projects.plugz.inject.InjectManager;
 import com.programm.projects.plugz.magic.api.*;
 import com.programm.projects.plugz.magic.resource.MagicResourceException;
+import com.programm.projects.plugz.magic.subsystems.IInstanceManager;
+import com.programm.projects.plugz.magic.subsystems.IResourcesManager;
 
+import java.io.IOException;
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.util.*;
@@ -23,7 +29,8 @@ public class MagicEnvironment {
     private final ThreadPoolManager threadPoolManager;
     private final MagicInstanceManager instanceManager;
     private final ScheduleManager scheduleManager;
-    private final ResourcesManager resourcesManager;
+    private IResourcesManager resourcesManager;
+    private final InjectManager injectionManager;
 
     private final List<URL> searchedUrls = new ArrayList<>();
     private final Map<URL, String> searchedBases = new HashMap<>();
@@ -50,7 +57,8 @@ public class MagicEnvironment {
         this.threadPoolManager = new ThreadPoolManager(log, MAX_ASYNC_WORKERS, MAX_WORKER_SLEEP_TIME);
         this.instanceManager = new MagicInstanceManager(threadPoolManager);
         this.scheduleManager = new ScheduleManager(log, threadPoolManager);
-        this.resourcesManager = new ResourcesManager(log, instanceManager);
+        this.injectionManager = new InjectManager("com.programm.projects.plugz");
+        this.injectionManager.setLogger(log);
 
         this.searchedAnnotations.add(Service.class);
         this.searchedAnnotations.add(Resources.class);
@@ -67,6 +75,12 @@ public class MagicEnvironment {
             log.debug("Adding shutdown-hook...");
             addShutdownHook();
         }
+
+        log.debug("Scanning for subsystems injection...");
+        injectSubsystems();
+
+        log.debug("Starting subsystems...");
+        startupSubsystems();
 
         log.debug("Scanning for annotations...");
         scan();
@@ -95,12 +109,13 @@ public class MagicEnvironment {
             throw new MagicRuntimeException("Exception while calling pre shutdown.", e);
         }
 
-        try {
-            log.debug("Shutting down Resources-Manager...");
-            resourcesManager.shutdown();
-        }
-        catch (MagicResourceException e){
-            throw new MagicRuntimeException("Exception while shutting down Resources-Manager.", e);
+        if(resourcesManager != null) {
+            try {
+                log.debug("Shutting down Resources-Manager...");
+                resourcesManager.shutdown();
+            } catch (MagicResourceException e) {
+                throw new MagicRuntimeException("Exception while shutting down Resources-Manager.", e);
+            }
         }
 
         log.debug("Finished shutting down.");
@@ -172,19 +187,23 @@ public class MagicEnvironment {
             List<Class<?>> resourceClasses = plugz.getAnnotatedWithFromUrl(Resource.class, url);
 
             if(resourceClasses != null) {
-                log.debug("[RE]: Instantiating [{}] @Resource classes from [{}].", resourceClasses.size(), url);
-                for (Class<?> cls : resourceClasses) {
-                    try {
-                        log.trace("[RE]: Building resource [{}]...", cls.toString());
-                        Object resourceObject = resourcesManager.buildResourceObject(cls);
+                if(resourceClasses.size() != 0 && resourcesManager == null){
+                    log.error("[RE]: No Resource Manager available, so no @Resource classes can be handled!");
+                }
+                else {
+                    log.debug("[RE]: Instantiating [{}] @Resource classes from [{}].", resourceClasses.size(), url);
+                    for (Class<?> cls : resourceClasses) {
+                        try {
+                            log.trace("[RE]: Building resource [{}]...", cls.toString());
+                            Object resourceObject = resourcesManager.buildResourceObject(cls);
 
-                        if(resourceObject != null) {
-                            registerInstance(cls, resourceObject);
-                            changes.addedInstancesMap.computeIfAbsent(url, u -> new HashMap<>()).put(cls, resourceObject);
+                            if (resourceObject != null) {
+                                registerInstance(cls, resourceObject);
+                                changes.addedInstancesMap.computeIfAbsent(url, u -> new HashMap<>()).put(cls, resourceObject);
+                            }
+                        } catch (MagicResourceException e) {
+                            throw new MagicRuntimeException("Could not instantiate Resource class: [" + cls.getName() + "] from url: [" + url + "].", e);
                         }
-                    }
-                    catch (MagicResourceException e) {
-                        throw new MagicRuntimeException("Could not instantiate Resource class: [" + cls.getName() + "] from url: [" + url + "].", e);
                     }
                 }
             }
@@ -192,19 +211,23 @@ public class MagicEnvironment {
             List<Class<?>> resourceMergedClasses = plugz.getAnnotatedWithFromUrl(Resources.class, url);
 
             if(resourceMergedClasses != null) {
-                log.debug("[RE]: Instantiating [{}] @Resources or classes with multiple @Resource annotations.", resourceMergedClasses.size());
-                for (Class<?> cls : resourceMergedClasses) {
-                    try {
-                        log.trace("[RE]: Building merged resource [{}]...", cls.toString());
-                        Object resourceObject = resourcesManager.buildMergedResourceObject(cls);
+                if(resourceMergedClasses.size() != 0 && resourcesManager == null){
+                    log.error("[RE]: No Resource Manager available, so no @Resources classes can be handled!");
+                }
+                else {
+                    log.debug("[RE]: Instantiating [{}] @Resources or classes with multiple @Resource annotations.", resourceMergedClasses.size());
+                    for (Class<?> cls : resourceMergedClasses) {
+                        try {
+                            log.trace("[RE]: Building merged resource [{}]...", cls.toString());
+                            Object resourceObject = resourcesManager.buildMergedResourceObject(cls);
 
-                        if(resourceObject != null) {
-                            registerInstance(cls, resourceObject);
-                            changes.addedInstancesMap.computeIfAbsent(url, u -> new HashMap<>()).put(cls, resourceObject);
+                            if (resourceObject != null) {
+                                registerInstance(cls, resourceObject);
+                                changes.addedInstancesMap.computeIfAbsent(url, u -> new HashMap<>()).put(cls, resourceObject);
+                            }
+                        } catch (MagicResourceException e) {
+                            throw new MagicRuntimeException("Could not instantiate merged Resource class: [" + cls.getName() + "].", e);
                         }
-                    }
-                    catch (MagicResourceException e) {
-                        throw new MagicRuntimeException("Could not instantiate merged Resource class: [" + cls.getName() + "].", e);
                     }
                 }
             }
@@ -240,6 +263,68 @@ public class MagicEnvironment {
             log.debug("Caught shutdown...");
             shutdown();
         }));
+    }
+
+    private void injectSubsystems(){
+        MagicInstanceManager subsystemInstanceManger = new MagicInstanceManager(threadPoolManager);
+
+        //Needed instances for subsystems
+        registerInstance(subsystemInstanceManger, ILogger.class, log);
+        registerInstance(subsystemInstanceManger, IInstanceManager.class, instanceManager);
+
+        //Find implementations
+        try {
+            injectionManager.scan();
+        }
+        catch (IOException e){
+            throw new MagicRuntimeException("Injection Manager failed to scan.", e);
+        }
+
+        List<Class<? extends IResourcesManager>> resManagers = injectionManager.findImplementations(IResourcesManager.class);
+
+        if(resManagers.size() == 1){
+            Class<? extends IResourcesManager> resManagerCls = resManagers.get(0);
+
+            log.debug("Found implementation for subsystem [resources-manager]: {}.", resManagerCls);
+
+            try {
+                this.resourcesManager = subsystemInstanceManger.instantiate(resManagerCls);
+            }
+            catch (MagicInstanceException e){
+                throw new MagicRuntimeException("Failed to instantiate subsystem [resources-manager]:", e);
+            }
+        }
+        else if(resManagers.size() == 0){
+            log.warn("No implementation found for subsystem [resources-manager]!");
+        }
+        else {
+            throw new MagicRuntimeException("Multiple possible implementations found for subsystem [resources-manager]:\n" + resManagers);
+        }
+    }
+
+    private void startupSubsystems(){
+        if(resourcesManager != null) {
+            try {
+                resourcesManager.startup();
+            } catch (MagicResourceException e) {
+                throw new MagicRuntimeException("Failed to start subsystem [resources-manager].", e);
+            }
+        }
+    }
+
+    private <T> T instantiateSubsystem(Class<T> cls) throws MagicInstanceException {
+        try {
+            Constructor<T> con = cls.getConstructor();
+            return con.newInstance();
+        } catch (NoSuchMethodException e) {
+            throw new MagicInstanceException("No empty constructor found for class [" + cls.getName() + "]!", e);
+        } catch (InvocationTargetException e) {
+            throw new MagicInstanceException("Empty constructor for class [" + cls.getName() + "] threw an exception:", e);
+        } catch (InstantiationException e) {
+            throw new MagicInstanceException("Class [" + cls.getName() + "] could not be instantiated.", e);
+        } catch (IllegalAccessException e) {
+            throw new MagicInstanceException("Empty constructor for class [" + cls.getName() + "] cannot be accessed!");
+        }
     }
 
     private Map<URL, Map<Class<? extends Annotation>, List<Class<?>>>> scan(){
@@ -311,18 +396,22 @@ public class MagicEnvironment {
         List<Class<?>> resourceClasses = plugz.getAnnotatedWith(Resource.class);
 
         if(resourceClasses != null) {
-            log.debug("Instantiating [{}] @Resource classes.", resourceClasses.size());
-            for (Class<?> cls : resourceClasses) {
-                try {
-                    log.trace("Building resource [{}]...", cls.toString());
-                    Object resourceObject = resourcesManager.buildResourceObject(cls);
+            if(resourceClasses.size() != 0 && resourcesManager == null){
+                log.error("No Resource Manager available, so no @Resource classes can be handled!");
+            }
+            else {
+                log.debug("Instantiating [{}] @Resource classes.", resourceClasses.size());
+                for (Class<?> cls : resourceClasses) {
+                    try {
+                        log.trace("Building resource [{}]...", cls.toString());
+                        Object resourceObject = resourcesManager.buildResourceObject(cls);
 
-                    if(resourceObject != null) {
-                        registerInstance(cls, resourceObject);
+                        if (resourceObject != null) {
+                            registerInstance(cls, resourceObject);
+                        }
+                    } catch (MagicResourceException e) {
+                        throw new MagicRuntimeException("Could not instantiate Resource class: [" + cls.getName() + "].", e);
                     }
-                }
-                catch (MagicResourceException e) {
-                    throw new MagicRuntimeException("Could not instantiate Resource class: [" + cls.getName() + "].", e);
                 }
             }
         }
@@ -330,18 +419,22 @@ public class MagicEnvironment {
         List<Class<?>> resourceMergedClasses = plugz.getAnnotatedWith(Resources.class);
 
         if(resourceMergedClasses != null) {
-            log.debug("Instantiating [{}] @Resources or classes with multiple @Resource annotations.", resourceMergedClasses.size());
-            for (Class<?> cls : resourceMergedClasses) {
-                try {
-                    log.trace("Building merged resource [{}]...", cls.toString());
-                    Object resourceObject = resourcesManager.buildMergedResourceObject(cls);
+            if(resourceMergedClasses.size() != 0 && resourcesManager == null){
+                log.error("No Resource Manager available, so no @Resources classes can be handled!");
+            }
+            else {
+                log.debug("Instantiating [{}] @Resources or classes with multiple @Resource annotations.", resourceMergedClasses.size());
+                for (Class<?> cls : resourceMergedClasses) {
+                    try {
+                        log.trace("Building merged resource [{}]...", cls.toString());
+                        Object resourceObject = resourcesManager.buildMergedResourceObject(cls);
 
-                    if(resourceObject != null) {
-                        registerInstance(cls, resourceObject);
+                        if (resourceObject != null) {
+                            registerInstance(cls, resourceObject);
+                        }
+                    } catch (MagicResourceException e) {
+                        throw new MagicRuntimeException("Could not instantiate merged Resource class: [" + cls.getName() + "].", e);
                     }
-                }
-                catch (MagicResourceException e) {
-                    throw new MagicRuntimeException("Could not instantiate merged Resource class: [" + cls.getName() + "].", e);
                 }
             }
         }
@@ -368,7 +461,7 @@ public class MagicEnvironment {
             instanceManager.checkWaitMap();
         }
         catch (MagicInstanceException e){
-            throw new MagicRuntimeException("Cyclic waiting dependencies could not be resolved!", e);
+            throw new MagicRuntimeException("Waiting dependencies could not be resolved. " + e.getMessage());
         }
 
         log.debug("Starting Schedule-Manager...");
@@ -413,9 +506,13 @@ public class MagicEnvironment {
     }
 
     public MagicEnvironment registerInstance(Class<?> cls, Object instance){
+        return registerInstance(instanceManager, cls, instance);
+    }
+
+    private MagicEnvironment registerInstance(MagicInstanceManager manager, Class<?> cls, Object instance){
         try {
             URL fromUrl = Utils.getUrlFromClass(instance.getClass());
-            instanceManager.registerInstance(fromUrl, cls, instance);
+            manager.registerInstance(fromUrl, cls, instance);
             return this;
         }
         catch (MagicInstanceException e){

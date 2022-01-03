@@ -1,6 +1,7 @@
 package com.programm.projects.plugz.magic;
 
 import com.programm.projects.plugz.magic.api.*;
+import com.programm.projects.plugz.magic.subsystems.IInstanceManager;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 
@@ -13,7 +14,7 @@ import java.net.URL;
 import java.util.*;
 
 @RequiredArgsConstructor
-class MagicInstanceManager {
+class MagicInstanceManager implements IInstanceManager {
 
     private static String getMethodString(Method method){
         return method.getDeclaringClass().getName() + "#" + method.getName();
@@ -110,6 +111,7 @@ class MagicInstanceManager {
 
     private final ThreadPoolManager threadPoolManager;
 
+    @Override
     public <T> T instantiate(Class<T> cls) throws MagicInstanceException{
         URL url = Utils.getUrlFromClass(cls);
 
@@ -431,7 +433,8 @@ class MagicInstanceManager {
         return instance;
     }
 
-    <T> T getInstance(Class<T> cls) throws MagicInstanceException {
+    @Override
+    public <T> T getInstance(Class<T> cls) throws MagicInstanceException {
         Object obj = getInstanceFromCls(cls);
 
         if(obj == null){
