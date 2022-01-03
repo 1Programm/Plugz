@@ -9,17 +9,19 @@ import com.programm.projects.plugz.magic.api.*;
 
 import java.io.IOException;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Logger("Magic-Environment")
 public class MagicEnvironment {
 
     private static final int MAX_ASYNC_WORKERS = 5;
     private static final long MAX_WORKER_SLEEP_TIME = 5000;
+    private static final String DEFAULT_INJECTION_POOL = "com.programm.projects.plugz";
 
     private final Plugz plugz = new Plugz();
     private final ProxyLogger log = new ProxyLogger();
@@ -42,21 +44,78 @@ public class MagicEnvironment {
     private boolean disableCallingUrl;
     private boolean notifyClassesFromRemovedUrl = true;
     private boolean addShutdownHook = true;
+    private boolean logSubsystemMissing = true;
 
-    public MagicEnvironment(){
-        this("");
+    public MagicEnvironment(String... args){
+        this("", args);
     }
 
-    public MagicEnvironment(String basePackage){
+    public MagicEnvironment(String basePackage, String... args){
         this.basePackageOfCallingClass = basePackage;
 
+        int max_async_workers = MAX_ASYNC_WORKERS;
+        long max_worker_sleep = MAX_WORKER_SLEEP_TIME;
+        String injection_pool = DEFAULT_INJECTION_POOL;
+
+        for(int i=0;i<args.length;i++){
+            String arg = args[i];
+            switch (arg) {
+                case "-disableCallingUrl":
+                    disableCallingUrl = true;
+                    break;
+                case "-noShutdownHook":
+                    addShutdownHook = false;
+                    break;
+                case "-ignoreSubsystemMissing":
+                    logSubsystemMissing = false;
+                    break;
+                case "-maxAsyncWorkers":
+                    if(i + 1 >= args.length) {
+                        System.err.println("Invalid arguments! [-maxAsyncWorkers] should be followed by a positive integer!");
+                        continue;
+                    }
+
+                    try {
+                        max_async_workers = Integer.parseInt(args[i + 1]);
+                    }
+                    catch (NumberFormatException e){
+                        System.err.println("Invalid arguments! [-maxAsyncWorkers] should be followed by a positive integer!");
+                        continue;
+                    }
+                    break;
+                case "-maxWorkerSleep":
+                    if(i + 1 >= args.length) {
+                        System.err.println("Invalid arguments! [-maxWorkerSleep] should be followed by a positive long!");
+                        continue;
+                    }
+
+                    try {
+                        max_worker_sleep = Long.parseLong(args[i + 1]);
+                    }
+                    catch (NumberFormatException e){
+                        System.err.println("Invalid arguments! [-maxWorkerSleep] should be followed by a positive integer!");
+                        continue;
+                    }
+                    break;
+                case "-injectionPool":
+                    if(i + 1 >= args.length) {
+                        System.err.println("Invalid arguments! [-injectionPool] should be followed by a String!");
+                        continue;
+                    }
+
+                    injection_pool = args[i + 1];
+                    break;
+            }
+        }
+
         this.plugz.setLogger(log);
-        this.threadPoolManager = new ThreadPoolManager(log, MAX_ASYNC_WORKERS, MAX_WORKER_SLEEP_TIME);
+        this.threadPoolManager = new ThreadPoolManager(log, max_async_workers, max_worker_sleep);
         this.instanceManager = new MagicInstanceManager(threadPoolManager);
-        this.injectionManager = new InjectManager("com.programm.projects.plugz");
+        this.injectionManager = new InjectManager(injection_pool);
         this.injectionManager.setLogger(log);
 
         this.searchedAnnotations.add(Service.class);
+        this.searchedAnnotations.add(Set.class);
         this.searchedAnnotations.add(Resources.class);
         this.searchedAnnotations.add(Resource.class);
 
@@ -284,7 +343,7 @@ public class MagicEnvironment {
         if(scheduleManagers.size() == 1){
             Class<? extends IScheduleManager> scheduleManagerCls = scheduleManagers.get(0);
 
-            log.debug("Found implementation for subsystem [schedule-manager]: {}.", scheduleManagerCls);
+            log.info("Found implementation for subsystem [schedule-manager]: {}.", scheduleManagerCls);
 
             try {
                 this.scheduleManager = subsystemInstanceManger.instantiate(scheduleManagerCls);
@@ -297,7 +356,9 @@ public class MagicEnvironment {
             }
         }
         else if(scheduleManagers.size() == 0){
-            log.warn("No implementation found for subsystem [schedule-manager]!");
+            if(logSubsystemMissing) {
+                log.warn("No implementation found for subsystem [schedule-manager]!");
+            }
         }
         else {
             throw new MagicRuntimeException("Multiple possible implementations found for subsystem [schedule-manager]:\n" + scheduleManagers);
@@ -308,7 +369,7 @@ public class MagicEnvironment {
         if(resManagers.size() == 1){
             Class<? extends IResourcesManager> resManagerCls = resManagers.get(0);
 
-            log.debug("Found implementation for subsystem [resources-manager]: {}.", resManagerCls);
+            log.info("Found implementation for subsystem [resources-manager]: {}.", resManagerCls);
 
             try {
                 this.resourcesManager = subsystemInstanceManger.instantiate(resManagerCls);
@@ -318,7 +379,9 @@ public class MagicEnvironment {
             }
         }
         else if(resManagers.size() == 0){
-            log.warn("No implementation found for subsystem [resources-manager]!");
+            if(logSubsystemMissing) {
+                log.warn("No implementation found for subsystem [resources-manager]!");
+            }
         }
         else {
             throw new MagicRuntimeException("Multiple possible implementations found for subsystem [resources-manager]:\n" + resManagers);
@@ -386,6 +449,21 @@ public class MagicEnvironment {
     }
 
     private void instantiate(){
+        List<Class<?>> setClasses = plugz.getAnnotatedWith(Set.class);
+
+        if(setClasses != null){
+            log.debug("Instantiating [{}] @Set classes.", setClasses.size());
+            for(Class<?> cls : setClasses){
+                try {
+                    log.trace("Register [{}] as @Set class...", cls.toString());
+                    instanceManager.registerSetClass(cls);
+                }
+                catch (MagicInstanceException e) {
+                    throw new MagicRuntimeException("Could not instantiate Service class: [" + cls.getName() + "].", e);
+                }
+            }
+        }
+
         List<Class<?>> serviceClasses = plugz.getAnnotatedWith(Service.class);
 
         if(serviceClasses != null) {

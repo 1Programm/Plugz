@@ -6,7 +6,7 @@ import com.programm.projects.plugz.magic.MagicEnvironment;
 public class Main {
 
     public static void main(String[] args) throws Exception{
-        MagicEnvironment env = new MagicEnvironment();
+        MagicEnvironment env = new MagicEnvironment(args);
         env.setLogger(ConfLogger.get());
         env.startup();
         env.postSetup();
