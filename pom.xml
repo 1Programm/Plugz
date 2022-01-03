@@ -13,6 +13,7 @@
         <module>plugz-core</module>
         <module>plugz-magic</module>
         <module>plugz-test</module>
+        <module>plugz-inject</module>
     </modules>
 
     <properties>
