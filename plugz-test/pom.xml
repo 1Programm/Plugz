@@ -20,12 +20,12 @@
         <dependency>
             <groupId>com.programm.projects</groupId>
             <artifactId>plugz-magic</artifactId>
-            <version>0.8</version>
+            <version>0.9-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.programm.projects</groupId>
             <artifactId>plugz-simple-resources</artifactId>
-            <version>0.1</version>
+            <version>0.2-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.programm.projects</groupId>
