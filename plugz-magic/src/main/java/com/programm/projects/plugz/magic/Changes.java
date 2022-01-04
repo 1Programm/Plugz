@@ -1,6 +1,6 @@
 package com.programm.projects.plugz.magic;
 
-import com.programm.projects.plugz.magic.api.ScheduledMethodConfig;
+import com.programm.projects.plugz.magic.api.schedules.ScheduledMethodConfig;
 
 import java.lang.annotation.Annotation;
 import java.net.URL;

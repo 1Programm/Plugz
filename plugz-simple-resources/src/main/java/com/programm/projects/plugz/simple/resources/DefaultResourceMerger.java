@@ -1,6 +1,6 @@
 package com.programm.projects.plugz.simple.resources;
 
-import com.programm.projects.plugz.magic.api.IResourceMerger;
+import com.programm.projects.plugz.magic.api.resources.IResourceMerger;
 
 public class DefaultResourceMerger implements IResourceMerger {
 

@@ -1,4 +1,7 @@
-package com.programm.projects.plugz.magic.api;
+package com.programm.projects.plugz.magic.api.schedules;
+
+import com.programm.projects.plugz.magic.api.Async;
+import com.programm.projects.plugz.magic.api.MagicInstanceException;
 
 public abstract class ScheduledMethodConfig {
 

@@ -2,6 +2,8 @@ package com.programm.projects.plugz.magic;
 
 import com.programm.projects.plugz.magic.api.*;
 import com.programm.projects.plugz.magic.api.Set;
+import com.programm.projects.plugz.magic.api.schedules.Scheduled;
+import com.programm.projects.plugz.magic.api.schedules.ScheduledMethodConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 

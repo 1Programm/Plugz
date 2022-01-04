@@ -3,6 +3,9 @@ package com.programm.projects.plugz.simple.schedules;
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.plugz.magic.api.*;
+import com.programm.projects.plugz.magic.api.schedules.IScheduleManager;
+import com.programm.projects.plugz.magic.api.schedules.ISchedules;
+import com.programm.projects.plugz.magic.api.schedules.ScheduledMethodConfig;
 
 import java.net.URL;
 import java.util.ArrayList;

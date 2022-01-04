@@ -1,6 +1,6 @@
 package com.programm.projects.plugz.simple.resources;
 
-import com.programm.projects.plugz.magic.api.IValueFallback;
+import com.programm.projects.plugz.magic.api.resources.IValueFallback;
 
 public class DefaultValueFallback implements IValueFallback {
 

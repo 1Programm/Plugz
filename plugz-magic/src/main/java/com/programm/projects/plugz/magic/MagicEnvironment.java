@@ -6,6 +6,13 @@ import com.programm.projects.plugz.core.Plugz;
 import com.programm.projects.plugz.core.ScanException;
 import com.programm.projects.plugz.inject.InjectManager;
 import com.programm.projects.plugz.magic.api.*;
+import com.programm.projects.plugz.magic.api.resources.IResourcesManager;
+import com.programm.projects.plugz.magic.api.resources.MagicResourceException;
+import com.programm.projects.plugz.magic.api.resources.Resource;
+import com.programm.projects.plugz.magic.api.resources.Resources;
+import com.programm.projects.plugz.magic.api.schedules.IScheduleManager;
+import com.programm.projects.plugz.magic.api.schedules.ISchedules;
+import com.programm.projects.plugz.magic.api.schedules.ScheduledMethodConfig;
 
 import java.io.IOException;
 import java.lang.annotation.Annotation;
@@ -349,7 +356,14 @@ public class MagicEnvironment {
                 this.scheduleManager = subsystemInstanceManger.instantiate(scheduleManagerCls);
 
                 ISchedules schedulesHandle = scheduleManager.getScheduleHandle();
-                registerInstance(ISchedules.class, schedulesHandle);
+
+                if(schedulesHandle == null) {
+                    log.error("Schedule-Handle was null.");
+                    this.scheduleManager = null;
+                }
+                else {
+                    registerInstance(ISchedules.class, schedulesHandle);
+                }
             }
             catch (MagicInstanceException e){
                 throw new MagicRuntimeException("Failed to instantiate subsystem [schedule-manager]:", e);

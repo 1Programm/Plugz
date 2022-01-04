@@ -1,4 +1,4 @@
-package com.programm.projects.plugz.magic.api;
+package com.programm.projects.plugz.magic.api.schedules;
 
 public interface ISchedules {
 

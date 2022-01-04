@@ -1,4 +1,4 @@
-package com.programm.projects.plugz.magic.api;
+package com.programm.projects.plugz.magic.api.schedules;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

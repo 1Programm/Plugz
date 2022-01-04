@@ -8,6 +8,7 @@ import com.programm.projects.ioutils.file.types.xml.XmlNode;
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.plugz.magic.api.*;
+import com.programm.projects.plugz.magic.api.resources.*;
 
 import java.io.*;
 import java.lang.reflect.*;
