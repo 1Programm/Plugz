@@ -1,12 +1,12 @@
 package com.programm.projects.plugz.magic.api.schedules;
 
+import com.programm.projects.plugz.magic.api.ISubsystem;
+
 import java.net.URL;
 
-public interface IScheduleManager {
+public interface IScheduleManager extends ISubsystem {
 
-    void startup();
-
-    void shutdown();
+    void start();
 
     void removeUrl(URL url);
 

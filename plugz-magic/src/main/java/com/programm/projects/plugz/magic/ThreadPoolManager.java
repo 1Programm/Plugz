@@ -162,6 +162,7 @@ class ThreadPoolManager implements IAsyncManager {
 
     @Override
     public void shutdown(){
+        //TODO: working workers are not listed and cannot be interrupted
         for(Worker worker : sleepingWorkers){
             if(worker.running) {
                 log.trace("Shutting down sleeping worker [{}]...", worker.name);

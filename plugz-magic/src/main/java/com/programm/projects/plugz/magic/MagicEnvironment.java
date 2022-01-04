@@ -39,6 +39,7 @@ public class MagicEnvironment {
     private final ThreadPoolManager threadPoolManager;
     private final MagicInstanceManager instanceManager;
     private final InjectManager injectionManager;
+    private final Subsystems subsystems;
     private IScheduleManager scheduleManager;
     private IResourcesManager resourcesManager;
     private IDatabaseManager databaseManager;
@@ -125,6 +126,7 @@ public class MagicEnvironment {
         this.instanceManager = new MagicInstanceManager(threadPoolManager);
         this.injectionManager = new InjectManager(injection_pool);
         this.injectionManager.setLogger(log);
+        this.subsystems = new Subsystems(log);
 
         this.searchedAnnotations.add(Service.class);
         this.searchedAnnotations.add(Set.class);
@@ -163,11 +165,6 @@ public class MagicEnvironment {
     public void shutdown(){
         log.info("Shutting down environment.");
 
-        if(scheduleManager != null) {
-            log.debug("Shutting down Schedule-Manager...");
-            scheduleManager.shutdown();
-        }
-
         log.debug("Shutting down Thread-Pool-Manager");
         threadPoolManager.shutdown();
 
@@ -179,24 +176,7 @@ public class MagicEnvironment {
             throw new MagicRuntimeException("Exception while calling pre shutdown.", e);
         }
 
-        if(databaseManager != null){
-            try {
-                log.debug("Shutting down Database-Manager...");
-                databaseManager.shutdown();
-            }
-            catch (DataBaseException e){
-                throw new MagicRuntimeException("Exception while shutting down Resources-Manager.", e);
-            }
-        }
-
-        if(resourcesManager != null) {
-            try {
-                log.debug("Shutting down Resources-Manager...");
-                resourcesManager.shutdown();
-            } catch (MagicResourceException e) {
-                throw new MagicRuntimeException("Exception while shutting down Resources-Manager.", e);
-            }
-        }
+        subsystems.shutdown();
 
         log.debug("Finished shutting down.");
     }
@@ -376,7 +356,6 @@ public class MagicEnvironment {
             }
         }
 
-
         //Post setup phase
         try {
             log.debug("[RE]: Checking wait map...");
@@ -409,13 +388,6 @@ public class MagicEnvironment {
     }
 
     private void injectSubsystems(){
-        MagicInstanceManager subsystemInstanceManger = new MagicInstanceManager(threadPoolManager);
-
-        //Needed instances for subsystems
-        registerInstance(subsystemInstanceManger, ILogger.class, log);
-        registerInstance(subsystemInstanceManger, IInstanceManager.class, instanceManager);
-        registerInstance(subsystemInstanceManger, IAsyncManager.class, threadPoolManager);
-
         //Find implementations
         try {
             injectionManager.scan();
@@ -424,104 +396,27 @@ public class MagicEnvironment {
             throw new MagicRuntimeException("Injection Manager failed to scan.", e);
         }
 
-        List<Class<? extends IScheduleManager>> scheduleManagers = injectionManager.findImplementations(IScheduleManager.class);
+        subsystems.inject(instanceManager, threadPoolManager, injectionManager, logSubsystemMissing);
 
-        if(scheduleManagers.size() == 1){
-            Class<? extends IScheduleManager> scheduleManagerCls = scheduleManagers.get(0);
+        scheduleManager = subsystems.getSubsystem(IScheduleManager.class);
 
-            log.info("Found implementation for subsystem [schedule-manager]: {}.", scheduleManagerCls);
-
-            try {
-                this.scheduleManager = subsystemInstanceManger.instantiate(scheduleManagerCls);
-
-                ISchedules schedulesHandle = scheduleManager.getScheduleHandle();
-
-                if(schedulesHandle == null) {
-                    log.error("Schedule-Handle was null.");
-                    this.scheduleManager = null;
-                }
-                else {
-                    registerInstance(ISchedules.class, schedulesHandle);
-                }
+        if(scheduleManager != null){
+            ISchedules schedulesHandle = scheduleManager.getScheduleHandle();
+            if(schedulesHandle == null) {
+                log.error("Schedule-Handle was null.");
+                this.scheduleManager = null;
             }
-            catch (MagicInstanceException e){
-                throw new MagicRuntimeException("Failed to instantiate subsystem [schedule-manager]:", e);
+            else {
+                registerInstance(ISchedules.class, schedulesHandle);
             }
         }
-        else if(scheduleManagers.size() == 0){
-            if(logSubsystemMissing) {
-                log.warn("No implementation found for subsystem [schedule-manager]!");
-            }
-        }
-        else {
-            throw new MagicRuntimeException("Multiple possible implementations found for subsystem [schedule-manager]:\n" + scheduleManagers);
-        }
 
-        List<Class<? extends IDatabaseManager>> dbManagers = injectionManager.findImplementations(IDatabaseManager.class);
-
-        if(dbManagers.size() == 1){
-            Class<? extends IDatabaseManager> dbManagerCls = dbManagers.get(0);
-
-            log.info("Found implementation for subsystem [db-manager]: {}.", dbManagerCls);
-
-            try {
-                this.databaseManager = subsystemInstanceManger.instantiate(dbManagerCls);
-            }
-            catch (MagicInstanceException e){
-                throw new MagicRuntimeException("Failed to instantiate subsystem [db-manager]:", e);
-            }
-        }
-        else if(dbManagers.size() == 0){
-            if(logSubsystemMissing) {
-                log.warn("No implementation found for subsystem [db-manager]!");
-            }
-        }
-        else {
-            throw new MagicRuntimeException("Multiple possible implementations found for subsystem [db-manager]:\n" + dbManagers);
-        }
-
-        List<Class<? extends IResourcesManager>> resManagers = injectionManager.findImplementations(IResourcesManager.class);
-
-        if(resManagers.size() == 1){
-            Class<? extends IResourcesManager> resManagerCls = resManagers.get(0);
-
-            log.info("Found implementation for subsystem [resources-manager]: {}.", resManagerCls);
-
-            try {
-                this.resourcesManager = subsystemInstanceManger.instantiate(resManagerCls);
-            }
-            catch (MagicInstanceException e){
-                throw new MagicRuntimeException("Failed to instantiate subsystem [resources-manager]:", e);
-            }
-        }
-        else if(resManagers.size() == 0){
-            if(logSubsystemMissing) {
-                log.warn("No implementation found for subsystem [resources-manager]!");
-            }
-        }
-        else {
-            throw new MagicRuntimeException("Multiple possible implementations found for subsystem [resources-manager]:\n" + resManagers);
-        }
+        databaseManager = subsystems.getSubsystem(IDatabaseManager.class);
+        resourcesManager = subsystems.getSubsystem(IResourcesManager.class);
     }
 
     private void startupSubsystems(){
-        if(databaseManager != null){
-            try {
-                databaseManager.startup();
-            }
-            catch (DataBaseException e){
-                throw new MagicRuntimeException("Failed to start subsystem [db-manager].", e);
-            }
-        }
-
-        if(resourcesManager != null) {
-            try {
-                resourcesManager.startup();
-            }
-            catch (MagicResourceException e) {
-                throw new MagicRuntimeException("Failed to start subsystem [resources-manager].", e);
-            }
-        }
+        subsystems.startup();
     }
 
     private Map<URL, Map<Class<? extends Annotation>, List<Class<?>>>> scan(){
@@ -725,8 +620,8 @@ public class MagicEnvironment {
         }
 
         if(scheduleManager != null) {
-            log.debug("Starting Schedule-Manager...");
-            scheduleManager.startup();
+            log.debug("Starting Schedule Manager...");
+            scheduleManager.start();
         }
 
         try {

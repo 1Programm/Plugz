@@ -1,12 +1,10 @@
 package com.programm.projects.plugz.magic.api.db;
 
+import com.programm.projects.plugz.magic.api.ISubsystem;
+
 import java.net.URL;
 
-public interface IDatabaseManager {
-
-    void startup() throws DataBaseException;
-
-    void shutdown() throws DataBaseException;
+public interface IDatabaseManager extends ISubsystem {
 
     void removeUrl(URL url);
 

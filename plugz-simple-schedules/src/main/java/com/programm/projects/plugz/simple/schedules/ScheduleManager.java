@@ -114,7 +114,15 @@ public class ScheduleManager implements IScheduleManager, ISchedules, Runnable {
     }
 
     @Override
-    public void startup(){
+    public void startup(){}
+
+    @Override
+    public void shutdown(){
+        running = false;
+    }
+
+    @Override
+    public void start() {
         if(running) return;
         running = true;
         paused = false;
@@ -122,11 +130,6 @@ public class ScheduleManager implements IScheduleManager, ISchedules, Runnable {
 
         log.info("Started.");
         asyncManager.runAsyncVipTask(this, 0);
-    }
-
-    @Override
-    public void shutdown(){
-        running = false;
     }
 
     @Override

@@ -1,12 +1,10 @@
 package com.programm.projects.plugz.magic.api.resources;
 
+import com.programm.projects.plugz.magic.api.ISubsystem;
+
 import java.net.URL;
 
-public interface IResourcesManager {
-
-    void startup() throws MagicResourceException;
-
-    void shutdown() throws MagicResourceException;
+public interface IResourcesManager extends ISubsystem {
 
     void removeUrl(URL url);
 
