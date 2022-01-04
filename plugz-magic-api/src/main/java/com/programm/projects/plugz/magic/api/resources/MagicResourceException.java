@@ -1,6 +1,8 @@
 package com.programm.projects.plugz.magic.api.resources;
 
-public class MagicResourceException extends Exception {
+import com.programm.projects.plugz.magic.api.MagicException;
+
+public class MagicResourceException extends MagicException {
 
     public MagicResourceException(String message) {
         super(message);

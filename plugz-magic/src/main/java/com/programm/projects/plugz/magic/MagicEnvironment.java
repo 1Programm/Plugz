@@ -6,6 +6,10 @@ import com.programm.projects.plugz.core.Plugz;
 import com.programm.projects.plugz.core.ScanException;
 import com.programm.projects.plugz.inject.InjectManager;
 import com.programm.projects.plugz.magic.api.*;
+import com.programm.projects.plugz.magic.api.db.DataBaseException;
+import com.programm.projects.plugz.magic.api.db.Entity;
+import com.programm.projects.plugz.magic.api.db.IDatabaseManager;
+import com.programm.projects.plugz.magic.api.db.Repo;
 import com.programm.projects.plugz.magic.api.resources.IResourcesManager;
 import com.programm.projects.plugz.magic.api.resources.MagicResourceException;
 import com.programm.projects.plugz.magic.api.resources.Resource;
@@ -34,9 +38,10 @@ public class MagicEnvironment {
     private final ProxyLogger log = new ProxyLogger();
     private final ThreadPoolManager threadPoolManager;
     private final MagicInstanceManager instanceManager;
+    private final InjectManager injectionManager;
     private IScheduleManager scheduleManager;
     private IResourcesManager resourcesManager;
-    private final InjectManager injectionManager;
+    private IDatabaseManager databaseManager;
 
     private final List<URL> searchedUrls = new ArrayList<>();
     private final Map<URL, String> searchedBases = new HashMap<>();
@@ -125,6 +130,8 @@ public class MagicEnvironment {
         this.searchedAnnotations.add(Set.class);
         this.searchedAnnotations.add(Resources.class);
         this.searchedAnnotations.add(Resource.class);
+        this.searchedAnnotations.add(Entity.class);
+        this.searchedAnnotations.add(Repo.class);
 
         registerInstance(ILogger.class, log);
     }
@@ -172,6 +179,16 @@ public class MagicEnvironment {
             throw new MagicRuntimeException("Exception while calling pre shutdown.", e);
         }
 
+        if(databaseManager != null){
+            try {
+                log.debug("Shutting down Database-Manager...");
+                databaseManager.shutdown();
+            }
+            catch (DataBaseException e){
+                throw new MagicRuntimeException("Exception while shutting down Resources-Manager.", e);
+            }
+        }
+
         if(resourcesManager != null) {
             try {
                 log.debug("Shutting down Resources-Manager...");
@@ -205,6 +222,7 @@ public class MagicEnvironment {
                         throw new MagicRuntimeException("Failed to remove url [" + url + "].", e);
                     }
 
+                    if(databaseManager != null) databaseManager.removeUrl(url);
                     if(resourcesManager != null) resourcesManager.removeUrl(url);
                     if(scheduleManager != null) scheduleManager.removeUrl(url);
                     searchedUrls.remove(url);
@@ -232,6 +250,22 @@ public class MagicEnvironment {
 
         //Instantiate
         for(URL url : addedUrls){
+            List<Class<?>> setClasses = plugz.getAnnotatedWithFromUrl(Set.class, url);
+
+            if(setClasses != null){
+                log.debug("[RE]: Instantiating [{}] @Set classes.", setClasses.size());
+                for(Class<?> cls : setClasses){
+                    try {
+                        log.trace("[RE]: Register [{}] as @Set class...", cls.toString());
+                        instanceManager.registerSetClass(cls);
+                        //TODO: add to changes
+                    }
+                    catch (MagicInstanceException e) {
+                        throw new MagicRuntimeException("Could not instantiate Service class: [" + cls.getName() + "] from url: [" + url + "].", e);
+                    }
+                }
+            }
+
             List<Class<?>> serviceClasses = plugz.getAnnotatedWithFromUrl(Service.class, url);
 
             if(serviceClasses != null){
@@ -244,6 +278,51 @@ public class MagicEnvironment {
                     }
                     catch (MagicInstanceException e) {
                         throw new MagicRuntimeException("Could not instantiate Service class: [" + cls.getName() + "] from url: [" + url + "].", e);
+                    }
+                }
+            }
+
+            List<Class<?>> entityClasses = plugz.getAnnotatedWithFromUrl(Entity.class, url);
+
+            if(entityClasses != null){
+                if(entityClasses.size() != 0 && databaseManager == null){
+                    log.error("[RE]: No Database Manager available, so no @Entity classes can be handled!");
+                }
+                else {
+                    log.debug("[RE]: Registering [{}] @Entity classes.", entityClasses.size());
+                    for(Class<?> cls : entityClasses){
+                        log.trace("[RE]: Registering entity [{}]...", cls);
+                        databaseManager.registerEntity(cls);
+                        //TODO: add to changes
+                    }
+                }
+            }
+
+            List<Class<?>> repoClasses = plugz.getAnnotatedWithFromUrl(Repo.class, url);
+
+            if(repoClasses != null){
+                if(repoClasses.size() != 0 && databaseManager == null){
+                    log.error("[RE]: No Database Manager available, so no @Repo classes can be handled!");
+                }
+                else {
+                    log.debug("[RE]: Registering [{}] @Repo classes.", repoClasses.size());
+                    for(Class<?> cls : repoClasses){
+                        Object repoImplementation;
+                        try {
+                            log.trace("[RE]: Creating repository [{}]...", cls);
+                            repoImplementation = databaseManager.registerAndImplementRepo(cls);
+                        }
+                        catch (DataBaseException e){
+                            throw new MagicRuntimeException("Could not create repository from class: [" + cls.getName() + "].", e);
+                        }
+
+                        if(repoImplementation == null){
+                            throw new MagicRuntimeException("Database Manager returned null implementation for repository class: [" + cls.getName() + "].");
+                        }
+
+                        log.trace("[RE]: Registering repository implementation [{}]...", repoImplementation);
+                        registerInstance(cls, repoImplementation);
+                        //TODO: add to changes
                     }
                 }
             }
@@ -378,6 +457,29 @@ public class MagicEnvironment {
             throw new MagicRuntimeException("Multiple possible implementations found for subsystem [schedule-manager]:\n" + scheduleManagers);
         }
 
+        List<Class<? extends IDatabaseManager>> dbManagers = injectionManager.findImplementations(IDatabaseManager.class);
+
+        if(dbManagers.size() == 1){
+            Class<? extends IDatabaseManager> dbManagerCls = dbManagers.get(0);
+
+            log.info("Found implementation for subsystem [db-manager]: {}.", dbManagerCls);
+
+            try {
+                this.databaseManager = subsystemInstanceManger.instantiate(dbManagerCls);
+            }
+            catch (MagicInstanceException e){
+                throw new MagicRuntimeException("Failed to instantiate subsystem [db-manager]:", e);
+            }
+        }
+        else if(dbManagers.size() == 0){
+            if(logSubsystemMissing) {
+                log.warn("No implementation found for subsystem [db-manager]!");
+            }
+        }
+        else {
+            throw new MagicRuntimeException("Multiple possible implementations found for subsystem [db-manager]:\n" + dbManagers);
+        }
+
         List<Class<? extends IResourcesManager>> resManagers = injectionManager.findImplementations(IResourcesManager.class);
 
         if(resManagers.size() == 1){
@@ -403,10 +505,20 @@ public class MagicEnvironment {
     }
 
     private void startupSubsystems(){
+        if(databaseManager != null){
+            try {
+                databaseManager.startup();
+            }
+            catch (DataBaseException e){
+                throw new MagicRuntimeException("Failed to start subsystem [db-manager].", e);
+            }
+        }
+
         if(resourcesManager != null) {
             try {
                 resourcesManager.startup();
-            } catch (MagicResourceException e) {
+            }
+            catch (MagicResourceException e) {
                 throw new MagicRuntimeException("Failed to start subsystem [resources-manager].", e);
             }
         }
@@ -493,6 +605,49 @@ public class MagicEnvironment {
             }
         }
 
+        List<Class<?>> entityClasses = plugz.getAnnotatedWith(Entity.class);
+
+        if(entityClasses != null){
+            if(entityClasses.size() != 0 && databaseManager == null){
+                log.error("No Database Manager available, so no @Entity classes can be handled!");
+            }
+            else {
+                log.debug("Registering [{}] @Entity classes.", entityClasses.size());
+                for(Class<?> cls : entityClasses){
+                    log.trace("Registering entity [{}]...", cls);
+                    databaseManager.registerEntity(cls);
+                }
+            }
+        }
+
+        List<Class<?>> repoClasses = plugz.getAnnotatedWith(Repo.class);
+
+        if(repoClasses != null){
+            if(repoClasses.size() != 0 && databaseManager == null){
+                log.error("No Database Manager available, so no @Repo classes can be handled!");
+            }
+            else {
+                log.debug("Registering [{}] @Repo classes.", repoClasses.size());
+                for(Class<?> cls : repoClasses){
+                    Object repoImplementation;
+                    try {
+                        log.trace("Creating repository [{}]...", cls);
+                        repoImplementation = databaseManager.registerAndImplementRepo(cls);
+                    }
+                    catch (DataBaseException e){
+                        throw new MagicRuntimeException("Could not create repository from class: [" + cls.getName() + "].", e);
+                    }
+
+                    if(repoImplementation == null){
+                        throw new MagicRuntimeException("Database Manager returned null implementation for repository class: [" + cls.getName() + "].");
+                    }
+
+                    log.trace("Registering repository implementation [{}]...", repoImplementation);
+                    registerInstance(cls, repoImplementation);
+                }
+            }
+        }
+
         List<Class<?>> resourceClasses = plugz.getAnnotatedWith(Resource.class);
 
         if(resourceClasses != null) {
@@ -503,7 +658,7 @@ public class MagicEnvironment {
                 log.debug("Instantiating [{}] @Resource classes.", resourceClasses.size());
                 for (Class<?> cls : resourceClasses) {
                     try {
-                        log.trace("Building resource [{}]...", cls.toString());
+                        log.trace("Building resource [{}]...", cls);
                         Object resourceObject = resourcesManager.buildResourceObject(cls);
 
                         if (resourceObject != null) {
