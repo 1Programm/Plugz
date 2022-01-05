@@ -6,10 +6,7 @@ import com.programm.projects.plugz.core.Plugz;
 import com.programm.projects.plugz.core.ScanException;
 import com.programm.projects.plugz.inject.InjectManager;
 import com.programm.projects.plugz.magic.api.*;
-import com.programm.projects.plugz.magic.api.db.DataBaseException;
-import com.programm.projects.plugz.magic.api.db.Entity;
-import com.programm.projects.plugz.magic.api.db.IDatabaseManager;
-import com.programm.projects.plugz.magic.api.db.Repo;
+import com.programm.projects.plugz.magic.api.db.*;
 import com.programm.projects.plugz.magic.api.resources.IResourcesManager;
 import com.programm.projects.plugz.magic.api.resources.MagicResourceException;
 import com.programm.projects.plugz.magic.api.resources.Resource;
@@ -271,9 +268,14 @@ public class MagicEnvironment {
                 else {
                     log.debug("[RE]: Registering [{}] @Entity classes.", entityClasses.size());
                     for(Class<?> cls : entityClasses){
-                        log.trace("[RE]: Registering entity [{}]...", cls);
-                        databaseManager.registerEntity(cls);
-                        //TODO: add to changes
+                        try {
+                            log.trace("[RE]: Registering entity [{}]...", cls);
+                            databaseManager.registerEntity(cls);
+                            //TODO: add to changes
+                        }
+                        catch (DataBaseException e){
+                            throw new MagicRuntimeException("Could not register Entity: [" + cls.getName() + "]!", e);
+                        }
                     }
                 }
             }
@@ -509,8 +511,13 @@ public class MagicEnvironment {
             else {
                 log.debug("Registering [{}] @Entity classes.", entityClasses.size());
                 for(Class<?> cls : entityClasses){
-                    log.trace("Registering entity [{}]...", cls);
-                    databaseManager.registerEntity(cls);
+                    try {
+                        log.trace("Registering entity [{}]...", cls);
+                        databaseManager.registerEntity(cls);
+                    }
+                    catch (DataBaseException e){
+                        throw new MagicRuntimeException("Could not register Entity: [" + cls.getName() + "]!", e);
+                    }
                 }
             }
         }
@@ -537,8 +544,10 @@ public class MagicEnvironment {
                         throw new MagicRuntimeException("Database Manager returned null implementation for repository class: [" + cls.getName() + "].");
                     }
 
+                    URL fromUrl = Utils.getUrlFromClass(cls);
+
                     log.trace("Registering repository implementation [{}]...", repoImplementation);
-                    registerInstance(cls, repoImplementation);
+                    registerInstance(instanceManager, fromUrl, cls, repoImplementation);
                 }
             }
         }
@@ -667,8 +676,12 @@ public class MagicEnvironment {
     }
 
     private MagicEnvironment registerInstance(MagicInstanceManager manager, Class<?> cls, Object instance){
+        URL fromUrl = Utils.getUrlFromClass(instance.getClass());
+        return registerInstance(manager, fromUrl, cls, instance);
+    }
+
+    private MagicEnvironment registerInstance(MagicInstanceManager manager, URL fromUrl, Class<?> cls, Object instance){
         try {
-            URL fromUrl = Utils.getUrlFromClass(instance.getClass());
             manager.registerInstance(fromUrl, cls, instance);
             return this;
         }

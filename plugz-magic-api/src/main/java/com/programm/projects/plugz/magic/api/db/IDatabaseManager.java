@@ -8,7 +8,7 @@ public interface IDatabaseManager extends ISubsystem {
 
     void removeUrl(URL url);
 
-    void registerEntity(Class<?> cls);
+    void registerEntity(Class<?> cls) throws DataBaseException;
 
     Object registerAndImplementRepo(Class<?> cls) throws DataBaseException;
 

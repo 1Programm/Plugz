@@ -1,10 +1,13 @@
 package com.programm.projects.plugz.test;
 
 import com.programm.projects.ioutils.log.api.out.ILogger;
+import com.programm.projects.plugz.magic.api.Async;
 import com.programm.projects.plugz.magic.api.Get;
 import com.programm.projects.plugz.magic.api.PostSetup;
 import com.programm.projects.plugz.magic.api.Service;
 import com.programm.projects.plugz.magic.api.schedules.Scheduled;
+
+import java.util.List;
 
 @Service
 public class MyService {
@@ -13,10 +16,22 @@ public class MyService {
     @Get private UserRepo repo;
 
     @PostSetup
+    public void zirst(){
+        log.info("A");
+        repo.create(1).setName("Peter");
+        repo.create(2).setName("Gandalf");
+        repo.create(3).setName("Peter");
+        repo.create(4).setName("Udolf");
+    }
+
+    @PostSetup
+    @Async(delay = 10)
     public void start(){
         log.info("ONSTART");
-        TestUser user = repo.getById(10);
-        log.info("User: {}", user);
+
+        List<TestUser> users = repo.findByName("Gandalf");
+
+        log.info("User: {}", users);
     }
 
     @Scheduled(repeat = 2000, stopAfter = 10000)

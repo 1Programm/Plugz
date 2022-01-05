@@ -2,6 +2,7 @@ package com.programm.projects.plugz.magic;
 
 import com.programm.projects.plugz.magic.api.*;
 import com.programm.projects.plugz.magic.api.Set;
+import com.programm.projects.plugz.magic.api.db.IRepo;
 import com.programm.projects.plugz.magic.api.schedules.Scheduled;
 import com.programm.projects.plugz.magic.api.schedules.ScheduledMethodConfig;
 import lombok.RequiredArgsConstructor;
@@ -602,6 +603,9 @@ class MagicInstanceManager implements IInstanceManager {
     }
 
     public void registerInstance(URL fromUrl, Class<?> cls, Object instance) throws MagicInstanceException {
+        //Blacklist
+        if(cls == IRepo.class) return;
+
         Class<?>[] interfaces = cls.getInterfaces();
         for(Class<?> iCls : interfaces){
             registerInstance(fromUrl, iCls, instance);

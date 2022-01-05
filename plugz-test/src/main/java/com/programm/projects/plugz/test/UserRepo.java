@@ -1,10 +1,13 @@
 package com.programm.projects.plugz.test;
 
+import com.programm.projects.plugz.magic.api.db.ICrudRepo;
 import com.programm.projects.plugz.magic.api.db.Repo;
 
-@Repo
-public interface UserRepo {
+import java.util.List;
 
-    TestUser getById(int id);
+@Repo
+public interface UserRepo extends ICrudRepo<Integer, TestUser> {
+
+    List<TestUser> findByName(String name);
 
 }
