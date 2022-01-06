@@ -10,15 +10,17 @@ import java.util.List;
 public class MyService {
 
     @Get private ILogger log;
-    @Get private UserRepo repo;
+    @Get(required = false) private UserRepo repo;
 
     @PostSetup
     public void zirst(){
         log.info("A");
-        repo.create(1).setName("Peter");
-        repo.create(2).setName("Gandalf");
-        repo.create(3).setName("Peter");
-        repo.create(4).setName("Udolf");
+        if(repo != null) {
+            repo.create(1).setName("Peter");
+            repo.create(2).setName("Gandalf");
+            repo.create(3).setName("Peter");
+            repo.create(4).setName("Udolf");
+        }
     }
 
     @PostSetup
@@ -26,9 +28,10 @@ public class MyService {
     public void start(){
         log.info("ONSTART");
 
-        List<TestUser> users = repo.findByName("Gandalf");
-
-        log.info("User: {}", users);
+        if(repo != null) {
+            List<TestUser> users = repo.findByName("Gandalf");
+            log.info("User: {}", users);
+        }
     }
 
     @Scheduled(repeat = 2000, stopAfter = 10000)

@@ -107,13 +107,36 @@ class MagicInstanceManager implements IInstanceManager {
         }
     }
 
-    public interface MagicWire {
+    private interface MagicWire {
         String name();
-
         String requesterName();
+        boolean required();
 
         void accept(Object o) throws MagicInstanceException;
     }
+
+    @RequiredArgsConstructor
+    private static abstract class AMagicWire implements MagicWire {
+        private final String name;
+        private final String requesterName;
+        private final boolean required;
+
+        @Override
+        public String name() {
+            return name;
+        }
+
+        @Override
+        public String requesterName() {
+            return requesterName;
+        }
+
+        @Override
+        public boolean required() {
+            return required;
+        }
+    }
+
 
     @RequiredArgsConstructor
     private static abstract class AbstractProvider {
@@ -340,6 +363,19 @@ class MagicInstanceManager implements IInstanceManager {
                 if(waits != null) {
                     for (Class<?> cls : waits.keySet()) {
                         List<MagicWire> mws = waits.get(cls);
+
+                        for(int i=0;i<mws.size();i++){
+                            MagicWire wire = mws.get(i);
+
+                            if(!wire.required()){
+                                wire.accept(null);
+                                mws.remove(i);
+                                i--;
+                            }
+                        }
+
+                        if(mws.isEmpty()) continue;
+
                         List<String> requestNames = mws.stream().map(MagicWire::requesterName).collect(Collectors.toList());
 
                         for(String name : requestNames){
@@ -349,6 +385,7 @@ class MagicInstanceManager implements IInstanceManager {
                 }
             }
 
+            //if(requesterMap.size() == 0) return;
             if(requesterMap.size() == 1){
                 for(URL url : requesterMap.keySet()){
                     String waitError = getWaitErrorMessage(requesterMap, url);
@@ -356,7 +393,7 @@ class MagicInstanceManager implements IInstanceManager {
                     throw new MagicInstanceException("Waiting for:\n[\n" + waitError + "\n]");
                 }
             }
-            else {
+            else if(requesterMap.size() > 1){
                 StringBuilder sb1 = new StringBuilder();
 
                 for(URL url : requesterMap.keySet()){
@@ -439,19 +476,9 @@ class MagicInstanceManager implements IInstanceManager {
                     continue;
                 }
 
-                MagicWire mw = new MagicWire() {
+                MagicWire mw = new AMagicWire(name, cls.toString(), getAnnotation.required()){
                     @Override
-                    public String name() {
-                        return name;
-                    }
-
-                    @Override
-                    public String requesterName() {
-                        return cls.toString();
-                    }
-
-                    @Override
-                    public void accept(Object o) {
+                    public void accept(Object o) throws MagicInstanceException {
                         putField(instance, field, o);
                     }
                 };
@@ -479,17 +506,7 @@ class MagicInstanceManager implements IInstanceManager {
                     continue;
                 }
 
-                MagicWire mw = new MagicWire() {
-                    @Override
-                    public String name() {
-                        return name;
-                    }
-
-                    @Override
-                    public String requesterName() {
-                        return cls.toString();
-                    }
-
+                MagicWire mw = new AMagicWire(name, cls.toString(), getAnnotation.required()){
                     @Override
                     public void accept(Object o) throws MagicInstanceException {
                         invokeMethod(instance, method, asyncAnnotation, o);
@@ -562,7 +579,7 @@ class MagicInstanceManager implements IInstanceManager {
         catch (NoSuchMethodException ignore){}
 
         Constructor<?> magicConstructor = null;
-        List<String> getAnnotationNames = new ArrayList<>();
+        List<Get> getAnnotations = new ArrayList<>();
 
         for(Constructor<?> con : cls.getConstructors()){
             Annotation[][] annotations = con.getParameterAnnotations();
@@ -574,7 +591,7 @@ class MagicInstanceManager implements IInstanceManager {
                     Annotation an = annotations[i][o];
                     if(an.annotationType() == Get.class){
                         found = true;
-                        getAnnotationNames.add(((Get) an).value());
+                        getAnnotations.add(((Get) an));
                         break;
                     }
                 }
@@ -611,9 +628,9 @@ class MagicInstanceManager implements IInstanceManager {
 
         for(int i=0;i<paramCount;i++){
             Class<?> paramType = paramTypes[i];
-            final String paramGetName = getAnnotationNames.get(i);
+            final Get getAnnotation = getAnnotations.get(i);
 
-            Object instance = getInstanceFromCls(paramType, paramGetName);
+            Object instance = getInstanceFromCls(paramType, getAnnotation.value());
             if(instance != null){
                 instances[i] = instance;
                 missingInstances--;
@@ -621,17 +638,8 @@ class MagicInstanceManager implements IInstanceManager {
             }
 
             final int pos = i;
-            MagicWire mw = new MagicWire() {
-                @Override
-                public String name() {
-                    return paramGetName;
-                }
 
-                @Override
-                public String requesterName() {
-                    return cls.toString();
-                }
-
+            MagicWire mw = new AMagicWire(getAnnotation.value(), cls.toString(), getAnnotation.required()){
                 @Override
                 public void accept(Object o) throws MagicInstanceException {
                     mmc.putArg(pos, o);
@@ -644,7 +652,6 @@ class MagicInstanceManager implements IInstanceManager {
                     }
                 }
             };
-
             waitMap.computeIfAbsent(fromUrl, url -> new HashMap<>()).computeIfAbsent(paramType, pt -> new ArrayList<>()).add(mw);
         }
 
@@ -786,19 +793,15 @@ class MagicInstanceManager implements IInstanceManager {
             Class<?> paramType = paramTypes[i];
             Annotation[] paramAnnotations = parameterAnnotations[i];
 
-            boolean isGetNotPresent = true;
-            String _getName = "";
+            Get getAnnotation = null;
             for(Annotation annotation : paramAnnotations){
                 if(annotation instanceof Get){
-                    isGetNotPresent = false;
-                    _getName = ((Get)annotation).value();
+                    getAnnotation = (Get)annotation;
                     break;
                 }
             }
 
-            final String getName = _getName;
-
-            if(isGetNotPresent){
+            if(getAnnotation == null){
                 if(argumentIndex >= arguments.length){
                     throw new MagicInstanceException("Not enough non - magic arguments inside constructor [" + getConstructorString(con) + "].");
                 }
@@ -807,6 +810,8 @@ class MagicInstanceManager implements IInstanceManager {
                 missingInstances--;
             }
             else {
+                final String getName = getAnnotation.value();
+
                 Object val = getInstanceFromCls(paramType, getName);
                 if (val != null) {
                     args[i] = val;
@@ -816,24 +821,13 @@ class MagicInstanceManager implements IInstanceManager {
 
                 final int pos = i;
 
-                MagicWire mw = new MagicWire() {
-                    @Override
-                    public String name() {
-                        return getName;
-                    }
-
-                    @Override
-                    public String requesterName() {
-                        return con.toString();
-                    }
-
+                MagicWire mw = new AMagicWire(getName, cls.toString(), getAnnotation.required()){
                     @Override
                     public void accept(Object o) throws MagicInstanceException {
                         mmc.putArg(pos, o);
                         mmc.tryConstruct();
                     }
                 };
-
                 if (!acceptsWait) throw new MagicInstanceException("Constructor [" + getConstructorString(con) + "] expects to get all values and cannot wait for them! - Could not find value for class: [" + paramType.getName() + "]");
                 waitMap.computeIfAbsent(fromUrl, url -> new HashMap<>()).computeIfAbsent(paramType, pt -> new ArrayList<>()).add(mw);
             }
@@ -868,19 +862,15 @@ class MagicInstanceManager implements IInstanceManager {
             Class<?> paramType = paramTypes[i];
             Annotation[] paramAnnotations = parameterAnnotations[i];
 
-            boolean isGetNotPresent = true;
-            String _getName = "";
+            Get getAnnotation = null;
             for(Annotation annotation : paramAnnotations){
                 if(annotation instanceof Get){
-                    isGetNotPresent = false;
-                    _getName = ((Get)annotation).value();
+                    getAnnotation = (Get)annotation;
                     break;
                 }
             }
 
-            final String getName = _getName;
-
-            if(isGetNotPresent){
+            if(getAnnotation == null){
                 if(argumentIndex >= arguments.length){
                     throw new MagicInstanceException("Not enough non - magic arguments inside method [" + getMethodString(method) + "].");
                 }
@@ -889,6 +879,8 @@ class MagicInstanceManager implements IInstanceManager {
                 missingInstances--;
             }
             else {
+                final String getName = getAnnotation.value();
+
                 Object val = getInstanceFromCls(paramType, getName);
                 if (val != null) {
                     args[i] = val;
@@ -898,17 +890,7 @@ class MagicInstanceManager implements IInstanceManager {
 
                 final int pos = i;
 
-                MagicWire mw = new MagicWire() {
-                    @Override
-                    public String name() {
-                        return getName;
-                    }
-
-                    @Override
-                    public String requesterName() {
-                        return method.toString();
-                    }
-
+                MagicWire mw = new AMagicWire(getName, method.toString(), getAnnotation.required()){
                     @Override
                     public void accept(Object o) throws MagicInstanceException {
                         mmm.putArg(pos, o);
