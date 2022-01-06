@@ -88,6 +88,12 @@ class Subsystems {
                 throw new MagicRuntimeException("Multiple possible implementations found for subsystem [" + name + "]:\n" + subsystemImpls);
             }
         }
+
+        try {
+            subsystemInstanceManger.checkWaitMap();
+        } catch (MagicInstanceException e) {
+            throw new MagicRuntimeException("Waiting dependencies could not be resolved. " + e.getMessage());
+        }
     }
 
     private void registerInstance(MagicInstanceManager manager, Class<?> cls, Object instance){

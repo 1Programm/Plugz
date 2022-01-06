@@ -10,8 +10,10 @@ import lombok.Setter;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 class MagicInstanceManager implements IInstanceManager {
@@ -107,6 +109,8 @@ class MagicInstanceManager implements IInstanceManager {
 
     public interface MagicWire {
         String name();
+
+        String requesterName();
 
         void accept(Object o) throws MagicInstanceException;
     }
@@ -329,22 +333,64 @@ class MagicInstanceManager implements IInstanceManager {
 
     public void checkWaitMap() throws MagicInstanceException {
         if(!waitMap.isEmpty()) {
-            StringBuilder sb = new StringBuilder();
+            Map<URL, Map<String, List<Class<?>>>> requesterMap = new HashMap<>();
 
             for(URL url : waitMap.keySet()){
                 Map<Class<?>, List<MagicWire>> waits = waitMap.get(url);
                 if(waits != null) {
                     for (Class<?> cls : waits.keySet()) {
-                        if (sb.length() != 0) {
-                            sb.append(",\n");
+                        List<MagicWire> mws = waits.get(cls);
+                        List<String> requestNames = mws.stream().map(MagicWire::requesterName).collect(Collectors.toList());
+
+                        for(String name : requestNames){
+                            requesterMap.computeIfAbsent(url, u -> new HashMap<>()).computeIfAbsent(name, n -> new ArrayList<>()).add(cls);
                         }
-                        sb.append("   ").append(cls.getName());
                     }
                 }
             }
 
-            throw new MagicInstanceException("Waiting for:\n[\n" + sb + "\n]");
+            if(requesterMap.size() == 1){
+                for(URL url : requesterMap.keySet()){
+                    String waitError = getWaitErrorMessage(requesterMap, url);
+
+                    throw new MagicInstanceException("Waiting for:\n[\n" + waitError + "\n]");
+                }
+            }
+            else {
+                StringBuilder sb1 = new StringBuilder();
+
+                for(URL url : requesterMap.keySet()){
+                    if(sb1.length() != 0){
+                        sb1.append("\n");
+                    }
+
+                    sb1.append("\n[").append(url).append("]:\n");
+
+                    String waitError = getWaitErrorMessage(requesterMap, url);
+
+                    sb1.append("Waiting for:\n[\n").append(waitError).append("\n]");
+                }
+
+                throw new MagicInstanceException("\n" + sb1);
+            }
         }
+    }
+
+    private String getWaitErrorMessage(Map<URL, Map<String, List<Class<?>>>> requesterMap, URL url){
+        StringBuilder sb = new StringBuilder();
+
+        Map<String, List<Class<?>>> requesterNameMap = requesterMap.get(url);
+
+        for(String name : requesterNameMap.keySet()){
+            List<Class<?>> classes = requesterNameMap.get(name);
+
+            if(sb.length() != 0){
+                sb.append(",\n");
+            }
+            sb.append("   ").append(name).append(" --> ").append(classes);
+        }
+
+        return sb.toString();
     }
 
     public void callPostSetup() throws MagicInstanceException{
@@ -400,6 +446,11 @@ class MagicInstanceManager implements IInstanceManager {
                     }
 
                     @Override
+                    public String requesterName() {
+                        return cls.toString();
+                    }
+
+                    @Override
                     public void accept(Object o) {
                         putField(instance, field, o);
                     }
@@ -432,6 +483,11 @@ class MagicInstanceManager implements IInstanceManager {
                     @Override
                     public String name() {
                         return name;
+                    }
+
+                    @Override
+                    public String requesterName() {
+                        return cls.toString();
                     }
 
                     @Override
@@ -569,6 +625,11 @@ class MagicInstanceManager implements IInstanceManager {
                 @Override
                 public String name() {
                     return paramGetName;
+                }
+
+                @Override
+                public String requesterName() {
+                    return cls.toString();
                 }
 
                 @Override
@@ -762,6 +823,11 @@ class MagicInstanceManager implements IInstanceManager {
                     }
 
                     @Override
+                    public String requesterName() {
+                        return con.toString();
+                    }
+
+                    @Override
                     public void accept(Object o) throws MagicInstanceException {
                         mmc.putArg(pos, o);
                         mmc.tryConstruct();
@@ -836,6 +902,11 @@ class MagicInstanceManager implements IInstanceManager {
                     @Override
                     public String name() {
                         return getName;
+                    }
+
+                    @Override
+                    public String requesterName() {
+                        return method.toString();
                     }
 
                     @Override

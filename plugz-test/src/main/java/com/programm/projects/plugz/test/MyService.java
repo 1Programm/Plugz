@@ -1,10 +1,7 @@
 package com.programm.projects.plugz.test;
 
 import com.programm.projects.ioutils.log.api.out.ILogger;
-import com.programm.projects.plugz.magic.api.Async;
-import com.programm.projects.plugz.magic.api.Get;
-import com.programm.projects.plugz.magic.api.PostSetup;
-import com.programm.projects.plugz.magic.api.Service;
+import com.programm.projects.plugz.magic.api.*;
 import com.programm.projects.plugz.magic.api.schedules.Scheduled;
 
 import java.util.List;
