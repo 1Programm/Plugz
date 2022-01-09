@@ -54,25 +54,20 @@ public class InMemoryDatabase implements IDatabaseManager {
         }
     }
 
-    private static class DataObjectEntry {
+    static class DataObjectEntry {
         final Class<?> dataCls;
         final Class<?> idCls;
-        final DataBuilder builder;
-        final List<String> builderTypeNames;
         final Map<String, DataEntry> dataEntryMap;
 
-        public DataObjectEntry(Class<?> dataCls, Class<?> idCls, DataBuilder builder, List<String> builderTypeNames, Map<String, DataEntry> dataEntryMap) {
+        public DataObjectEntry(Class<?> dataCls, Class<?> idCls, Map<String, DataEntry> dataEntryMap) {
             this.dataCls = dataCls;
             this.idCls = idCls;
-            this.builder = builder;
-            this.builderTypeNames = builderTypeNames;
             this.dataEntryMap = dataEntryMap;
         }
     }
 
-    private static class DataEntry {
+    static class DataEntry {
         final Class<?> type;
-        boolean setInBuilder;
         DataGetter getter;
         DataSetter setter;
 
@@ -81,47 +76,7 @@ public class InMemoryDatabase implements IDatabaseManager {
         }
     }
 
-    private interface DataBuilder {
-        Object build(Object... args) throws InvocationTargetException;
-    }
-
-    private static class DataConstructorBuilder implements DataBuilder {
-        private final Constructor<?> constructor;
-
-        public DataConstructorBuilder(Constructor<?> constructor) {
-            this.constructor = constructor;
-        }
-
-        @Override
-        public Object build(Object... args) throws InvocationTargetException {
-            try {
-                return constructor.newInstance(args);
-            } catch (InstantiationException e) {
-                throw new IllegalStateException("Abstract constructor was annotated with @Builder!");
-            } catch (IllegalAccessException e) {
-                throw new IllegalStateException("INVALID STATE: should be checked!");
-            }
-        }
-    }
-
-    private static class DataMethodBuilder implements DataBuilder {
-        private final Method method;
-
-        public DataMethodBuilder(Method method) {
-            this.method = method;
-        }
-
-        @Override
-        public Object build(Object... args) throws InvocationTargetException {
-            try {
-                return method.invoke(null, args);
-            } catch (IllegalAccessException e) {
-                throw new IllegalStateException("INVALID STATE: should be checked!");
-            }
-        }
-    }
-
-    private interface DataGetter {
+    interface DataGetter {
         Object get(Object instance) throws InvocationTargetException;
     }
 
@@ -179,7 +134,7 @@ public class InMemoryDatabase implements IDatabaseManager {
         }
     }
 
-    private interface DataSetter {
+    interface DataSetter {
         void set(Object instance, Object data) throws InvocationTargetException;
     }
 
@@ -243,45 +198,69 @@ public class InMemoryDatabase implements IDatabaseManager {
             String mName = method.getName();
             Class<?> dataCls = repoEntry.dataCls;
             DataObjectEntry objectEntry = entityMap.get(dataCls);
+            IDatabase<Object, Object> db = databaseMap.get(dataCls);
 
             if(mName.equals("length") || mName.equals("size") || mName.equals("count")){
-                Database db = databaseMap.computeIfAbsent(repoEntry.dataCls, c -> new Database());
-                return db.data.size();
+                return db.size();
             }
-            else if(mName.equals("create")){
-                if(method.getReturnType() != Object.class && method.getReturnType() != dataCls) throw new DataBaseException("Method " + method + " should return [" + dataCls.getName() + "]!");
+            else if(mName.equals("save") || mName.equals("update")){
+                Object data = args[0];
+                DataEntry fieldEntry = objectEntry.dataEntryMap.get("id");
+                Object idValue = fieldEntry.getter.get(data);
 
-                if(args.length == 1 && args[0].getClass().isArray()){
-                    args = (Object[]) args[0];
+                //CREATE NEW AND GENERATE ID
+                if(idValue == null){
+                    //IF FINAL
+                    if(fieldEntry.setter == null){
+                        throw new DataBaseException("Id field must be either not null or not final!");
+                    }
+
+                    idValue = db.getAdvanceId();
+                    fieldEntry.setter.set(data, idValue);
                 }
 
-                if(args.length != objectEntry.builderTypeNames.size()) throw new DataBaseException("Invalid number of arguments [" + args.length + "] calling method [" + method + "]! Expected [" + objectEntry.builderTypeNames.size() + "].");
+                Class<?> retType = method.getReturnType();
 
-                for(int i=0;i<args.length;i++){
-                    Object arg = args[i];
-                    Class<?> argCls = arg.getClass();
-                    String builderArgName = objectEntry.builderTypeNames.get(i);
-                    Class<?> builderArgCls = objectEntry.dataEntryMap.get(builderArgName).type;
-
-                    if(isNotSameClass(argCls, builderArgCls)) throw new DataBaseException("Invalid data type! Expected [" + builderArgCls.getName() + "] got [" + argCls.getName() + "] when calling method [" + method + "]!");
+                if(retType == Void.TYPE) {
+                    db.save(idValue, data);
+                    return null;
                 }
-
-                Object o =  objectEntry.builder.build(args);
-
-                Database db = databaseMap.computeIfAbsent(dataCls, c -> new Database());
-                db.data.add(o);
-                return o;
+                else if(retType.isAssignableFrom(dataCls)) {
+                    return db.save(idValue, data);
+                }
+                else {
+                    throw new DataBaseException("Invalid return type [" + retType.getName() + "] for method: [" + method + "]!");
+                }
+            }
+            else if(mName.equals("remove")){
+                Object data = args[0];
+                db.remove(data);
+                return null;
             }
 
 
             QueryMethodEntry entry = repoEntry.queries.get(method);
 
             if(entry != null){
-                Database db = databaseMap.computeIfAbsent(dataCls, c -> new Database());
-
                 if(objectEntry == null) throw new IllegalStateException("SOMETHING WENT WRONG!");
 
-                List<Object> result = getResult(db, entry, objectEntry, args);
+                if(entry.andOrNames == null){
+                    return db.getAll();
+                }
+
+                Map<String, Object> queryArgs = new HashMap<>();
+                int arg_i = 0;
+                for(List<String> l1 : entry.andOrNames){
+                    for(String name : l1){
+                        if(!queryArgs.containsKey(name)){
+                            if(args == null || arg_i >= args.length) throw new IllegalStateException("SHOULD NOT HAPPEN");
+                            Object arg = args[arg_i++];
+                            queryArgs.put(name, arg);
+                        }
+                    }
+                }
+
+                List<Object> result = db.query(entry.andOrNames, queryArgs);
 
                 Class<?> retType = method.getReturnType();
                 Class<?> declaringClass = method.getDeclaringClass();
@@ -316,52 +295,13 @@ public class InMemoryDatabase implements IDatabaseManager {
 
             return method.invoke(proxy, args);
         }
-
-        private List<Object> getResult(Database db, QueryMethodEntry entry, DataObjectEntry objectEntry, Object[] args) throws DataBaseException {
-            List<Object> result = new ArrayList<>();
-
-            for(Object o : db.data){
-                int argi = 0;
-                for(List<String> andNames : entry.andOrNames){
-                    boolean is = true;
-
-                    for(String name : andNames){
-                        DataEntry dataEntry = objectEntry.dataEntryMap.get(name);
-
-                        if(dataEntry == null) throw new DataBaseException("No such field [" + name + "] found on @Entity [" + repoEntry.dataCls.getName() + "]!");
-
-                        Object queriedObject;
-                        try {
-                            queriedObject = dataEntry.getter.get(o);
-                        }
-                        catch (InvocationTargetException e){
-                            throw new DataBaseException("Internal Exception getting a value [" + name + "] from @Entity [" + repoEntry.dataCls.getName() + "]!", e);
-                        }
-
-                        Object arg = args[argi++];
-
-                        if(!queriedObject.equals(arg)){
-                            is = false;
-                            break;
-                        }
-                    }
-
-                    if(is){
-                        result.add(o);
-                    }
-
-                }
-            }
-
-            return  result;
-        }
     }
 
 
     @Get private ILogger log;
 
     private final Map<Class<?>, DataObjectEntry> entityMap = new HashMap<>();
-    private final Map<Class<?>, Database> databaseMap = new HashMap<>();
+    private final Map<Class<?>, IDatabase<Object, Object>> databaseMap = new HashMap<>();
 
     @Override
     public void startup() {
@@ -383,10 +323,31 @@ public class InMemoryDatabase implements IDatabaseManager {
             try {
                 DataObjectEntry dataEntry = createDataEntry(cls);
                 entityMap.put(cls, dataEntry);
+
+                IDatabase<Object, Object> db = databaseMap.get(cls);
+                if(db == null){
+                    db = generateDatabase(dataEntry);
+                    databaseMap.put(cls, db);
+                }
             }
             catch (DataBaseException e){
                 throw new DataBaseException("Exception inspecting the @Entity [" + cls.getName() + "]", e);
             }
+        }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private IDatabase<Object, Object> generateDatabase(DataObjectEntry dataEntry) throws DataBaseException {
+        Class<?> idCls = dataEntry.idCls;
+
+        if(idCls == Integer.class){
+            return (NumIdDatabase) new NumIdDatabase.IntDatabase<>(dataEntry);
+        }
+        else if(idCls == Long.class){
+            return (NumIdDatabase) new NumIdDatabase.LongDatabase<>(dataEntry);
+        }
+        else {
+            throw new DataBaseException("No database generator found for id-type: [" + idCls.getName() + "]!");
         }
     }
 
@@ -417,7 +378,7 @@ public class InMemoryDatabase implements IDatabaseManager {
             repoEntry = createRepoEntry(cls, dataEntry);
         }
         catch (DataBaseException e){
-            throw new DataBaseException("Exception inspecting the @Entity [" + dataCls.getName() + "]", e);
+            throw new DataBaseException("Exception inspecting the @Repo [" + cls.getName() + "]", e);
         }
 
         RepoHandler handler = new RepoHandler(repoEntry);
@@ -426,107 +387,11 @@ public class InMemoryDatabase implements IDatabaseManager {
 
     private DataObjectEntry createDataEntry(Class<?> dataCls) throws DataBaseException{
         Map<String, DataEntry> entries = new HashMap<>();
-        DataBuilder builder = null;
-        List<String> builderTypeNames = new ArrayList<>();
 
         Map<String, Class<?>> nameTypeMap = new HashMap<>();
         Map<String, Boolean> ignoreMap = new HashMap<>();
 
         Class<?> idClass = null;
-        Constructor<?> builderConstructor = null;
-        Method builderMethod = null;
-
-        //Find Builder in constructor
-        Constructor<?>[] constructors = dataCls.getConstructors();
-        for(Constructor<?> constructor : constructors){
-            if(constructor.isAnnotationPresent(Ignore.class)) continue;
-
-            Builder builderAnnotation = constructor.getAnnotation(Builder.class);
-
-            if(builderAnnotation != null) {
-                if(builderConstructor != null) throw new DataBaseException("Multiple @Builder Constructors found. Can only have one! (" + constructor + ")");
-
-                String[] paramNames = builderAnnotation.value();
-                Class<?>[] params = constructor.getParameterTypes();
-
-                if(paramNames.length != params.length) throw new DataBaseException("Invalid @Builder annotation: Names do not match the length of the parameter count! (" + constructor + ")");
-
-                for(int i=0;i<paramNames.length;i++){
-                    String name = paramNames[i];
-                    String stdName = nameToStd(name);
-                    Class<?> paramCls = params[i];
-
-                    if(nameTypeMap.containsKey(stdName)){
-                        throw new DataBaseException("@Builder defines multiple params with the same name: [" + stdName + "]! (" + constructor + ")");
-                    }
-
-                    nameTypeMap.put(stdName, paramCls);
-
-                    entries.computeIfAbsent(stdName, n -> new DataEntry(paramCls)).setInBuilder = true;
-                    builderTypeNames.add(stdName);
-                }
-
-                builderConstructor = constructor;
-            }
-        }
-
-        Method[] methods = dataCls.getDeclaredMethods();
-        for(Method method : methods){
-            if(method.isAnnotationPresent(Ignore.class)) continue;
-
-            Builder builderAnnotation = method.getAnnotation(Builder.class);
-
-            if(builderAnnotation != null){
-                int mods = method.getModifiers();
-
-                if(!Modifier.isStatic(mods)) throw new DataBaseException("@Builder annotation can only be placed on static methods! (" + method + ")");
-                if(builderConstructor != null) throw new DataBaseException("@Builder annotation already found on a constructor! Can only have one! (" + method + ")");
-                if(builderMethod != null) throw new DataBaseException("@Builder annotation already found on a method! Can only have one! (" + method + ")");
-                if(method.getReturnType() != dataCls) throw new DataBaseException("Static method annotated with @Builder should return the data class: [" + dataCls.getName() + "]! (" + method + ")");
-
-                String[] paramNames = builderAnnotation.value();
-                Class<?>[] params = method.getParameterTypes();
-
-                if(paramNames.length != params.length) throw new DataBaseException("Invalid @Builder annotation: Names do not match the length of the parameter count! (" + method + ")");
-
-                for(int i=0;i<paramNames.length;i++){
-                    String name = paramNames[i];
-                    String stdName = nameToStd(name);
-                    Class<?> paramCls = params[i];
-
-                    if(nameTypeMap.containsKey(stdName)){
-                        throw new DataBaseException("@Builder defines multiple params with the same name: [" + stdName + "]! (" + method + ")");
-                    }
-
-                    nameTypeMap.put(stdName, paramCls);
-
-                    entries.computeIfAbsent(stdName, n -> new DataEntry(paramCls)).setInBuilder = true;
-                    builderTypeNames.add(stdName);
-                }
-
-                builderMethod = method;
-            }
-        }
-
-        String builderName;
-        if(builderConstructor == null && builderMethod == null){
-            try {
-                builderConstructor = dataCls.getConstructor();
-                builderName = "Constructor: " + builderConstructor;
-                builder = new DataConstructorBuilder(builderConstructor);
-            } catch (NoSuchMethodException e) {
-                throw new DataBaseException("Could neither find a @Builder or an empty constructor for class [" + dataCls.getName() + "]!", e);
-            }
-        }
-        else if(builderConstructor != null){
-            builderName = "Constructor: " + builderConstructor;
-            builder = new DataConstructorBuilder(builderConstructor);
-        }
-        else {
-            builderName = "Method: " + builderMethod;
-            builder = new DataMethodBuilder(builderMethod);
-        }
-
         Field[] fields = dataCls.getDeclaredFields();
         for(Field field : fields){
             String fName = field.getName();
@@ -540,21 +405,14 @@ public class InMemoryDatabase implements IDatabaseManager {
             Class<?> type = field.getType();
             int mods = field.getModifiers();
 
-            Class<?> prevType = nameTypeMap.get(stdName);
-            if(prevType != null && type != prevType) throw new DataBaseException("Type for field [" + stdName + "] and previously found type in the builder do not match! (" + type + " <-> " + prevType + ")");
-
             if(!Modifier.isStatic(mods)) {
-                if(Modifier.isFinal(mods)){
-                    if(!nameTypeMap.containsKey(stdName)){
-                        throw new DataBaseException("Final field [" + stdName + "] is not annotated with @Ignore and is not passed into the @Builder [" + builderName + "]!");
-                    }
-                }
-                else {
+                if(!Modifier.isFinal(mods)){
                     entries.computeIfAbsent(stdName, n -> new DataEntry(type)).setter = new DataFieldSetter(field);
                 }
 
-                if(stdName.equals("id")){
+                if(fName.equals("id")){
                     if(idClass != null) throw new DataBaseException("Multiple id fields!");
+                    if(type.isPrimitive()) throw new DataBaseException("Id cannot be a primitive value as the default value could be interpreted as a set id!");
                     idClass = type;
                 }
 
@@ -563,6 +421,7 @@ public class InMemoryDatabase implements IDatabaseManager {
             }
         }
 
+        Method[] methods = dataCls.getDeclaredMethods();
         for(Method method : methods){
             if(method.isAnnotationPresent(Ignore.class)) continue;
 
@@ -582,7 +441,7 @@ public class InMemoryDatabase implements IDatabaseManager {
                 Class<?> getType = method.getReturnType();
                 Class<?> type = nameTypeMap.get(stdName);
 
-                if(type != null && type != getType) throw new DataBaseException("Getter for field [" + stdName + "] and previously found type do not match! (" + getType + " <-> " + type + ")");
+                if(type != null && isNotSameClass(type, getType)) throw new DataBaseException("Getter for field [" + stdName + "] and previously found type do not match! (" + getType + " <-> " + type + ")");
 
                 nameTypeMap.put(stdName, getType);
                 entries.computeIfAbsent(stdName, n -> new DataEntry(type)).getter = new DataMethodGetter(method);
@@ -597,7 +456,7 @@ public class InMemoryDatabase implements IDatabaseManager {
                 Class<?> setType = method.getParameterTypes()[0];
                 Class<?> type = nameTypeMap.get(stdName);
 
-                if(type != null && type != setType) throw new DataBaseException("Setter for field [" + stdName + "] and previously found type do not match! (" + setType + " <-> " + type + ")");
+                if(type != null && isNotSameClass(type, setType)) throw new DataBaseException("Setter for field [" + stdName + "] and previously found type do not match! (" + setType + " <-> " + type + ")");
 
                 nameTypeMap.put(stdName, setType);
                 entries.computeIfAbsent(stdName, n -> new DataEntry(type)).setter = new DataMethodSetter(method);
@@ -608,7 +467,7 @@ public class InMemoryDatabase implements IDatabaseManager {
             throw new DataBaseException("Could not find an id for @Data [" + dataCls.getName() + "]!");
         }
 
-        return new DataObjectEntry(dataCls, idClass, builder, builderTypeNames, entries);
+        return new DataObjectEntry(dataCls, idClass, entries);
     }
 
     private RepoEntry createRepoEntry(Class<?> cls, DataObjectEntry dataEntry) throws DataBaseException {
@@ -635,46 +494,25 @@ public class InMemoryDatabase implements IDatabaseManager {
             String mName = method.getName();
             String stdName = nameToStd(mName);
 
-            String[] split = stdName.split("_");
-
             if(mName.equals("length") || mName.equals("size") || mName.equals("count")){
                 if(method.getParameterCount() != 0) throw new DataBaseException("Method [" + method + "] to get the number of data stored cannot accept any arguments!");
                 Class<?> ret = method.getReturnType();
                 if(isNotSameClass(ret, Integer.class) && isNotSameClass(ret, Long.class)) throw new DataBaseException("Method [" + method.getName() + " must return either an integer or a long!]");
                 continue;
             }
-            else if(mName.equals("create")){
-                int paramCount = method.getParameterCount();
-                Class<?>[] params = method.getParameterTypes();
-
-                List<String> builderNames = dataEntry.builderTypeNames;
-
-                if(paramCount == 1 && params[0].isArray()){
-                    Class<?> arrayType = params[0].getComponentType();
-
-                    if(arrayType == Object.class) continue;
-
-
-                    for (String builderParamName : builderNames) {
-                        Class<?> builderParamType = dataEntry.dataEntryMap.get(builderParamName).type;
-                        if (isNotSameClass(arrayType, builderParamType)) throw new DataBaseException("Invalid data type [" + arrayType.getName() + "] for create method in @Repo. Does not match data type [" + builderParamType.getName() + "] of @Builder.");
-                    }
-                }
-                else {
-                    if (paramCount != dataEntry.builderTypeNames.size()) throw new DataBaseException("Create method does not match the @Builder for the @Entity [" + dataEntry.dataCls.getName() + "]!");
-
-                    for (int i = 0; i < params.length; i++) {
-                        Class<?> paramType = params[i];
-                        String builderParamName = dataEntry.builderTypeNames.get(i);
-                        Class<?> builderParamType = dataEntry.dataEntryMap.get(builderParamName).type;
-
-                        if (isNotSameClass(paramType, builderParamType)) throw new DataBaseException("Invalid data type [" + paramType.getName() + "] for create method in @Repo. Does not match data type [" + builderParamType.getName() + "] of @Builder.");
-                    }
-                }
-
+            else if(mName.equals("save") || mName.equals("update")){
+                if(method.getParameterCount() != 1 || !method.getParameterTypes()[0].isAssignableFrom(dataEntry.dataCls)) throw new DataBaseException("The '" + mName + "' Method [" + method + "] must accept exactly 1 argument: [" + dataEntry.dataCls + "]!");
+                if(method.getReturnType() != Void.TYPE && !method.getReturnType().isAssignableFrom(dataEntry.dataCls)) throw new DataBaseException("The '" + mName + "' Method [" + method + "] must return either void or type of [" + dataEntry.dataCls + "]!");
                 continue;
             }
-            else if(split[0].equals("get") || split[0].equals("find")){
+            else if(mName.equals("remove") || mName.equals("delete")){
+                if(method.getParameterCount() != 1 || !method.getParameterTypes()[0].isAssignableFrom(dataEntry.dataCls)) throw new DataBaseException("The '" + mName + "' Method [" + method + "] must accept exactly 1 argument: [" + dataEntry.dataCls + "]!");
+                continue;
+            }
+
+            String[] split = stdName.split("_");
+
+            if(split[0].equals("get") || split[0].equals("find")){
                 if(split.length > 1 && split[1].equals("by")){
                     List<List<String>> names = new ArrayList<>();
                     List<String> cur = new ArrayList<>();
@@ -712,6 +550,13 @@ public class InMemoryDatabase implements IDatabaseManager {
 
                         break;
                     } while(true);
+                }
+                else if(split.length == 2 && split[1].equals("all")){
+                    if(method.getParameterCount() != 0) throw new DataBaseException("Query-all methods should not get any arguments!");
+                    if(!List.class.isAssignableFrom(method.getReturnType())) throw new DataBaseException("Query-all methods must return some kind of List!");
+
+                    queryEntries.put(method, new QueryMethodEntry(null));
+                    continue;
                 }
             }
 

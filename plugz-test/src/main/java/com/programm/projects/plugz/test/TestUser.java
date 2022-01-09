@@ -1,21 +1,29 @@
 package com.programm.projects.plugz.test;
 
-import com.programm.projects.plugz.magic.api.db.Builder;
 import com.programm.projects.plugz.magic.api.db.Entity;
 
 @Entity
 public class TestUser {
 
-    private final int id;
+    /*
+
+    1. id is generated when no id is set
+    TestUser u1 = new TestUser();
+    repo.save(u1); //sets the generated id or throws an exception if id is final
+
+    2. id is not custom and replaces data
+    TestUser u1 = new TestUser(1);
+    repo.save(u1); //id is already set so it will set or replace existing data
+
+
+
+     */
+
+    private final Integer id;
     private String name;
 
-    @Builder("id")
-    public TestUser(int id) {
+    public TestUser(Integer id) {
         this.id = id;
-    }
-
-    public String getName() {
-        return name;
     }
 
     public void setName(String name) {

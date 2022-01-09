@@ -625,7 +625,7 @@ public class MagicEnvironment {
             instanceManager.checkWaitMap();
         }
         catch (MagicInstanceException e){
-            throw new MagicRuntimeException("Waiting dependencies could not be resolved. " + e.getMessage());
+            throw new MagicRuntimeException("@Get - waiting dependencies could not be resolved. " + e.getMessage());
         }
 
         if(scheduleManager != null) {

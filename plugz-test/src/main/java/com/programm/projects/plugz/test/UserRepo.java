@@ -10,4 +10,6 @@ public interface UserRepo extends ICrudRepo<Integer, TestUser> {
 
     List<TestUser> findByName(String name);
 
+    List<TestUser> findByIdAndName(int id, String name);
+
 }

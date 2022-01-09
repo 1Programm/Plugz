@@ -10,16 +10,32 @@ import java.util.List;
 public class MyService {
 
     @Get private ILogger log;
-    @Get(required = false) private UserRepo repo;
+    @Get private UserRepo repo;
+
+    private TestUser user;
 
     @PostSetup
     public void zirst(){
         log.info("A");
         if(repo != null) {
-            repo.create(1).setName("Peter");
-            repo.create(2).setName("Gandalf");
-            repo.create(3).setName("Peter");
-            repo.create(4).setName("Udolf");
+            TestUser u1 = new TestUser(99);
+            u1.setName("A");
+            repo.save(u1);
+
+            TestUser a1 = new TestUser(99);
+            a1.setName("B");
+            repo.save(a1);
+
+            a1.setName("Peter");
+            user = repo.save(a1);
+
+            TestUser u2 = new TestUser(10);
+            u2.setName("Gandalf");
+            repo.save(u2);
+
+            TestUser u3 = new TestUser(50);
+            u3.setName("Peter");
+            repo.save(u3);
         }
     }
 
@@ -29,8 +45,14 @@ public class MyService {
         log.info("ONSTART");
 
         if(repo != null) {
-            List<TestUser> users = repo.findByName("Gandalf");
-            log.info("User: {}", users);
+            List<TestUser> users1 = repo.findAll();
+            log.info("User: {}", users1);
+
+//            TestUser toRemove = new TestUser(99);
+            repo.remove(user);
+
+            List<TestUser> users2 = repo.findAll();
+            log.info("User: {}", users2);
         }
     }
 
