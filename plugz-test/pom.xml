@@ -29,6 +29,11 @@
         </dependency>
         <dependency>
             <groupId>com.programm.projects</groupId>
+            <artifactId>plugz-simple-schedules</artifactId>
+            <version>1.0.1-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>com.programm.projects</groupId>
             <artifactId>ioutils-log-logger</artifactId>
             <version>1.1</version>
         </dependency>

@@ -1,5 +1,7 @@
 package com.programm.projects.plugz.db.memory;
 
+import com.programm.projects.plugz.db.abstractbase.entity.EntityEntry;
+import com.programm.projects.plugz.db.abstractbase.entity.FieldEntry;
 import com.programm.projects.plugz.magic.api.db.DataBaseException;
 
 import java.lang.reflect.InvocationTargetException;
@@ -10,8 +12,8 @@ abstract class NumIdDatabase<ID, Data> implements IDatabase<ID, Data> {
     public static final class IntDatabase <Data> extends NumIdDatabase<Integer, Data> {
         private Integer currentId = 0;
 
-        public IntDatabase(InMemoryDatabase.DataObjectEntry dataEntry) {
-            super(dataEntry);
+        public IntDatabase(EntityEntry entityEntry) {
+            super(entityEntry);
         }
 
         @Override
@@ -23,8 +25,8 @@ abstract class NumIdDatabase<ID, Data> implements IDatabase<ID, Data> {
     public static final class LongDatabase <Data> extends NumIdDatabase<Long, Data> {
         private Long currentId = 0L;
 
-        public LongDatabase(InMemoryDatabase.DataObjectEntry dataEntry) {
-            super(dataEntry);
+        public LongDatabase(EntityEntry entityEntry) {
+            super(entityEntry);
         }
 
         @Override
@@ -35,16 +37,16 @@ abstract class NumIdDatabase<ID, Data> implements IDatabase<ID, Data> {
 
     private final List<Data> dataList = new ArrayList<>();
     private final Map<String, Map<Object, List<Integer>>> posMap = new HashMap<>();
-    private final InMemoryDatabase.DataObjectEntry dataEntry;
+    private final EntityEntry entityEntry;
 
     private final Map<Data, Map<String, Object>> cachedData = new HashMap<>();
 
     private int size;
 
-    public NumIdDatabase(InMemoryDatabase.DataObjectEntry dataEntry) {
-        this.dataEntry = dataEntry;
+    public NumIdDatabase(EntityEntry entityEntry) {
+        this.entityEntry = entityEntry;
 
-        for(String fieldName : dataEntry.dataEntryMap.keySet()){
+        for(String fieldName : entityEntry.getFieldEntryMap().keySet()){
             posMap.put(fieldName, new HashMap<>());
         }
     }
@@ -110,9 +112,9 @@ abstract class NumIdDatabase<ID, Data> implements IDatabase<ID, Data> {
 
             Map<Object, List<Integer>> valMap = posMap.get(name);
 
-            InMemoryDatabase.DataEntry fieldEntry = dataEntry.dataEntryMap.get(name);
+            FieldEntry fieldEntry = entityEntry.getFieldEntryMap().get(name);
             try {
-                Object val = fieldEntry.getter.get(data);
+                Object val = fieldEntry.getGetter().get(data);
                 cache.put(name, val);
 
                 valMap.computeIfAbsent(val, v -> new ArrayList<>()).add(pos);
@@ -134,7 +136,7 @@ abstract class NumIdDatabase<ID, Data> implements IDatabase<ID, Data> {
             Object id;
 
             try {
-                id = dataEntry.dataEntryMap.get("id").getter.get(data);
+                id = entityEntry.getFieldEntryMap().get("id").getGetter().get(data);
             }
             catch (InvocationTargetException e){
                 throw new DataBaseException("", e);

@@ -4,6 +4,28 @@ import java.net.URL;
 
 class Utils {
 
+    public static boolean isSameClass(Class<?> a, Class<?> b){
+        if(a == b) return true;
+
+        if(a.isPrimitive()){
+            return a == toPrimitive(b);
+        }
+
+        if(b.isPrimitive()){
+            return b == toPrimitive(a);
+        }
+
+        return false;
+    }
+
+    private static Class<?> toPrimitive(Class<?> c){
+        try {
+            return (Class<?>) c.getField("TYPE").get(null);
+        } catch (IllegalAccessException | NoSuchFieldException e) {
+            return null;
+        }
+    }
+
     public static URL getUrlFromClass(Class<?> cls){
         return cls.getProtectionDomain().getCodeSource().getLocation();
     }

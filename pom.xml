@@ -18,6 +18,7 @@
         <module>plugz-magic-api</module>
         <module>plugz-simple-schedules</module>
         <module>plugz-db-memory</module>
+        <module>plugz-db-abstract-base</module>
     </modules>
 
     <properties>

@@ -552,7 +552,8 @@ public class SimpleResourcesManager implements IResourcesManager {
         for(int i=0;i<types.size();i++){
             TypeEntry entry = types.get(i);
             String name = entry.name;
-            String _val = getValueFromXmlNode(node, name);
+//            String _val = getValueFromXmlNode(node, name);
+            XmlNode _val = getValueFromXmlNode(node, name);
 
             if(_val == null){
                 for(NameFallback nameFallback : NAME_FALLBACK_TRIES){
@@ -569,53 +570,32 @@ public class SimpleResourcesManager implements IResourcesManager {
                 continue;
             }
 
-            Object val = serializeType(entry.type, _val);
+            Object val = serializeXmlType(entry.type, _val);
             values[i] = val;
         }
 
         return values;
     }
 
-    private String getValueFromXmlNode(XmlNode node, String key){
-        XmlNode res = node.get(key);
-
-        if(res != null){
-            return res.value();
-        }
-
-        int last = key.length();
-        while(true) {
-            int lastDot = key.lastIndexOf('.', last);
-
-            if (lastDot == -1) {
-                return null;
-            } else {
-                String nodeName = key.substring(0, lastDot);
-                String newKey = key.substring(lastDot + 1);
-
-                res = node.get(nodeName);
-
-                if(res != null){
-                    return getValueFromXmlNode(res, newKey);
-                }
-
-                last = lastDot - 1;
-            }
-        }
+    private XmlNode getValueFromXmlNode(XmlNode node, String key){
+        return node.get(key);
     }
 
     private Object serializeType(Class<?> type, String _val) throws MagicResourceException {
-        if(type == Boolean.TYPE){
+        if(CharSequence.class.isAssignableFrom(type)){
+            return _val;
+        }
+        else if(Utils.isSameClass(type, Boolean.class)){
             return Boolean.parseBoolean(_val);
         }
-        else if(type == Character.TYPE){
+        else if(Utils.isSameClass(type, Character.class)){
             if(_val.length() != 1){
                 throw new MagicResourceException("Parsing exception: Expected a character, got: [" + _val + "].");
             }
 
             return _val.charAt(0);
         }
-        else if(type == Byte.TYPE){
+        else if(Utils.isSameClass(type, Byte.class)){
             try {
                 return Byte.parseByte(_val);
             }
@@ -623,7 +603,7 @@ public class SimpleResourcesManager implements IResourcesManager {
                 throw new MagicResourceException("Parsing exception: Expected a byte, got: [" + _val + "].");
             }
         }
-        else if(type == Short.TYPE){
+        else if(Utils.isSameClass(type, Short.class)){
             try {
                 return Short.parseShort(_val);
             }
@@ -631,7 +611,7 @@ public class SimpleResourcesManager implements IResourcesManager {
                 throw new MagicResourceException("Parsing exception: Expected a short, got: [" + _val + "].");
             }
         }
-        else if(type == Integer.TYPE){
+        else if(Utils.isSameClass(type, Integer.class)){
             try {
                 return Integer.parseInt(_val);
             }
@@ -639,7 +619,7 @@ public class SimpleResourcesManager implements IResourcesManager {
                 throw new MagicResourceException("Parsing exception: Expected an int, got: [" + _val + "].");
             }
         }
-        else if(type == Long.TYPE){
+        else if(Utils.isSameClass(type, Long.class)){
             try {
                 return Long.parseLong(_val);
             }
@@ -647,7 +627,7 @@ public class SimpleResourcesManager implements IResourcesManager {
                 throw new MagicResourceException("Parsing exception: Expected a long, got: [" + _val + "].");
             }
         }
-        else if(type == Float.TYPE){
+        else if(Utils.isSameClass(type, Float.class)){
             try {
                 return Float.parseFloat(_val);
             }
@@ -655,7 +635,7 @@ public class SimpleResourcesManager implements IResourcesManager {
                 throw new MagicResourceException("Parsing exception: Expected a float, got: [" + _val + "].");
             }
         }
-        else if(type == Double.TYPE){
+        else if(Utils.isSameClass(type, Double.class)){
             try {
                 return Double.parseDouble(_val);
             }
@@ -665,6 +645,103 @@ public class SimpleResourcesManager implements IResourcesManager {
         }
 
         return _val;
+    }
+
+    private Object serializeXmlType(Class<?> type, XmlNode node) throws MagicResourceException{
+        if(CharSequence.class.isAssignableFrom(type)){
+            return node.value();
+        }
+        else if(Utils.isSameClass(type, Boolean.class)){
+            String _val = node.value();
+            return Boolean.parseBoolean(_val);
+        }
+        else if(Utils.isSameClass(type, Character.class)){
+            String _val = node.value();
+            if(_val.length() != 1){
+                throw new MagicResourceException("Parsing exception: Expected a character, got: [" + _val + "].");
+            }
+
+            return _val.charAt(0);
+        }
+        else if(Utils.isSameClass(type, Byte.class)){
+            String _val = node.value();
+            try {
+                return Byte.parseByte(_val);
+            }
+            catch (NumberFormatException e){
+                throw new MagicResourceException("Parsing exception: Expected a byte, got: [" + _val + "].");
+            }
+        }
+        else if(Utils.isSameClass(type, Short.class)){
+            String _val = node.value();
+            try {
+                return Short.parseShort(_val);
+            }
+            catch (NumberFormatException e){
+                throw new MagicResourceException("Parsing exception: Expected a short, got: [" + _val + "].");
+            }
+        }
+        else if(Utils.isSameClass(type, Integer.class)){
+            String _val = node.value();
+            try {
+                return Integer.parseInt(_val);
+            }
+            catch (NumberFormatException e){
+                throw new MagicResourceException("Parsing exception: Expected an int, got: [" + _val + "].");
+            }
+        }
+        else if(Utils.isSameClass(type, Long.class)){
+            String _val = node.value();
+            try {
+                return Long.parseLong(_val);
+            }
+            catch (NumberFormatException e){
+                throw new MagicResourceException("Parsing exception: Expected a long, got: [" + _val + "].");
+            }
+        }
+        else if(Utils.isSameClass(type, Float.class)){
+            String _val = node.value();
+            try {
+                return Float.parseFloat(_val);
+            }
+            catch (NumberFormatException e){
+                throw new MagicResourceException("Parsing exception: Expected a float, got: [" + _val + "].");
+            }
+        }
+        else if(Utils.isSameClass(type, Double.class)){
+            String _val = node.value();
+            try {
+                return Double.parseDouble(_val);
+            }
+            catch (NumberFormatException e){
+                throw new MagicResourceException("Parsing exception: Expected a double, got: [" + _val + "].");
+            }
+        }
+        else if(List.class.isAssignableFrom(type)){
+            List<Object> list = new ArrayList<>();
+            XmlNode childNode = node.get("0");
+            int pos = 1;
+            while(childNode != null){
+                String _childType = childNode.attribute("type");
+                Class<?> childType;
+
+                try {
+                    childType = Class.forName(_childType);
+                }
+                catch (ClassNotFoundException e){
+                    throw new MagicResourceException("Invalid class definition: [" + _childType + "]!", e);
+                }
+
+                Object child = serializeXmlType(childType, childNode);
+                list.add(child);
+
+                childNode = node.get("" + (pos++));
+            }
+
+            return list;
+        }
+
+        return null;
     }
 
     private String deserializeType(Object val) {
@@ -875,6 +952,14 @@ public class SimpleResourcesManager implements IResourcesManager {
         if(path.endsWith(".properties")){
             saveToPropertyFile(file, names, values);
         }
+        else if(path.endsWith(".xml")){
+            saveToXmlFile(file, names, values);
+        }
+        else {
+            int lastDot = path.lastIndexOf('.');
+            String rest = path.substring(lastDot == -1 ? 0 : lastDot);
+            throw new MagicResourceException("Invalid file type [" + rest + "]!");
+        }
     }
 
     private void saveToPropertyFile(File file, String[] names, Object[] values) throws MagicResourceException {
@@ -900,13 +985,72 @@ public class SimpleResourcesManager implements IResourcesManager {
         }
     }
 
+    private void saveToXmlFile(File file, String[] names, Object[] values) throws MagicResourceException {
+        try(BufferedWriter bw = new BufferedWriter(new FileWriter(file))){
+            bw.append("<xml>\n");
+            for(int i=0;i<names.length;i++){
+                String name = names[i];
+                Object value = values[i];
+
+                printNamedObjectToXmlOut(bw, "   ", name, value);
+                bw.append("\n");
+            }
+            bw.append("</xml>");
+        }
+        catch (FileNotFoundException e){
+            throw new IllegalStateException("INVALID STATE: Should have checked if file exists!", e);
+        }
+        catch (IOException e){
+            throw new MagicResourceException("Exception while writing to file: [" + file.getAbsolutePath() + "]!", e);
+        }
+    }
+
+    private void printNamedObjectToXmlOut(BufferedWriter bw, String tabs, String name, Object obj) throws IOException {
+        bw.append(tabs).append("<").append(name).append(" type=\"").append(obj.getClass().getName()).append("\"").append(">");
+        printXmlObject(bw, tabs, obj);
+        bw.append("</").append(name).append(">");
+    }
+
+    private void printXmlObject(BufferedWriter bw, String oldTabs, Object obj) throws IOException {
+        String newTabs = oldTabs + "   ";
+        Class<?> type = obj.getClass();
+
+        if(type == Boolean.TYPE || type == Boolean.class
+        || type == Character.TYPE || type == Character.class
+        || type == Byte.TYPE || type == Byte.class
+        || type == Short.TYPE || type == Short.class
+        || type == Integer.TYPE || type == Integer.class
+        || type == Long.TYPE || type == Long.class
+        || type == Float.TYPE || type == Float.class
+        || type == Double.TYPE || type == Double.class
+        || CharSequence.class.isAssignableFrom(type)){
+            String _obj = obj.toString();
+            bw.append(_obj);
+        }
+        else if(obj instanceof List){
+            List<?> list = (List<?>) obj;
+            bw.append("\n");
+            for(int i=0;i<list.size();i++){
+                Object lObj = list.get(i);
+
+                printNamedObjectToXmlOut(bw, newTabs, "" + i, lObj);
+                bw.append("\n");
+            }
+            bw.append(oldTabs);
+        }
+        else {
+
+        }
+    }
+
     private Object getForEntry(Object instance, TypeEntry entry) throws MagicResourceException {
         Class<?> type = entry.type;
         String origName = entry.field.getName();
         Method theGetter = null;
 
         //First try to find a getter
-        Method[] methods = type.getMethods();
+        Class<?> instanceType = instance.getClass();
+        Method[] methods = instanceType.getMethods();
         for(Method method : methods){
             String name = method.getName();
 
