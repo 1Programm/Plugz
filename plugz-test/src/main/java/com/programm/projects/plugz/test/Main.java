@@ -2,27 +2,46 @@ package com.programm.projects.plugz.test;
 
 import com.programm.projects.ioutils.log.logger.ConfLogger;
 import com.programm.projects.plugz.magic.MagicEnvironment;
+import com.programm.projects.plugz.magic.api.PostSetup;
 import com.programm.projects.plugz.magic.api.Service;
-import com.programm.projects.plugz.magic.api.schedules.Scheduled;
-
-import java.io.IOException;
+import com.programm.projects.plugz.magic.api.debug.Debug;
+import com.programm.projects.plugz.magic.api.debug.IValue;
 
 @Service
 public class Main {
 
-    public static void main(String[] args) throws IOException {
-        MagicEnvironment env = new MagicEnvironment();
+    public static void main(String[] args) throws Exception {
+        MagicEnvironment env = new MagicEnvironment(args);
         env.setLogger(ConfLogger.get());
         env.startup();
         env.postSetup();
     }
 
-    private int c = 0;
+    @Debug
+    private IValue<Integer> debugValue;
 
-    @Scheduled(repeat = 1000, stopAfter = 10000)
-    private void rep(){
-        c++;
-        System.out.println("" + c);
+    @Debug
+    private IValue<Boolean> val2;
+
+    @Debug
+    private IValue<String> val3;
+
+    @Debug
+    private IValue<Main> val4;
+
+    @PostSetup
+    public void test() throws Exception{
+        System.out.println(debugValue);
+        Thread.sleep(3000);
+        debugValue.set((int)(Math.random() * 1000));
+        Thread.sleep(3000);
+        debugValue.set((int)(Math.random() * 1000));
+        Thread.sleep(3000);
+        debugValue.set((int)(Math.random() * 1000));
+        Thread.sleep(3000);
+        debugValue.set((int)(Math.random() * 1000));
+        Thread.sleep(3000);
+        debugValue.set((int)(Math.random() * 1000));
     }
 
 }

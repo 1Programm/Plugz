@@ -1,6 +1,7 @@
 package com.programm.projects.plugz.db.abstractbase.repo;
 
 import com.programm.projects.plugz.db.abstractbase.entity.EntityEntry;
+import com.programm.projects.plugz.magic.api.db.Query;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -39,6 +40,13 @@ public class RepoMapper {
         Method[] methods = cls.getDeclaredMethods();
         loopM:
         for(Method method : methods){
+            Query queryAnnotation = method.getAnnotation(Query.class);
+            if(queryAnnotation != null){
+                String query = queryAnnotation.value();
+                queryMap.put(method, query);
+                continue;
+            }
+
             String mName = method.getName();
             String stdName = nameToStd(mName);
             int paramCount = method.getParameterCount();

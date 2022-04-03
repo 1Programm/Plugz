@@ -3,6 +3,7 @@ package com.programm.projects.plugz.magic;
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.plugz.magic.api.IAsyncManager;
+import com.programm.projects.plugz.magic.api.SysArgs;
 import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;
@@ -71,6 +72,9 @@ class ThreadPoolManager implements IAsyncManager {
         }
     }
 
+    private static final int DEFAULT_MAX_WORKERS = 5;
+    private static final long DEFAULT_MAX_WORKER_SLEEP_TIME = 5000;
+
     private final List<Worker> sleepingWorkers = new ArrayList<>();
     private final List<Worker> vipWorkers = new ArrayList<>();
     private final BlockingQueue<Runnable> queuedTasks;
@@ -80,10 +84,10 @@ class ThreadPoolManager implements IAsyncManager {
     private final long sleepTime;
     private final boolean[] workerExists;
 
-    public ThreadPoolManager(ILogger log, int maxWorkers, long sleepTime) {
+    public ThreadPoolManager(ILogger log, SysArgs args) {
         this.log = log;
-        this.maxWorkers = maxWorkers;
-        this.sleepTime = sleepTime;
+        this.maxWorkers = args.getDefault("-maxAsyncWorkers", DEFAULT_MAX_WORKERS);
+        this.sleepTime = args.getDefault("-maxWorkerSleep", DEFAULT_MAX_WORKER_SLEEP_TIME);
         this.workerExists = new boolean[maxWorkers];
         this.queuedTasks = new LinkedBlockingDeque<>();
     }

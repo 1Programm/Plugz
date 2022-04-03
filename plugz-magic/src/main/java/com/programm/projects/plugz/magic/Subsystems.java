@@ -5,8 +5,10 @@ import com.programm.projects.ioutils.log.api.out.Logger;
 import com.programm.projects.plugz.inject.InjectManager;
 import com.programm.projects.plugz.magic.api.*;
 import com.programm.projects.plugz.magic.api.db.IDatabaseManager;
+import com.programm.projects.plugz.magic.api.debug.IDebugManager;
 import com.programm.projects.plugz.magic.api.resources.IResourcesManager;
 import com.programm.projects.plugz.magic.api.schedules.IScheduleManager;
+import com.programm.projects.plugz.magic.api.web.IWebServerManager;
 
 import java.net.URL;
 import java.util.HashMap;
@@ -19,7 +21,9 @@ class Subsystems {
     private static final String[] NAMES = {
             "schedule-manager",
             "db-manager",
-            "resource-manager"
+            "resource-manager",
+            "webserv-manager",
+            "debugger"
     };
 
     private static final Map<String, Class<? extends ISubsystem>> subsystemClasses = new HashMap<>();
@@ -28,7 +32,9 @@ class Subsystems {
         int i = 0;
         subsystemClasses.put(NAMES[i++], IScheduleManager.class);
         subsystemClasses.put(NAMES[i++], IDatabaseManager.class);
-        subsystemClasses.put(NAMES[i], IResourcesManager.class);
+        subsystemClasses.put(NAMES[i++], IResourcesManager.class);
+        subsystemClasses.put(NAMES[i++], IWebServerManager.class);
+        subsystemClasses.put(NAMES[i], IDebugManager.class);
     }
 
     private final Map<String, ISubsystem> subsystemMap = new HashMap<>();
@@ -55,11 +61,12 @@ class Subsystems {
     }
 
     @SuppressWarnings("unchecked")
-    public void inject(IInstanceManager instanceManager, ThreadPoolManager threadPoolManager, InjectManager injectManager, boolean logSubsystemMissing){
+    public void inject(IInstanceManager instanceManager, ThreadPoolManager threadPoolManager, InjectManager injectManager, boolean logSubsystemMissing, SysArgs args){
         MagicInstanceManager subsystemInstanceManger = new MagicInstanceManager(threadPoolManager);
 
         //Needed instances for subsystems
         registerInstance(subsystemInstanceManger, ILogger.class, log);
+        registerInstance(subsystemInstanceManger, SysArgs.class, args);
         registerInstance(subsystemInstanceManger, IInstanceManager.class, instanceManager);
         registerInstance(subsystemInstanceManger, IAsyncManager.class, threadPoolManager);
 

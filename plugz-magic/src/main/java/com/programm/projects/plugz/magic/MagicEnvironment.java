@@ -7,6 +7,8 @@ import com.programm.projects.plugz.core.ScanException;
 import com.programm.projects.plugz.inject.InjectManager;
 import com.programm.projects.plugz.magic.api.*;
 import com.programm.projects.plugz.magic.api.db.*;
+import com.programm.projects.plugz.magic.api.debug.IDebugManager;
+import com.programm.projects.plugz.magic.api.debug.MagicDebugSetupException;
 import com.programm.projects.plugz.magic.api.resources.IResourcesManager;
 import com.programm.projects.plugz.magic.api.resources.MagicResourceException;
 import com.programm.projects.plugz.magic.api.resources.Resource;
@@ -14,6 +16,8 @@ import com.programm.projects.plugz.magic.api.resources.Resources;
 import com.programm.projects.plugz.magic.api.schedules.IScheduleManager;
 import com.programm.projects.plugz.magic.api.schedules.ISchedules;
 import com.programm.projects.plugz.magic.api.schedules.ScheduledMethodConfig;
+import com.programm.projects.plugz.magic.api.web.IWebServerManager;
+import com.programm.projects.plugz.magic.api.web.MagicWebException;
 
 import java.io.IOException;
 import java.lang.annotation.Annotation;
@@ -27,8 +31,6 @@ import java.util.Map;
 @Logger("Magic-Environment")
 public class MagicEnvironment {
 
-    private static final int MAX_ASYNC_WORKERS = 5;
-    private static final long MAX_WORKER_SLEEP_TIME = 5000;
     private static final String DEFAULT_INJECTION_POOL = "com.programm.projects.plugz";
 
     private final Plugz plugz = new Plugz();
@@ -38,8 +40,10 @@ public class MagicEnvironment {
     private final InjectManager injectionManager;
     private final Subsystems subsystems;
     private IScheduleManager scheduleManager;
-    private IResourcesManager resourcesManager;
     private IDatabaseManager databaseManager;
+    private IResourcesManager resourcesManager;
+    private IWebServerManager webservManager;
+    private IDebugManager debugger;
 
     private final List<URL> searchedUrls = new ArrayList<>();
     private final Map<URL, String> searchedBases = new HashMap<>();
@@ -51,6 +55,7 @@ public class MagicEnvironment {
 
     private final String basePackageOfCallingClass;
 
+    private final SysArgs sysArgs;
     private boolean disableCallingUrl;
     private boolean notifyClassesFromRemovedUrl = true;
     private boolean addShutdownHook = true;
@@ -63,65 +68,16 @@ public class MagicEnvironment {
     public MagicEnvironment(String basePackage, String... args){
         this.basePackageOfCallingClass = basePackage;
 
-        int max_async_workers = MAX_ASYNC_WORKERS;
-        long max_worker_sleep = MAX_WORKER_SLEEP_TIME;
-        String injection_pool = DEFAULT_INJECTION_POOL;
+        sysArgs = MagicSysArgs.parseArgs(args);
 
-        for(int i=0;i<args.length;i++){
-            String arg = args[i];
-            switch (arg) {
-                case "-disableCallingUrl":
-                    disableCallingUrl = true;
-                    break;
-                case "-noShutdownHook":
-                    addShutdownHook = false;
-                    break;
-                case "-ignoreSubsystemMissing":
-                    logSubsystemMissing = false;
-                    break;
-                case "-maxAsyncWorkers":
-                    if(i + 1 >= args.length) {
-                        System.err.println("Invalid arguments! [-maxAsyncWorkers] should be followed by a positive integer!");
-                        continue;
-                    }
-
-                    try {
-                        max_async_workers = Integer.parseInt(args[i + 1]);
-                    }
-                    catch (NumberFormatException e){
-                        System.err.println("Invalid arguments! [-maxAsyncWorkers] should be followed by a positive integer!");
-                        continue;
-                    }
-                    break;
-                case "-maxWorkerSleep":
-                    if(i + 1 >= args.length) {
-                        System.err.println("Invalid arguments! [-maxWorkerSleep] should be followed by a positive long!");
-                        continue;
-                    }
-
-                    try {
-                        max_worker_sleep = Long.parseLong(args[i + 1]);
-                    }
-                    catch (NumberFormatException e){
-                        System.err.println("Invalid arguments! [-maxWorkerSleep] should be followed by a positive integer!");
-                        continue;
-                    }
-                    break;
-                case "-injectionPool":
-                    if(i + 1 >= args.length) {
-                        System.err.println("Invalid arguments! [-injectionPool] should be followed by a String!");
-                        continue;
-                    }
-
-                    injection_pool = args[i + 1];
-                    break;
-            }
-        }
+        disableCallingUrl = sysArgs.getDefault("-disableCallingUrl", false);
+        addShutdownHook = !sysArgs.getDefault("-noShutdownHook", false);
+        logSubsystemMissing = !sysArgs.getDefault("-ignoreSubsystemMissing", false);
 
         this.plugz.setLogger(log);
-        this.threadPoolManager = new ThreadPoolManager(log, max_async_workers, max_worker_sleep);
+        this.threadPoolManager = new ThreadPoolManager(log, sysArgs);
         this.instanceManager = new MagicInstanceManager(threadPoolManager);
-        this.injectionManager = new InjectManager(injection_pool);
+        this.injectionManager = new InjectManager(sysArgs.getDefault("-injectionPool", DEFAULT_INJECTION_POOL));
         this.injectionManager.setLogger(log);
         this.subsystems = new Subsystems(log);
 
@@ -133,6 +89,7 @@ public class MagicEnvironment {
         this.searchedAnnotations.add(Repo.class);
 
         registerInstance(ILogger.class, log);
+        registerInstance(SysArgs.class, sysArgs);
     }
 
     public void startup(){
@@ -155,8 +112,14 @@ public class MagicEnvironment {
         log.debug("Instantiating found classes.");
         instantiate();
 
-        if(scheduleManager != null) log.debug("Passing scheduler methods to Schedule-Manager.");
+        if(scheduleManager != null) log.debug("Passing scheduler-methods to [schedule-manager]...");
         passScheduledMethods();
+
+        if(webservManager != null) log.debug("Passing web-request-methods to [webserv-manager]...");
+        passWebRequestMethods();
+
+        if(debugger != null) log.debug("Passing debug-values to [debugger]...");
+        passDebugValues();
     }
 
     public void shutdown(){
@@ -398,7 +361,7 @@ public class MagicEnvironment {
             throw new MagicRuntimeException("Injection Manager failed to scan.", e);
         }
 
-        subsystems.inject(instanceManager, threadPoolManager, injectionManager, logSubsystemMissing);
+        subsystems.inject(instanceManager, threadPoolManager, injectionManager, logSubsystemMissing, sysArgs);
 
         scheduleManager = subsystems.getSubsystem(IScheduleManager.class);
 
@@ -415,6 +378,8 @@ public class MagicEnvironment {
 
         databaseManager = subsystems.getSubsystem(IDatabaseManager.class);
         resourcesManager = subsystems.getSubsystem(IResourcesManager.class);
+        webservManager = subsystems.getSubsystem(IWebServerManager.class);
+        debugger = subsystems.getSubsystem(IDebugManager.class);
     }
 
     private void startupSubsystems(){
@@ -603,7 +568,9 @@ public class MagicEnvironment {
         Map<URL, List<ScheduledMethodConfig>> configs = new HashMap<>(instanceManager.toScheduleMethods);
         instanceManager.toScheduleMethods.clear();
 
-        if(!configs.isEmpty() && scheduleManager == null){
+        if(configs.isEmpty()) return configs;
+
+        if(scheduleManager == null){
             log.error("No [schedule-manager] available, so no @Scheduled methods can be run.");
         }
         else {
@@ -615,6 +582,44 @@ public class MagicEnvironment {
         }
 
         return configs;
+    }
+
+    private void passWebRequestMethods(){
+        if(instanceManager.webRequestMethodConfigs.isEmpty()) return;
+
+        if(webservManager == null){
+            log.error("No [webserv-manager] available, so no @GetRequest and @PostRequest methods can be run.");
+        }
+        else {
+            for(MagicInstanceManager.WebRequestMethodConfigImpl config : instanceManager.webRequestMethodConfigs){
+                try {
+                    webservManager.registerRequestMethod(config);
+                }
+                catch (MagicWebException e){
+                    log.error("Exception registering web-request-method: [{}]:\n{}", config.path, e.getMessage());
+                }
+            }
+        }
+
+        instanceManager.webRequestMethodConfigs.clear();
+    }
+
+    private void passDebugValues(){
+        if(instanceManager.debuggerFieldConfigs.isEmpty()) return;
+
+        if(debugger == null){
+            log.error("No [debugger] available, so no @Debug values can be processed!");
+        }
+        else {
+            for(MagicInstanceManager.DebugFieldConfig config : instanceManager.debuggerFieldConfigs){
+                try {
+                    debugger.registerDebugValue(config.instance, config.field, config.debugAnnotation);
+                }
+                catch (MagicDebugSetupException e){
+                    log.error("Exception registering debug value: [{}]:\n{}", config.field, e.getMessage());
+                }
+            }
+        }
     }
 
     public void postSetup() {

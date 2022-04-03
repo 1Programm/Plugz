@@ -32,7 +32,13 @@ public class RepoProxyHandler implements InvocationHandler {
         String query = queries.get(method);
 
         if(query != null) {
-            return queryExecutor.execute(query);
+            Class<?> retType = method.getReturnType();
+            if(retType == Void.TYPE){
+                queryExecutor.execute(query, args);
+                return null;
+            }
+
+            return queryExecutor.execute(query, args);
         }
 
         throw new IllegalStateException("Method [" + method + "] is not checked by the system!");

@@ -19,6 +19,9 @@
         <module>plugz-simple-schedules</module>
         <module>plugz-db-memory</module>
         <module>plugz-db-abstract-base</module>
+        <module>plugz-db-dummy</module>
+        <module>plugz-simple-webserv</module>
+        <module>plugz-simple-debug</module>
     </modules>
 
     <properties>

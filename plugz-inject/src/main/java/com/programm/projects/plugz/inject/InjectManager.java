@@ -46,6 +46,8 @@ public class InjectManager {
             log.trace("# Found [{}].", url);
             discoveredUrls.add(url);
         }
+
+        //TODO: Add calling URL if wanted so subsystems can also be found from current project
     }
 
     @SuppressWarnings("unchecked")

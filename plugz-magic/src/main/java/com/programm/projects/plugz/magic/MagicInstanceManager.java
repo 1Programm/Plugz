@@ -3,14 +3,16 @@ package com.programm.projects.plugz.magic;
 import com.programm.projects.plugz.magic.api.*;
 import com.programm.projects.plugz.magic.api.Set;
 import com.programm.projects.plugz.magic.api.db.IRepo;
+import com.programm.projects.plugz.magic.api.debug.Debug;
+import com.programm.projects.plugz.magic.api.debug.IValue;
 import com.programm.projects.plugz.magic.api.schedules.Scheduled;
 import com.programm.projects.plugz.magic.api.schedules.ScheduledMethodConfig;
+import com.programm.projects.plugz.magic.api.web.*;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -107,6 +109,27 @@ class MagicInstanceManager implements IInstanceManager {
         }
     }
 
+    class WebRequestMethodConfigImpl extends WebRequestMethodConfig {
+        private final MagicMethod method;
+
+        public WebRequestMethodConfigImpl(String path, RequestType type, String contentType, List<RequestParam> requestParamAnnotations, int requestBodyAnnotationPos, Class<?> requestBodyType, MagicMethod method) {
+            super(path, type, contentType, requestParamAnnotations, requestBodyAnnotationPos, requestBodyType);
+            this.method = method;
+        }
+
+        @Override
+        public Object call(Object... arguments) throws MagicInstanceException {
+            return method.call(arguments);
+        }
+    }
+
+    @RequiredArgsConstructor
+    static class DebugFieldConfig {
+        final Object instance;
+        final Field field;
+        final Debug debugAnnotation;
+    }
+
     private interface MagicWire {
         String name();
         String requesterName();
@@ -199,8 +222,11 @@ class MagicInstanceManager implements IInstanceManager {
     private final Map<URL, List<MagicMethod>> onRemoveMethods = new HashMap<>();
 
     final Map<URL, List<ScheduledMethodConfig>> toScheduleMethods = new HashMap<>();
+    final List<WebRequestMethodConfigImpl> webRequestMethodConfigs = new ArrayList<>();
+    final List<DebugFieldConfig> debuggerFieldConfigs = new ArrayList<>();
 
     private final ThreadPoolManager threadPoolManager;
+
 
     public void registerSetClass(Class<?> cls) throws MagicInstanceException {
         Set setAnnotation = cls.getAnnotation(Set.class);
@@ -478,17 +504,27 @@ class MagicInstanceManager implements IInstanceManager {
 
                 MagicWire mw = new AMagicWire(name, cls.toString(), getAnnotation.required()){
                     @Override
-                    public void accept(Object o) throws MagicInstanceException {
+                    public void accept(Object o) {
                         putField(instance, field, o);
                     }
                 };
                 waitMap.computeIfAbsent(fromUrl, url -> new HashMap<>()).computeIfAbsent(fieldType, pt -> new ArrayList<>()).add(mw);
+            }
+            else if(field.isAnnotationPresent(Debug.class)){
+                Debug debugAnnotation = field.getAnnotation(Debug.class);
+                debuggerFieldConfigs.add(new DebugFieldConfig(instance, field, debugAnnotation));
             }
         }
     }
 
     private void tryMagicMethods(URL fromUrl, Class<?> cls, Object instance) throws MagicInstanceException{
         Method[] methods = cls.getDeclaredMethods();
+
+        //WEB
+        String parentPath = "";
+        if(cls.isAnnotationPresent(RequestMapping.class)){
+            parentPath = cls.getAnnotation(RequestMapping.class).value();
+        }
 
         for(Method method : methods){
             final Async asyncAnnotation = method.getAnnotation(Async.class);
@@ -557,6 +593,69 @@ class MagicInstanceManager implements IInstanceManager {
                     Scheduled ann = method.getAnnotation(Scheduled.class);
                     ScheduledMagicMethod scheduledMagicMethod = new ScheduledMagicMethod(ann.startAfter(), ann.repeat(), ann.stopAfter(), instance, method, fromUrl, asyncAnnotation);
                     toScheduleMethods.computeIfAbsent(fromUrl, url -> new ArrayList<>()).add(scheduledMagicMethod);
+                }
+
+                if(method.isAnnotationPresent(GetRequest.class)){
+                    GetRequest request = method.getAnnotation(GetRequest.class);
+                    String fullPath = parentPath + request.value();
+                    String contentType = request.contentType();
+
+                    List<RequestParam> requestParamAnnotations = new ArrayList<>();
+                    int requestBodyAnnotationPos = -1;
+                    Class<?> requestBodyType = null;
+                    Annotation[][] paramAnnotations = method.getParameterAnnotations();
+                    Class<?>[] paramTypes = method.getParameterTypes();
+                    for(int i=0;i<method.getParameterCount();i++){
+                        Annotation[] annotations = paramAnnotations[i];
+                        for(Annotation a : annotations){
+                            if(a instanceof RequestParam){
+                                Class<?> paramType = paramTypes[i];
+                                if(paramType != String.class) throw new MagicInstanceException("Request parameters can only be of type string!");
+                                requestParamAnnotations.add((RequestParam) a);
+                                break;
+                            }
+                            else if(a instanceof RequestBody){
+                                requestBodyAnnotationPos = i;
+                                requestBodyType = paramTypes[i];
+                                break;
+                            }
+                        }
+                    }
+
+
+                    MagicMethod mm = new MagicMethod(instance, method, fromUrl, asyncAnnotation);
+                    webRequestMethodConfigs.add(new WebRequestMethodConfigImpl(fullPath, RequestType.GET, contentType, requestParamAnnotations, requestBodyAnnotationPos, requestBodyType, mm));
+                }
+
+                if(method.isAnnotationPresent(PostRequest.class)){
+                    PostRequest request = method.getAnnotation(PostRequest.class);
+                    String fullPath = parentPath + request.value();
+                    String contentType = request.contentType();
+
+                    List<RequestParam> requestParamAnnotations = new ArrayList<>();
+                    int requestBodyAnnotationPos = -1;
+                    Class<?> requestBodyType = null;
+                    Annotation[][] paramAnnotations = method.getParameterAnnotations();
+                    Class<?>[] paramTypes = method.getParameterTypes();
+                    for(int i=0;i<method.getParameterCount();i++){
+                        Annotation[] annotations = paramAnnotations[i];
+                        for(Annotation a : annotations){
+                            if(a instanceof RequestParam){
+                                Class<?> paramType = paramTypes[i];
+                                if(paramType != String.class) throw new MagicInstanceException("Request parameters can only be of type string!");
+                                requestParamAnnotations.add((RequestParam) a);
+                                break;
+                            }
+                            else if(a instanceof RequestBody){
+                                requestBodyAnnotationPos = i;
+                                requestBodyType = paramTypes[i];
+                                break;
+                            }
+                        }
+                    }
+
+                    MagicMethod mm = new MagicMethod(instance, method, fromUrl, asyncAnnotation);
+                    webRequestMethodConfigs.add(new WebRequestMethodConfigImpl(fullPath, RequestType.POST, contentType, requestParamAnnotations, requestBodyAnnotationPos, requestBodyType, mm));
                 }
             }
         }
@@ -712,7 +811,21 @@ class MagicInstanceManager implements IInstanceManager {
         }
     }
 
-    private Object getInstanceFromCls(Class<?> cls, String name) throws MagicInstanceException{
+    private Object getInstanceFromCls(Class<?> cls, String name) throws MagicInstanceException {
+        Object ret;
+        if(name.isEmpty()){
+            ret = getInstanceFromClsFromInstances(cls);
+            if(ret == null) getInstanceFromClsFromProviders(cls, name);
+        }
+        else {
+            ret = getInstanceFromClsFromProviders(cls, name);
+            if(ret == null) getInstanceFromClsFromInstances(cls);
+        }
+
+        return ret;
+    }
+
+    private Object getInstanceFromClsFromInstances(Class<?> cls){
         for(URL url : instanceMap.keySet()){
             Map<Class<?>, Object> instances = instanceMap.get(url);
             Object instance = instances.get(cls);
@@ -722,6 +835,10 @@ class MagicInstanceManager implements IInstanceManager {
             }
         }
 
+        return null;
+    }
+
+    private Object getInstanceFromClsFromProviders(Class<?> cls, String name) throws MagicInstanceException {
         for(URL url : providerMap.keySet()){
             Map<Class<?>, AbstractProvider> providerConfigMap = providerMap.get(url);
             AbstractProvider provider = providerConfigMap.get(cls);

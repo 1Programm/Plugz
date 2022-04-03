@@ -101,6 +101,11 @@ public class InMemoryDatabase implements IDatabaseManager, IQueryExecutor {
     }
 
     @Override
+    public Object execute(String query, Object... args) throws QueryExecuteException {
+        return null;
+    }
+
+    //@Override
     public Object execute(String query) throws QueryExecuteException {
         log.info("EXECUTE: {}", query);
         String[] split = query.split(" ");
