@@ -18,6 +18,12 @@
 
     <dependencies>
         <dependency>
+            <groupId>com.programm.plugz</groupId>
+            <artifactId>plugz-magic</artifactId>
+            <version>0.1-SNAPSHOT</version>
+        </dependency>
+
+        <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>1.18.22</version>
