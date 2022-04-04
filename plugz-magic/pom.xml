@@ -22,6 +22,11 @@
             <artifactId>plugz-api</artifactId>
             <version>0.1-SNAPSHOT</version>
         </dependency>
+        <dependency>
+            <groupId>com.programm.plugz</groupId>
+            <artifactId>plugz-inject</artifactId>
+            <version>0.1-SNAPSHOT</version>
+        </dependency>
 
         <dependency>
             <groupId>com.programm.projects</groupId>
