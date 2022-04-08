@@ -2,14 +2,15 @@ package com.programm.plugz.magic;
 
 import com.programm.plugz.annocheck.AnnotationCheckException;
 import com.programm.plugz.annocheck.AnnotationChecker;
+import com.programm.plugz.api.Async;
 import com.programm.plugz.api.Config;
 import com.programm.plugz.api.MagicInstanceException;
-import com.programm.plugz.api.Service;
+import com.programm.plugz.api.MagicRuntimeException;
 import com.programm.plugz.api.auto.ConfigValue;
 import com.programm.plugz.api.auto.Get;
 import com.programm.plugz.api.auto.GetConfig;
 import com.programm.plugz.api.auto.Set;
-import com.programm.plugz.api.lifecycle.*;
+import com.programm.plugz.api.lifecycle.LifecycleState;
 import com.programm.plugz.api.utils.ValueUtils;
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
@@ -18,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -209,8 +211,9 @@ public class MagicInstanceManager {
 
 
 
-    private final ConfigurationManager plugzConfig;
     private final ILogger log;
+    private final ConfigurationManager plugzConfig;
+    private final ThreadPoolManager asyncManager;
 
     private final Map<Class<?>, InstanceProvider> instanceMap = new HashMap<>();
     private final Map<Class<?>, List<MagicWire>> waitMap = new HashMap<>();
@@ -377,45 +380,48 @@ public class MagicInstanceManager {
 
     private void tryMagicField(Object instance, Field field) throws MagicInstanceException {
         Class<?> type = field.getType();
+        Annotation[] annotations = field.getDeclaredAnnotations();
 
-        if(field.isAnnotationPresent(Get.class)){
-            Get getAnnotation = field.getAnnotation(Get.class);
-            Object value = getInstance(type);
+        for(Annotation annotation : annotations){
+            Class<?> aType = annotation.annotationType();
 
-            if(value != null){
+            if(aType == Get.class){
+                Get getAnnotation = field.getAnnotation(Get.class);
+                Object value = getInstance(type);
+
+                if(value != null){
+                    setField(field, instance, value);
+                }
+                else if(canWait){
+                    waitFor(type, new MissingFieldWire(instance, field, getAnnotation.required()));
+                }
+                else {
+                    if(getAnnotation.required()) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + type + "]!");
+                    Object defaultValue = ValueUtils.getDefaultValue(type);
+                    setField(field, instance, defaultValue);
+                }
+            }
+            else if(aType == GetConfig.class){
+                GetConfig getConfigAnnotation = field.getAnnotation(GetConfig.class);
+                Object value = plugzConfig.get(getConfigAnnotation.value());
+
+                if(value == null) {
+                    value = ValueUtils.getDefaultValue(type);
+                }
+
                 setField(field, instance, value);
             }
-            else if(canWait){
-                waitFor(type, new MissingFieldWire(instance, field, getAnnotation.required()));
+            else if(aType == ConfigValue.class){
+                int mods = field.getModifiers();
+                if(!Modifier.isFinal(mods)) throw new MagicInstanceException("Field [" + field + "] must be final to be used as a config value!");
+                boolean isStatic = Modifier.isStatic(mods);
+
+                ConfigValue configValueAnnotation = field.getAnnotation(ConfigValue.class);
+                String key = configValueAnnotation.value();
+                Object value = getField(field, isStatic ? null : instance);
+
+                plugzConfig.registerConfiguration(key, value);
             }
-            else {
-                if(getAnnotation.required()) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + type + "]!");
-                Object defaultValue = ValueUtils.getDefaultValue(type);
-                setField(field, instance, defaultValue);
-            }
-        }
-
-        if(field.isAnnotationPresent(GetConfig.class)){
-            GetConfig getConfigAnnotation = field.getAnnotation(GetConfig.class);
-            Object value = plugzConfig.get(getConfigAnnotation.value());
-
-            if(value == null) {
-                value = ValueUtils.getDefaultValue(type);
-            }
-
-            setField(field, instance, value);
-        }
-
-        if(field.isAnnotationPresent(ConfigValue.class)){
-            int mods = field.getModifiers();
-            if(!Modifier.isFinal(mods)) throw new MagicInstanceException("Field [" + field + "] must be final to be used as a config value!");
-            boolean isStatic = Modifier.isStatic(mods);
-
-            ConfigValue configValueAnnotation = field.getAnnotation(ConfigValue.class);
-            String key = configValueAnnotation.value();
-            Object value = getField(field, isStatic ? null : instance);
-
-            plugzConfig.registerConfiguration(key, value);
         }
     }
 
@@ -469,30 +475,44 @@ public class MagicInstanceManager {
     }
 
     private void tryMagicMethod(Object instance, Method method) throws MagicInstanceException{
-        if(method.isAnnotationPresent(Get.class)){
-            tryGetterMethod(instance, method, Get.class, Get::required, (type, getAnnotation) -> getInstance(type));
-        }
+        Annotation[] annotations = method.getDeclaredAnnotations();
 
-        if(method.isAnnotationPresent(Set.class)){
-            trySetterMethod(instance, method, Set.class, Set::persist, (type, setAnnotation, provider) -> this._registerInstance(type, provider));
-        }
+        annotationsLoop:
+        for(Annotation annotation : annotations){
+            Class<?> aType = annotation.annotationType();
 
-        if(method.isAnnotationPresent(GetConfig.class)){
-            tryGetterMethod(instance, method, GetConfig.class, anno -> true, this::_getConfigValueAsInstanceFunction);
-        }
+            if(aType == Async.class) continue;
 
-        if(method.isAnnotationPresent(ConfigValue.class)){
-            trySetterMethod(instance, method, ConfigValue.class, anno -> false, this::_setConfigAsRegisterFunction);
-        }
+            if(aType == Get.class){
+                tryGetterMethod(instance, method, Get.class, Get::required, (type, getAnnotation) -> getInstance(type));
+                continue;
+            }
 
-        for(LifecycleState state : LifecycleState.values()){
-            Class<? extends Annotation> methodAnnotation = state.methodAnnotation;
-            if(method.isAnnotationPresent(methodAnnotation)){
-                if(state == LifecycleState.PRE_SETUP){
-                    tryInvokeMethod(instance, method, canWait, null);
-                }
-                else {
-                    lifecycleMethods.computeIfAbsent(state, s -> new ArrayList<>()).add(new MagicMethod(instance, method, null, null));
+            if(aType == Set.class){
+                trySetterMethod(instance, method, Set.class, Set::persist, (type, setAnnotation, provider) -> this._registerInstance(type, provider));
+                continue;
+            }
+
+            if(aType == GetConfig.class){
+                tryGetterMethod(instance, method, GetConfig.class, anno -> true, this::_getConfigValueAsInstanceFunction);
+                continue;
+            }
+
+            if(aType == ConfigValue.class){
+                trySetterMethod(instance, method, ConfigValue.class, anno -> false, this::_setConfigAsRegisterFunction);
+                continue;
+            }
+
+            for(LifecycleState state : LifecycleState.values()){
+                Class<? extends Annotation> methodAnnotation = state.methodAnnotation;
+                if(aType == methodAnnotation){
+                    if(state == LifecycleState.PRE_SETUP){
+                        tryInvokeMethod(instance, method, canWait, null);
+                    }
+                    else {
+                        lifecycleMethods.computeIfAbsent(state, s -> new ArrayList<>()).add(new MagicMethod(instance, method, null, null));
+                    }
+                    continue annotationsLoop;
                 }
             }
         }
@@ -750,13 +770,37 @@ public class MagicInstanceManager {
     }
 
     private Object invokeMethod(Object instance, Method method, Object... params) throws MagicInstanceException {
+        Async async = method.getAnnotation(Async.class);
         int mods = method.getModifiers();
 
-        if(Modifier.isStatic(mods)){
-            return doInvokeMethod(null, method, params);
+        if(async == null) {
+            if (Modifier.isStatic(mods)) {
+                return doInvokeMethod(null, method, params);
+            }
+            else {
+                return doInvokeMethod(instance, method, params);
+            }
         }
         else {
-            return doInvokeMethod(instance, method, params);
+            CompletableFuture<Object> future = new CompletableFuture<>();
+
+            asyncManager.runAsyncTask(() -> {
+                try {
+                    Object value;
+                    if (Modifier.isStatic(mods)) {
+                        value = doInvokeMethod(null, method, params);
+                    } else {
+                        value = doInvokeMethod(instance, method, params);
+                    }
+
+                    future.complete(value);
+                }
+                catch (MagicInstanceException e){
+                    throw new MagicRuntimeException(e);
+                }
+            }, async.delay());
+
+            return future;
         }
     }
 

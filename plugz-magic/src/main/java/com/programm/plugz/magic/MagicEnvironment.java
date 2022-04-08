@@ -16,6 +16,8 @@ import java.util.List;
 @Logger("Plugz")
 public class MagicEnvironment {
 
+    private static final boolean DEFAULT_ADD_SHUTDOWN_HOOK = true;
+
     public static MagicEnvironment Start() throws MagicSetupException {
         return Start(new String[0]);
     }
@@ -34,6 +36,7 @@ public class MagicEnvironment {
     private final ProxyLogger log;
     private final PlugzUrlClassScanner scanner;
     private final ConfigurationManager configurations;
+    private final ThreadPoolManager asyncManager;
     private final MagicInstanceManager instanceManager;
 
     public MagicEnvironment(String... args){
@@ -48,7 +51,8 @@ public class MagicEnvironment {
         this.scanner = new PlugzUrlClassScanner();
         this.scanner.setLogger(log);
         this.configurations = new ConfigurationManager();
-        this.instanceManager = new MagicInstanceManager(configurations, log);
+        this.asyncManager = new ThreadPoolManager(log, configurations);
+        this.instanceManager = new MagicInstanceManager(log, configurations, asyncManager);
 
         try {
             this.instanceManager.registerInstance(ILogger.class, log);
@@ -84,6 +88,8 @@ public class MagicEnvironment {
             throw new MagicSetupException("Failed to collect scan urls.", e);
         }
 
+
+        log.info("[[[ Discovering Phase ]]]");
         log.debug("Scanning through collected urls with a base package of [{}]...", basePackage);
         try {
             scanner.scan(collectedUrls, basePackage);
@@ -96,8 +102,9 @@ public class MagicEnvironment {
         log.debug("Registering [{}] configuration classes", configClasses.size());
         for(Class<?> cls : configClasses){
             try {
-                instanceManager.checkConfigNeeded(cls);
-                instanceManager.instantiate(cls);
+                if(instanceManager.checkConfigNeeded(cls)) {
+                    instanceManager.instantiate(cls);
+                }
             }
             catch (MagicInstanceException e){
                 throw new MagicSetupException("Failed to instantiate config class: [" + cls.getName() + "]!", e);
@@ -115,6 +122,7 @@ public class MagicEnvironment {
         }
 
 
+        log.info("[[[ Preparing Phase ]]]");
         List<Class<?>> serviceClasses = scanner.getAnnotatedWith(Service.class);
         log.debug("Registering [{}] service classes", serviceClasses.size());
         for(Class<?> cls : serviceClasses){
@@ -145,18 +153,51 @@ public class MagicEnvironment {
     }
 
     public void startup() {
+        log.info("[[[ Startup Phase ]]]");
+        if(configurations.getOrDefault("core.shutdownhook.enabled", DEFAULT_ADD_SHUTDOWN_HOOK)){
+            addShutdownHook();
+        }
+
         try {
             instanceManager.callLifecycleMethods(LifecycleState.PRE_STARTUP);
         }
         catch (MagicInstanceException e){
-            throw new MagicRuntimeException("Exception while calling " + LifecycleState.PRE_STARTUP + " methods!", e);
+            throw new MagicRuntimeException(e);
         }
 
+        //subsystems.startup();
 
+        try {
+            instanceManager.callLifecycleMethods(LifecycleState.POST_STARTUP);
+        }
+        catch (MagicInstanceException e){
+            throw new MagicRuntimeException(e);
+        }
+
+        log.info("[[[ Running Phase ]]]");
     }
 
     public void shutdown(){
+        log.info("[[[ Shutdown Phase ]]]");
+        try {
+            instanceManager.callLifecycleMethods(LifecycleState.PRE_SHUTDOWN);
+        }
+        catch (MagicInstanceException e){
+            log.error(e.getMessage());
+            e.printStackTrace();
+        }
 
+        //subsystems.shutdown();
+
+        asyncManager.shutdown();
+
+        try {
+            instanceManager.callLifecycleMethods(LifecycleState.POST_SHUTDOWN);
+        }
+        catch (MagicInstanceException e){
+            log.error(e.getMessage());
+            e.printStackTrace();
+        }
     }
 
 
@@ -176,6 +217,13 @@ public class MagicEnvironment {
         }
 
         return searchUrls;
+    }
+
+    private void addShutdownHook(){
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            log.debug("Caught shutdown...");
+            shutdown();
+        }, "Shutdown Hook"));
     }
 
 
