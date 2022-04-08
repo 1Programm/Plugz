@@ -1,6 +1,7 @@
 package com.programm.plugz.magic;
 
 import com.programm.plugz.api.MagicSetupException;
+import com.programm.plugz.api.PlugzConfig;
 import com.programm.plugz.api.utils.ValueUtils;
 import com.programm.plugz.files.ResourceNode;
 import com.programm.plugz.files.props.PropsBuilder;
@@ -18,7 +19,7 @@ import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 
-class ConfigurationManager {
+class ConfigurationManager implements PlugzConfig {
 
     public final Map<String, Object> configValues = new HashMap<>();
     public String configProfile;
@@ -33,6 +34,20 @@ class ConfigurationManager {
 
     public void registerConfiguration(String key, Object value){
         configValues.put(key, value);
+    }
+
+    @Override
+    public String profile() {
+        return configProfile;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public <T> T get(String name) {
+        Object val = configValues.get(name);
+        if(val == null) return null;
+
+        return (T) val;
     }
 
     private Map<String, Object> collectConfigArgs(String... args) throws MagicSetupException {

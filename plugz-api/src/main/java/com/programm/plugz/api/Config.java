@@ -1,5 +1,7 @@
 package com.programm.plugz.api;
 
+import com.programm.plugz.annocheck.Check;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -12,6 +14,7 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
+@Check(clsNotAnnotatedWith = Service.class)
 public @interface Config {
 
     /**

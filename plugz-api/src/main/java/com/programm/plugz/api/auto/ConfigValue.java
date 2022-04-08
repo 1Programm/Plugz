@@ -1,5 +1,6 @@
 package com.programm.plugz.api.auto;
 
+import com.programm.plugz.annocheck.Check;
 import com.programm.plugz.api.Config;
 
 import java.lang.annotation.ElementType;
@@ -14,6 +15,7 @@ import java.lang.annotation.Target;
  */
 @Target({ElementType.FIELD, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
+@Check(clsAnnotatedWith = Config.class)
 public @interface ConfigValue {
 
     /**

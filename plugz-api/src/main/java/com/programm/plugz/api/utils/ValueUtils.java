@@ -22,4 +22,19 @@ public class ValueUtils {
         return s;
     }
 
+    public static Object getDefaultValue(Class<?> cls){
+        if(!cls.isPrimitive()) return null;
+
+        if(cls == Boolean.TYPE)     return false;
+        if(cls == Byte.TYPE)        return (byte)0;
+        if(cls == Character.TYPE)   return (char)0;
+        if(cls == Short.TYPE)       return (short)0;
+        if(cls == Integer.TYPE)     return 0;
+        if(cls == Long.TYPE)        return (long)0;
+        if(cls == Float.TYPE)       return (float)0;
+        if(cls == Double.TYPE)      return (double)0;
+
+        throw new IllegalStateException("INVALID STATE: There should be no other primitive values! [" + cls + "]");
+    }
+
 }
