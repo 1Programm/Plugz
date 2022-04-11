@@ -1,6 +1,10 @@
 package com.programm.plugz.magic;
 
+import com.programm.plugz.annocheck.AnnotationChecker;
 import com.programm.plugz.api.*;
+import com.programm.plugz.api.auto.Get;
+import com.programm.plugz.api.auto.GetConfig;
+import com.programm.plugz.api.auto.SetConfig;
 import com.programm.plugz.api.lifecycle.LifecycleState;
 import com.programm.plugz.inject.PlugzUrlClassScanner;
 import com.programm.plugz.inject.ScanException;
@@ -31,13 +35,14 @@ public class MagicEnvironment {
 
 
     private final String basePackage;
-    private final String[] initialArgs;
 
     private final ProxyLogger log;
     private final PlugzUrlClassScanner scanner;
     private final ConfigurationManager configurations;
     private final ThreadPoolManager asyncManager;
+    private final AnnotationChecker annocheck;
     private final MagicInstanceManager instanceManager;
+    private final SubsystemManager subsystems;
 
     public MagicEnvironment(String... args){
         this("", args);
@@ -45,34 +50,48 @@ public class MagicEnvironment {
 
     public MagicEnvironment(String basePackage, String... args){
         this.basePackage = basePackage;
-        this.initialArgs = args;
 
         this.log = new ProxyLogger();
         this.scanner = new PlugzUrlClassScanner();
         this.scanner.setLogger(log);
-        this.configurations = new ConfigurationManager();
+        this.configurations = new ConfigurationManager(args);
         this.asyncManager = new ThreadPoolManager(log, configurations);
-        this.instanceManager = new MagicInstanceManager(log, configurations, asyncManager);
+        this.annocheck = new AnnotationChecker();
+        this.instanceManager = new MagicInstanceManager(log, configurations, asyncManager, annocheck);
+        this.subsystems = new SubsystemManager(log, scanner, configurations, annocheck, instanceManager);
+
+        setupAnnocheck();
 
         try {
             this.instanceManager.registerInstance(ILogger.class, log);
             this.instanceManager.registerInstance(PlugzConfig.class, configurations);
+            this.instanceManager.registerInstance(IAsyncManager.class, asyncManager);
         }
         catch (MagicInstanceException e){
             throw new IllegalStateException("INVALID STATE: There should be no class waiting yet!", e);
         }
+    }
 
-        scanner.addSearchClass(ISubsystem.class);
-        scanner.addSearchAnnotation(Config.class);
-        scanner.addSearchAnnotation(Service.class);
+    private void setupAnnocheck(){
+        //SetConfig annotation can only be used inside classes annotated by Config
+        this.annocheck.whitelistClassAnnotations(SetConfig.class).set(Config.class).seal();
+
+        this.annocheck.blacklistPartnerAnnotations(Get.class).set(GetConfig.class);
+    }
+
+    private void logPhase(String msg){
+        if(configurations.getOrDefault("core.log.phases", true)){
+            log.info("[[[ {} ]]]", msg);
+        }
     }
 
     public void setup() throws MagicSetupException {
-        log.info("[[[ Configuration Phase ]]]");
+        log.info("Setting up the environment with profile: [{}]", configurations.profile());
+        logPhase("Configuration Phase");
 
         log.debug("Initializing configurations from args and profile-resource...");
         try {
-            configurations.init(initialArgs);
+            configurations.init();
         }
         catch (MagicSetupException e){
             throw new MagicSetupException("Failed to initialize configuration manager.", e);
@@ -89,13 +108,17 @@ public class MagicEnvironment {
         }
 
 
-        log.info("[[[ Discovering Phase ]]]");
-        log.debug("Scanning through collected urls with a base package of [{}]...", basePackage);
+        logPhase("Discovering Phase");
+        log.debug("Starting config scan");
         try {
+            scanner.addSearchClass(ISubsystem.class);
+            scanner.addSearchAnnotation(Config.class);
+
+            log.debug("Scanning through collected urls with a base package of [{}]...", basePackage);
             scanner.scan(collectedUrls, basePackage);
         }
         catch (ScanException e){
-            throw new MagicSetupException("Failed to scan through collected urls and a base package [" + basePackage + "]!", e);
+            throw new MagicSetupException("Config scan failed with a base package of [" + basePackage + "]!", e);
         }
 
         List<Class<?>> configClasses = scanner.getAnnotatedWith(Config.class);
@@ -122,7 +145,26 @@ public class MagicEnvironment {
         }
 
 
-        log.info("[[[ Preparing Phase ]]]");
+        try {
+            scanner.addSearchAnnotation(Service.class);
+            subsystems.prepare();
+        }
+        catch (MagicInstanceException e){
+            throw new MagicSetupException("Failed to prepare subsystems!", e);
+        }
+
+
+        log.info("Starting main scan");
+        try {
+            log.debug("Scanning through collected urls with a base package of [{}]...", basePackage);
+            scanner.scan(collectedUrls, basePackage);
+        }
+        catch (ScanException e){
+            throw new MagicSetupException("Main scan failed with a base package of [" + basePackage + "]!", e);
+        }
+
+
+        logPhase("Preparing Phase");
         List<Class<?>> serviceClasses = scanner.getAnnotatedWith(Service.class);
         log.debug("Registering [{}] service classes", serviceClasses.size());
         for(Class<?> cls : serviceClasses){
@@ -132,6 +174,14 @@ public class MagicEnvironment {
             catch (MagicInstanceException e){
                 throw new MagicSetupException("Failed to instantiate service class: [" + cls.getName() + "]!", e);
             }
+        }
+
+        log.debug("Setting up discovered classes from subsystems...");
+        try {
+            subsystems.setupFoundClasses();
+        }
+        catch (MagicInstanceException e){
+            throw new MagicSetupException("Failed to set up discovered classes from subsystems!", e);
         }
 
         try {
@@ -153,7 +203,8 @@ public class MagicEnvironment {
     }
 
     public void startup() {
-        log.info("[[[ Startup Phase ]]]");
+        log.info("Starting up the environment");
+        logPhase("Startup Phase");
         if(configurations.getOrDefault("core.shutdownhook.enabled", DEFAULT_ADD_SHUTDOWN_HOOK)){
             addShutdownHook();
         }
@@ -165,7 +216,12 @@ public class MagicEnvironment {
             throw new MagicRuntimeException(e);
         }
 
-        //subsystems.startup();
+        try {
+            subsystems.startup();
+        }
+        catch (MagicException e){
+            throw new MagicRuntimeException(e);
+        }
 
         try {
             instanceManager.callLifecycleMethods(LifecycleState.POST_STARTUP);
@@ -174,11 +230,12 @@ public class MagicEnvironment {
             throw new MagicRuntimeException(e);
         }
 
-        log.info("[[[ Running Phase ]]]");
+        logPhase("Running Phase");
     }
 
     public void shutdown(){
-        log.info("[[[ Shutdown Phase ]]]");
+        log.info("Shutting down the environment");
+        logPhase("Shutdown Phase");
         try {
             instanceManager.callLifecycleMethods(LifecycleState.PRE_SHUTDOWN);
         }
@@ -187,7 +244,12 @@ public class MagicEnvironment {
             e.printStackTrace();
         }
 
-        //subsystems.shutdown();
+        try {
+            subsystems.shutdown();
+        }
+        catch (MagicException e){
+            throw new MagicRuntimeException(e);
+        }
 
         asyncManager.shutdown();
 
@@ -217,6 +279,13 @@ public class MagicEnvironment {
         }
 
         return searchUrls;
+    }
+
+    private void logSubsystemsFound(List<Class<?>> subsystems){
+        log.info("Found [{}] subsystems:", subsystems.size());
+        for(Class<?> cls : subsystems){
+            log.info("-> {}", cls.getSimpleName());
+        }
     }
 
     private void addShutdownHook(){

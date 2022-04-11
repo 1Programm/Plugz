@@ -24,14 +24,15 @@ class ConfigurationManager implements PlugzConfig {
     public final Map<String, Object> configValues = new HashMap<>();
     public String configProfile;
 
-    public void init(String... args) throws MagicSetupException {
-        Map<String, Object> tmpConfigArgs = collectConfigArgs(args);
-
-        readProfile();
-
-        configValues.putAll(tmpConfigArgs);
+    public ConfigurationManager(String... args) {
+        collectConfigArgs(args);
     }
 
+    public void init() throws MagicSetupException {
+        readProfile();
+    }
+
+    @Override
     public void registerConfiguration(String key, Object value){
         configValues.put(key, value);
     }
@@ -50,16 +51,15 @@ class ConfigurationManager implements PlugzConfig {
         return (T) val;
     }
 
-    private Map<String, Object> collectConfigArgs(String... args) throws MagicSetupException {
-        Map<String, Object> tmpConfigArgs = new HashMap<>();
-
+    private void collectConfigArgs(String... args) {
         for(int i=0;i<args.length;i++){
             if(args[i].startsWith("-")){
                 String key = args[i].substring(1);
 
-                if(key.equals("config-profile")){
-                    if(i + 1 == args.length) throw new MagicSetupException("Config profile value not defined in args!");
-                    configProfile = args[i + 1];
+                if(key.equals("config.profile")){
+                    if(i + 1 < args.length) {
+                        configProfile = args[i + 1];
+                    }
                     continue;
                 }
 
@@ -71,11 +71,9 @@ class ConfigurationManager implements PlugzConfig {
                     value = getPrimitiveConfigValue(args[i + 1]);
                 }
 
-                tmpConfigArgs.put(key, value);
+                configValues.put(key, value);
             }
         }
-
-        return tmpConfigArgs;
     }
 
     private Object getPrimitiveConfigValue(String s){
