@@ -1,0 +1,25 @@
+# Will try to find a config file in resources with the profile name
+# If profile IS NOT set it will try to find a [plugz.xml, plugz.yml, plugz.yaml, plugz.properties] file to set the configs but doesnt care if it does not exist
+# If profile IS set than it will try to find a [plugz-PROFILE.xml, plugz-PROFILE.yml, plugz-PROFILE.yaml, plugz-PROFILE.properties] file and will throw an exception if it could not find even one of them.
+config.profile=
+
+# Adds a runtime-shutdownhook to the system when startup() is called.
+core.shutdownhook.enabled = true
+
+
+
+# Maximum worker size so with the default there can be max 5 workers and other tasks will be queued
+async.workers.max = 5
+
+# Timeout time after which workers will be killed. With the default they will wait 5 seconds after finishing a task and will look for new tasks.
+async.workers.timeout = 5000
+
+
+
+# Min pace at which @Scheduled methods will be updated so with the default value they will be updated once a second at fastest
+scheduler.sleep = 1000
+
+
+
+# Port on which the Server socket should listen
+webserv.port = 8080

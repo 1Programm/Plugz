@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 class ThreadPoolManager implements IAsyncManager {
 
     private static final int DEFAULT_MAX_WORKERS = 5;
-    private static final int DEFAULT_MAX_SLEEP = 5000;
+    private static final int DEFAULT_MAX_TIMEOUT = 5000;
 
     @RequiredArgsConstructor
     private class Worker {
@@ -63,7 +63,7 @@ class ThreadPoolManager implements IAsyncManager {
         }
 
         private boolean checkQueue() throws InterruptedException{
-            Runnable task = queuedTasks.poll(sleepTime, TimeUnit.MILLISECONDS);
+            Runnable task = queuedTasks.poll(timeoutTime, TimeUnit.MILLISECONDS);
 
             if(task != null){
                 this.task = task;
@@ -82,7 +82,7 @@ class ThreadPoolManager implements IAsyncManager {
 
     private boolean initialized;
     private int maxWorkers;
-    private long sleepTime;
+    private long timeoutTime;
     private boolean[] workerExists;
     private boolean exited;
 
@@ -93,7 +93,7 @@ class ThreadPoolManager implements IAsyncManager {
 
     public void init(ConfigurationManager configurations){
         this.maxWorkers = configurations.getIntOrDefault("async.workers.max", DEFAULT_MAX_WORKERS);
-        this.sleepTime = configurations.getLongOrDefault("async.workers.sleep", DEFAULT_MAX_SLEEP);
+        this.timeoutTime = configurations.getLongOrDefault("async.workers.timeout", DEFAULT_MAX_TIMEOUT);
         this.workerExists = new boolean[maxWorkers];
 
         initialized = true;

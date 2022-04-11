@@ -79,15 +79,8 @@ public class MagicEnvironment {
         this.annocheck.blacklistPartnerAnnotations(Get.class).set(GetConfig.class);
     }
 
-    private void logPhase(String msg){
-        if(configurations.getBooleanOrDefault("core.log.phases", true)){
-            log.info("[[[ {} ]]]", msg);
-        }
-    }
-
     public void setup() throws MagicSetupException {
         log.info("Setting up the environment with profile: [{}]", configurations.profile());
-        logPhase("Configuration Phase");
 
         log.debug("Initializing configurations from args and profile-resource...");
         try {
@@ -107,8 +100,6 @@ public class MagicEnvironment {
             throw new MagicSetupException("Failed to collect scan urls.", e);
         }
 
-
-        logPhase("Discovering Phase");
         log.debug("Starting config scan");
         try {
             scanner.addSearchClass(ISubsystem.class);
@@ -165,7 +156,6 @@ public class MagicEnvironment {
         }
 
 
-        logPhase("Preparing Phase");
         List<Class<?>> serviceClasses = scanner.getAnnotatedWith(Service.class);
         log.debug("Registering [{}] service classes", serviceClasses.size());
         for(Class<?> cls : serviceClasses){
@@ -205,8 +195,9 @@ public class MagicEnvironment {
 
     public void startup() {
         log.info("Starting up the environment");
-        logPhase("Startup Phase");
+
         if(configurations.getBooleanOrDefault("core.shutdownhook.enabled", DEFAULT_ADD_SHUTDOWN_HOOK)){
+            log.debug("Adding shutdown-hook...");
             addShutdownHook();
         }
 
@@ -231,12 +222,11 @@ public class MagicEnvironment {
             throw new MagicRuntimeException(e);
         }
 
-        logPhase("Running Phase");
+        log.info("Environment started up!");
     }
 
     public void shutdown(){
         log.info("Shutting down the environment");
-        logPhase("Shutdown Phase");
         try {
             instanceManager.callLifecycleMethods(LifecycleState.PRE_SHUTDOWN);
         }
@@ -280,13 +270,6 @@ public class MagicEnvironment {
         }
 
         return searchUrls;
-    }
-
-    private void logSubsystemsFound(List<Class<?>> subsystems){
-        log.info("Found [{}] subsystems:", subsystems.size());
-        for(Class<?> cls : subsystems){
-            log.info("-> {}", cls.getSimpleName());
-        }
     }
 
     private void addShutdownHook(){

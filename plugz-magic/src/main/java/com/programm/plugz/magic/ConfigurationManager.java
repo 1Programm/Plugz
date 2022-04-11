@@ -1,6 +1,5 @@
 package com.programm.plugz.magic;
 
-import com.programm.plugz.api.MagicRuntimeException;
 import com.programm.plugz.api.MagicSetupException;
 import com.programm.plugz.api.PlugzConfig;
 import com.programm.plugz.api.utils.ValueParseException;
