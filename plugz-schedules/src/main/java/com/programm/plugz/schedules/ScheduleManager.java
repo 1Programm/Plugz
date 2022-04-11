@@ -16,12 +16,11 @@ import java.util.Map;
 @Logger("Scheduler")
 public class ScheduleManager implements Runnable, ISchedules {
 
-    private static final long MIN_SLEEP = 100L;
-
     private final List<ScheduledMethodConfig> schedulerConfigs = new ArrayList<>();
     private final Map<String, ScheduledMethodConfig> mappedBeanConfigs = new HashMap<>();
     private final ILogger log;
     private final IAsyncManager asyncManager;
+    private final long minSleep;
 
     private boolean running;
     private boolean paused;
@@ -35,7 +34,7 @@ public class ScheduleManager implements Runnable, ISchedules {
 
         try {
             while(running && !paused){
-                Thread.sleep(MIN_SLEEP);
+                Thread.sleep(minSleep);
 
                 now = curTime();
 
@@ -113,8 +112,8 @@ public class ScheduleManager implements Runnable, ISchedules {
     public void scheduleRunnable(ScheduledMethodConfig config){
         log.debug("Scheduling method: [{}].", config.beanString);
 
-        if(config.repeatAfter < MIN_SLEEP){
-            log.warn("Scheduled method ({}) cannot run faster than every {} milliseconds!", config.beanString, MIN_SLEEP);
+        if(config.repeatAfter < minSleep){
+            log.warn("Scheduled method ({}) cannot run faster than every {} milliseconds!", config.beanString, minSleep);
         }
 
         schedulerConfigs.add(config);

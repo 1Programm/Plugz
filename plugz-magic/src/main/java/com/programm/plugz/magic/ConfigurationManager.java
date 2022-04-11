@@ -1,7 +1,9 @@
 package com.programm.plugz.magic;
 
+import com.programm.plugz.api.MagicRuntimeException;
 import com.programm.plugz.api.MagicSetupException;
 import com.programm.plugz.api.PlugzConfig;
+import com.programm.plugz.api.utils.ValueParseException;
 import com.programm.plugz.api.utils.ValueUtils;
 import com.programm.plugz.files.ResourceNode;
 import com.programm.plugz.files.props.PropsBuilder;
@@ -42,13 +44,12 @@ class ConfigurationManager implements PlugzConfig {
         return configProfile;
     }
 
-    @SuppressWarnings("unchecked")
     @Override
-    public <T> T get(String name) {
+    public <T> T get(String name, Class<T> cls) throws ValueParseException {
         Object val = configValues.get(name);
         if(val == null) return null;
 
-        return (T) val;
+        return ValueUtils.parsePrimitive(val, cls);
     }
 
     private void collectConfigArgs(String... args) {

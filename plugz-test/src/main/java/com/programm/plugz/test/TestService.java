@@ -17,7 +17,7 @@ public class TestService {
         log.info("Started !");
     }
 
-    @Scheduled(repeat = 2000)
+    @Scheduled(repeat = 500)
     public void test(@Get String apple, @Get ISchedules schedules){
         log.info("Apple: {}", apple);
 

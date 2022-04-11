@@ -13,12 +13,15 @@ import java.lang.reflect.Method;
 @Logger("Scheduler")
 public class SchedulerSubsystem implements ISubsystem {
 
+    private static final long DEFAULT_MIN_SLEEP = 1000;
+
     private final ILogger log;
     private final ScheduleManager scheduleManager;
 
-    public SchedulerSubsystem(@Get ILogger log, @Get IAsyncManager asyncManager){
+    public SchedulerSubsystem(@Get ILogger log, @Get IAsyncManager asyncManager, @Get PlugzConfig config){
         this.log = log;
-        this.scheduleManager = new ScheduleManager(log, asyncManager);
+        long minSleep = config.getLongOrDefault("scheduler.sleep", DEFAULT_MIN_SLEEP);
+        this.scheduleManager = new ScheduleManager(log, asyncManager, minSleep);
     }
 
     @Override

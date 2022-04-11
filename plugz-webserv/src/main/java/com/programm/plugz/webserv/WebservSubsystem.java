@@ -13,16 +13,16 @@ public class WebservSubsystem implements ISubsystem {
 
     @Override
     public void registerSetup(ISubsystemSetupHelper setupHelper, AnnotationChecker annocheck) throws MagicException {
-        
+        log.info("A");
     }
 
     @Override
     public void startup() throws MagicException {
-
+        log.info("B");
     }
 
     @Override
     public void shutdown() throws MagicException {
-
+        log.info("C");
     }
 }

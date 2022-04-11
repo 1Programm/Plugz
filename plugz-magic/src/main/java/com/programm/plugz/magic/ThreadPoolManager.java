@@ -79,21 +79,42 @@ class ThreadPoolManager implements IAsyncManager {
     private final BlockingQueue<Runnable> queuedTasks;
 
     private final ILogger log;
-    private final int maxWorkers;
-    private final long sleepTime;
-    private final boolean[] workerExists;
+
+    private boolean initialized;
+    private int maxWorkers;
+    private long sleepTime;
+    private boolean[] workerExists;
     private boolean exited;
 
-    public ThreadPoolManager(ILogger log, ConfigurationManager configurations) {
+    public ThreadPoolManager(ILogger log) {
         this.log = log;
-        this.maxWorkers = configurations.getOrDefault("async.workers.max", DEFAULT_MAX_WORKERS);
-        this.sleepTime = configurations.getOrDefault("async.workers.sleep", DEFAULT_MAX_SLEEP);
-        this.workerExists = new boolean[maxWorkers];
         this.queuedTasks = new LinkedBlockingDeque<>();
+    }
+
+    public void init(ConfigurationManager configurations){
+        this.maxWorkers = configurations.getIntOrDefault("async.workers.max", DEFAULT_MAX_WORKERS);
+        this.sleepTime = configurations.getLongOrDefault("async.workers.sleep", DEFAULT_MAX_SLEEP);
+        this.workerExists = new boolean[maxWorkers];
+
+        initialized = true;
+    }
+
+    public void shutdown(){
+        this.exited = true;
+
+        //TODO: working workers are not listed and cannot be interrupted
+        for(Worker worker : sleepingWorkers){
+            if(worker.running) {
+                log.trace("Shutting down sleeping worker [{}]...", worker.name);
+                worker.running = false;
+                worker.thread.interrupt();
+            }
+        }
     }
 
     @Override
     public void runAsyncVipTask(Runnable task, long delay){
+        if(!initialized) throw new IllegalStateException("Cannot run tasks before initialisation!");
         if(exited) return;
 
         log.trace("Running async VIP task: [{}].", task);
@@ -133,6 +154,7 @@ class ThreadPoolManager implements IAsyncManager {
 
     @Override
     public void runAsyncTask(Runnable task, long delay){
+        if(!initialized) throw new IllegalStateException("Cannot run tasks before initialisation!");
         if(exited) return;
 
         log.trace("Running async task: [{}].", task);
@@ -164,20 +186,6 @@ class ThreadPoolManager implements IAsyncManager {
             else {
                 log.debug("Restarting [{}].", worker.name);
                 worker.start(task, delay);
-            }
-        }
-    }
-
-    //TODO: @Override
-    public void shutdown(){
-        this.exited = true;
-
-        //TODO: working workers are not listed and cannot be interrupted
-        for(Worker worker : sleepingWorkers){
-            if(worker.running) {
-                log.trace("Shutting down sleeping worker [{}]...", worker.name);
-                worker.running = false;
-                worker.thread.interrupt();
             }
         }
     }

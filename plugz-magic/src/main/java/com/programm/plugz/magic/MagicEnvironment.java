@@ -55,7 +55,7 @@ public class MagicEnvironment {
         this.scanner = new PlugzUrlClassScanner();
         this.scanner.setLogger(log);
         this.configurations = new ConfigurationManager(args);
-        this.asyncManager = new ThreadPoolManager(log, configurations);
+        this.asyncManager = new ThreadPoolManager(log);
         this.annocheck = new AnnotationChecker();
         this.instanceManager = new MagicInstanceManager(log, configurations, asyncManager, annocheck);
         this.subsystems = new SubsystemManager(log, scanner, configurations, annocheck, instanceManager);
@@ -80,7 +80,7 @@ public class MagicEnvironment {
     }
 
     private void logPhase(String msg){
-        if(configurations.getOrDefault("core.log.phases", true)){
+        if(configurations.getBooleanOrDefault("core.log.phases", true)){
             log.info("[[[ {} ]]]", msg);
         }
     }
@@ -144,6 +144,7 @@ public class MagicEnvironment {
             throw new MagicSetupException(e.getMessage());
         }
 
+        asyncManager.init(configurations);
 
         try {
             scanner.addSearchAnnotation(Service.class);
@@ -205,7 +206,7 @@ public class MagicEnvironment {
     public void startup() {
         log.info("Starting up the environment");
         logPhase("Startup Phase");
-        if(configurations.getOrDefault("core.shutdownhook.enabled", DEFAULT_ADD_SHUTDOWN_HOOK)){
+        if(configurations.getBooleanOrDefault("core.shutdownhook.enabled", DEFAULT_ADD_SHUTDOWN_HOOK)){
             addShutdownHook();
         }
 
