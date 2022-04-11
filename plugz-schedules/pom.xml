@@ -22,11 +22,6 @@
             <artifactId>plugz-api</artifactId>
             <version>0.1-SNAPSHOT</version>
         </dependency>
-        <dependency>
-            <groupId>com.programm.projects</groupId>
-            <artifactId>ioutils-log-api</artifactId>
-            <version>1.2</version>
-        </dependency>
 
         <dependency>
             <groupId>org.projectlombok</groupId>
