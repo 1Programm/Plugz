@@ -2,40 +2,28 @@ package com.programm.plugz.test;
 
 import com.programm.plugz.api.Service;
 import com.programm.plugz.api.auto.Get;
-import com.programm.plugz.api.lifecycle.*;
+import com.programm.plugz.api.lifecycle.PostStartup;
+import com.programm.plugz.schedules.ISchedules;
+import com.programm.plugz.schedules.Scheduled;
 import com.programm.projects.ioutils.log.api.out.ILogger;
 
 @Service
 public class TestService {
 
-    @PreSetup
-    public void m1(@Get ILogger log){
-        log.info("1");
-    }
-
-    @PostSetup
-    public void m2(@Get ILogger log){
-        log.info("2");
-    }
-
-    @PreStartup
-    public void m3(@Get ILogger log){
-        log.info("3");
-    }
+    @Get private ILogger log;
 
     @PostStartup
-    public void m4(@Get ILogger log){
-        log.info("4");
+    public void onStartup(){
+        log.info("Started !");
     }
 
-    @PreShutdown
-    public void m5(@Get ILogger log){
-        log.info("5");
-    }
+    @Scheduled(repeat = 2000)
+    public void test(@Get String apple, @Get ISchedules schedules){
+        log.info("Apple: {}", apple);
 
-    @PostShutdown
-    public void m6(@Get ILogger log){
-        log.info("6");
+        if(apple.equals("Braeburn")){
+            schedules.stopSchedule();
+        }
     }
 
 }

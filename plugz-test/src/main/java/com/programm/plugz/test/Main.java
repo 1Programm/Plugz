@@ -4,10 +4,14 @@ import com.programm.plugz.magic.MagicEnvironment;
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.IOutput;
 import com.programm.projects.ioutils.log.logger.ConfLogger;
+import lombok.RequiredArgsConstructor;
 
 public class Main {
 
+    @RequiredArgsConstructor
     private static class ThreadNamePrependOut implements IOutput {
+        private final int space;
+
         @Override
         public void print(String s, Object... objects) {
             System.out.print(s);
@@ -15,16 +19,15 @@ public class Main {
 
         @Override
         public void println(String message, Object... args) {
-            int num = 20;
             String threadName = Thread.currentThread().getName();
-            message = "[" + threadName + " ".repeat(Math.max(0, num - threadName.length())) + "]: " + message;
+            message = "[" + threadName + " ".repeat(Math.max(0, space - threadName.length())) + "]: " + message;
             IOutput.super.println(message, args);
         }
     }
 
     public static void main(String[] args) throws Exception {
         MagicEnvironment env = new MagicEnvironment(args);
-        env.setLogger(new ConfLogger("[%5<($LVL)] [%30>($LOG?{$CLS.$MET})]: $MSG", ILogger.LEVEL_INFO, new ThreadNamePrependOut()));
+        env.setLogger(new ConfLogger("[%5<($LVL)] [%30>($LOG?{$CLS.$MET})]: $MSG", ILogger.LEVEL_INFO, new ThreadNamePrependOut(15)));
         env.setup();
         env.startup();
     }
