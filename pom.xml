@@ -15,6 +15,7 @@
         <module>plugz-inject</module>
         <module>plugz-files</module>
         <module>plugz-annocheck</module>
+        <module>plugz-schedules</module>
     </modules>
 
     <properties>
