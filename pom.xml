@@ -16,6 +16,7 @@
         <module>plugz-files</module>
         <module>plugz-annocheck</module>
         <module>plugz-schedules</module>
+        <module>plugz-webserv</module>
     </modules>
 
     <properties>

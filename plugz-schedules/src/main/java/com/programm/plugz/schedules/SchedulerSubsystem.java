@@ -33,13 +33,11 @@ public class SchedulerSubsystem implements ISubsystem {
 
     @Override
     public void startup() throws MagicException {
-        log.debug("Starting scheduler...");
         scheduleManager.start();
     }
 
     @Override
     public void shutdown() throws MagicException {
-        log.info("Stopping the scheduler...");
         scheduleManager.stop();
     }
 
