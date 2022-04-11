@@ -165,7 +165,7 @@ public class PlugzUrlClassScanner {
         for(Annotation annotation : annotations){
             Class<?> annotationType = annotation.annotationType();
             List<Class<?>> registeredClasses = foundAnnotatedClasses.get(annotationType);
-            if(registeredClasses != null) {
+            if(registeredClasses != null && !registeredClasses.contains(cls)) {
                 log.trace("#    %70<({}) is annotated with [{}]", cls, annotationType);
                 registeredClasses.add(cls);
             }
@@ -180,7 +180,7 @@ public class PlugzUrlClassScanner {
         }
         else {
             List<Class<?>> registeredImplementations = foundImplementingClasses.get(cls);
-            if(registeredImplementations != null) {
+            if(registeredImplementations != null && !registeredImplementations.contains(actualCls)) {
                 log.trace("#    %70<({}) is an implementation of [{}]", actualCls, cls);
                 registeredImplementations.add(actualCls);
             }

@@ -1,5 +1,6 @@
 package com.programm.plugz.magic;
 
+import com.programm.plugz.api.IAsyncManager;
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +12,7 @@ import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 
 @Logger("Thread-Pool-Manager")
-class ThreadPoolManager {
+class ThreadPoolManager implements IAsyncManager {
 
     private static final int DEFAULT_MAX_WORKERS = 5;
     private static final int DEFAULT_MAX_SLEEP = 5000;
@@ -81,6 +82,7 @@ class ThreadPoolManager {
     private final int maxWorkers;
     private final long sleepTime;
     private final boolean[] workerExists;
+    private boolean exited;
 
     public ThreadPoolManager(ILogger log, ConfigurationManager configurations) {
         this.log = log;
@@ -90,8 +92,10 @@ class ThreadPoolManager {
         this.queuedTasks = new LinkedBlockingDeque<>();
     }
 
-    //TODO @Override
+    @Override
     public void runAsyncVipTask(Runnable task, long delay){
+        if(exited) return;
+
         log.trace("Running async VIP task: [{}].", task);
 
         if(sleepingWorkers.isEmpty()){
@@ -127,8 +131,10 @@ class ThreadPoolManager {
         }
     }
 
-    //TODO @Override
+    @Override
     public void runAsyncTask(Runnable task, long delay){
+        if(exited) return;
+
         log.trace("Running async task: [{}].", task);
 
         if(sleepingWorkers.isEmpty()){
@@ -164,6 +170,8 @@ class ThreadPoolManager {
 
     //TODO: @Override
     public void shutdown(){
+        this.exited = true;
+
         //TODO: working workers are not listed and cannot be interrupted
         for(Worker worker : sleepingWorkers){
             if(worker.running) {
