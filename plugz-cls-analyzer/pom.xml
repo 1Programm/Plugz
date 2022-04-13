@@ -9,7 +9,7 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>plugz-webserv</artifactId>
+    <artifactId>plugz-cls-analyzer</artifactId>
 
     <properties>
         <maven.compiler.source>16</maven.compiler.source>
@@ -18,14 +18,9 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.programm.plugz</groupId>
-            <artifactId>plugz-api</artifactId>
-            <version>0.1-SNAPSHOT</version>
-        </dependency>
-        <dependency>
-            <groupId>com.programm.plugz</groupId>
-            <artifactId>plugz-cls-analyzer</artifactId>
-            <version>0.1-SNAPSHOT</version>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.22</version>
         </dependency>
     </dependencies>
 

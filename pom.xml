@@ -17,6 +17,7 @@
         <module>plugz-annocheck</module>
         <module>plugz-schedules</module>
         <module>plugz-webserv</module>
+        <module>plugz-cls-analyzer</module>
     </modules>
 
     <properties>
