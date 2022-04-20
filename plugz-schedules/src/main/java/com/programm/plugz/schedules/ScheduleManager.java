@@ -20,7 +20,7 @@ public class ScheduleManager implements Runnable, ISchedules {
     private final Map<String, ScheduledMethodConfig> mappedBeanConfigs = new HashMap<>();
     private final ILogger log;
     private final IAsyncManager asyncManager;
-    private final long minSleep;
+    final long minSleep;
 
     private boolean running;
     private boolean paused;
@@ -99,7 +99,7 @@ public class ScheduleManager implements Runnable, ISchedules {
         if(running) return;
         running = true;
         paused = false;
-        
+
         asyncManager.runAsyncVipTask(this, 0);
     }
 
@@ -109,10 +109,6 @@ public class ScheduleManager implements Runnable, ISchedules {
 
     public void scheduleRunnable(ScheduledMethodConfig config){
         log.debug("Scheduling method: [{}].", config.beanString);
-
-        if(config.repeatAfter < minSleep){
-            log.warn("Scheduled method ({}) cannot run faster than every {} milliseconds!", config.beanString, minSleep);
-        }
 
         schedulerConfigs.add(config);
         mappedBeanConfigs.put(config.beanString, config);

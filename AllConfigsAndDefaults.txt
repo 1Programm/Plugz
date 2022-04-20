@@ -47,7 +47,7 @@ async.workers.timeout = 5000
 
 
 # Min pace at which @Scheduled methods will be updated so with the default value they will be updated once a second at fastest
-scheduler.sleep = 1000
+scheduler.min-sleep = 1000
 
 
 
