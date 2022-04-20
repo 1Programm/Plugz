@@ -168,6 +168,7 @@ public class MagicEnvironment {
 
         asyncManager.init(configurations);
 
+
         try {
             scanner.addSearchAnnotation(Service.class);
             subsystems.prepare();
@@ -355,6 +356,8 @@ public class MagicEnvironment {
             } catch (IllegalAccessException e) {
                 throw new MagicSetupException("The empty constructor for the provided logger implementation [" + loggerImplementationClassName + "] cannot be accessed!", e);
             }
+
+            log.info("Using Logger [{}]", loggerImplementationClass.getName());
         }
 
         if(loggerImplementation instanceof IConfigurableLogger configurableLogger){
