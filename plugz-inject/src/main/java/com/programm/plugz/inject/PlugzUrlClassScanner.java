@@ -15,6 +15,7 @@ import java.util.zip.ZipInputStream;
 @Logger("Plugz Scanner")
 public class PlugzUrlClassScanner {
 
+    private final List<String> blacklistedPackages = new ArrayList<>();
     private final Map<Class<? extends Annotation>, List<Class<?>>> foundAnnotatedClasses = new HashMap<>();
     private final Map<Class<?>, List<Class<?>>> foundImplementingClasses = new HashMap<>();
 
@@ -22,7 +23,7 @@ public class PlugzUrlClassScanner {
 
     public void scan(List<URL> searchUrls, String basePackage) throws ScanException {
         if(searchUrls == null || searchUrls.isEmpty()){
-            log.warn("No urls to search through!");
+            log.warn("# No urls to search through!");
             return;
         }
         if(basePackage == null) basePackage = "";
@@ -31,11 +32,11 @@ public class PlugzUrlClassScanner {
             String urlFile = url.getFile();
 
             if(urlFile.endsWith(".jar")){
-                log.debug("Scanning url as jar: [{}]...", url);
+                log.debug("# Scanning url as jar: [{}]...", url);
                 searchInJar(url, basePackage);
             }
             else if(url.getProtocol().equals("file")){
-                log.debug("Scanning url as class folder: [{}]...", url);
+                log.debug("# Scanning url as class folder: [{}]...", url);
                 File file = new File(urlFile);
                 searchInFolder(file, basePackage);
             }
@@ -61,6 +62,10 @@ public class PlugzUrlClassScanner {
         this.foundImplementingClasses.putIfAbsent(cls, new ArrayList<>());
     }
 
+    public void blacklistPackage(String pkg){
+        blacklistedPackages.add(pkg);
+    }
+
     public void setLogger(ILogger log){
         this.log = log;
     }
@@ -79,6 +84,10 @@ public class PlugzUrlClassScanner {
                     String name = entry.getName();
 
                     if(!name.endsWith(".class") || !name.startsWith(basePackage)) continue;
+                    if(isBlacklisted(name, false)){
+                        log.trace("# Encountered blacklisted package [{}]", name);
+                        continue;
+                    }
 
                     name = name.substring(0, name.length() - ".class".length());
                     name = name.replaceAll("/", ".");
@@ -105,7 +114,14 @@ public class PlugzUrlClassScanner {
 
             File[] children = curFile.listFiles();
             if(children != null){
-                Collections.addAll(toBeScanned, children);
+                for(File child : children){
+                    String relativePath = child.getAbsolutePath().substring(rootFolderPath.length() + 1);
+                    if(isBlacklisted(relativePath, true)) {
+                        log.trace("# Encountered blacklisted package [{}]", relativePath.replaceAll("/", "."));
+                        continue;
+                    }
+                    toBeScanned.add(child);
+                }
             }
             else {
                 String name = curFile.getName();
@@ -115,6 +131,15 @@ public class PlugzUrlClassScanner {
                 }
             }
         }
+    }
+
+    private boolean isBlacklisted(String pkg, boolean isPath){
+        for(String blacklistedPkg : blacklistedPackages){
+            if(isPath) blacklistedPkg = blacklistedPkg.replaceAll("\\.", "/");
+            if(pkg.startsWith(blacklistedPkg)) return true;
+        }
+
+        return false;
     }
 
     private String getFullNameFromAbsolutePath(String path, String rootFolder){
@@ -154,19 +179,19 @@ public class PlugzUrlClassScanner {
             cls = Class.forName(clsName);
         }
         catch (ClassNotFoundException e){
-            log.error("Something went wrong: Class [{}] could not be found!", clsName);
+            log.error("# Something went wrong: Class [{}] could not be found!", clsName);
             e.printStackTrace();
             return;
         }
 
-        log.trace("# Found class: [{}]", cls);
+        log.trace("### Found class: [{}]", cls);
 
         Annotation[] annotations = cls.getDeclaredAnnotations();
         for(Annotation annotation : annotations){
             Class<?> annotationType = annotation.annotationType();
             List<Class<?>> registeredClasses = foundAnnotatedClasses.get(annotationType);
             if(registeredClasses != null && !registeredClasses.contains(cls)) {
-                log.trace("#    %70<({}) is annotated with [{}]", cls, annotationType);
+                log.trace("###    %70<({}) is annotated with [{}]", cls, annotationType);
                 registeredClasses.add(cls);
             }
         }
@@ -181,7 +206,7 @@ public class PlugzUrlClassScanner {
         else {
             List<Class<?>> registeredImplementations = foundImplementingClasses.get(cls);
             if(registeredImplementations != null && !registeredImplementations.contains(actualCls)) {
-                log.trace("#    %70<({}) is an implementation of [{}]", actualCls, cls);
+                log.trace("###    %70<({}) is an implementation of [{}]", actualCls, cls);
                 registeredImplementations.add(actualCls);
             }
         }

@@ -99,9 +99,7 @@ public class ScheduleManager implements Runnable, ISchedules {
         if(running) return;
         running = true;
         paused = false;
-
-
-        log.info("Started.");
+        
         asyncManager.runAsyncVipTask(this, 0);
     }
 

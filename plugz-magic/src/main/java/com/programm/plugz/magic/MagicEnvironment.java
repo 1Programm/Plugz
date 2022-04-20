@@ -8,26 +8,39 @@ import com.programm.plugz.api.auto.SetConfig;
 import com.programm.plugz.api.lifecycle.LifecycleState;
 import com.programm.plugz.inject.PlugzUrlClassScanner;
 import com.programm.plugz.inject.ScanException;
+import com.programm.projects.ioutils.log.api.out.IConfigurableLogger;
 import com.programm.projects.ioutils.log.api.out.ILogger;
 import com.programm.projects.ioutils.log.api.out.Logger;
+import com.programm.projects.ioutils.log.api.out.LoggerConfigException;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Map;
 
 @Logger("Plugz")
 public class MagicEnvironment {
 
-    private static final boolean DEFAULT_ADD_SHUTDOWN_HOOK = true;
+    private static final String CONF_ADD_SHUTDOWN_HOOK_NAME = "core.shutdownhook.enabled";
+    private static final boolean CONF_ADD_SHUTDOWN_HOOK_DEFAULT = true;
+
+    private static final String CONF_LOGGER_IMPL_CLASS_NAME = "log.implementation";
+    private static final String CONF_LOGGER_LEVEL_NAME = "log.level";
+    private static final String CONF_LOGGER_LEVEL_DEFAULT = "INFO";
+    private static final String CONF_LOGGER_FORMAT_NAME = "log.format";
+    private static final String CONF_LOGGER_FORMAT_DEFAULT = "[%5<($LVL)] [%30>($CLS.$MET)]: $MSG";
+
 
     public static MagicEnvironment Start() throws MagicSetupException {
         return Start(new String[0]);
     }
 
     public static MagicEnvironment Start(String... args) throws MagicSetupException {
-        MagicEnvironment env = MagicEnvironmentBuilder.create(args);
+        MagicEnvironment env = new MagicEnvironment(args);
         env.setup();
         env.startup();
         return env;
@@ -36,7 +49,7 @@ public class MagicEnvironment {
 
     private final String basePackage;
 
-    private final ProxyLogger log;
+    private final LoggerProxy log;
     private final PlugzUrlClassScanner scanner;
     private final ConfigurationManager configurations;
     private final ThreadPoolManager asyncManager;
@@ -51,7 +64,7 @@ public class MagicEnvironment {
     public MagicEnvironment(String basePackage, String... args){
         this.basePackage = basePackage;
 
-        this.log = new ProxyLogger();
+        this.log = new LoggerProxy();
         this.scanner = new PlugzUrlClassScanner();
         this.scanner.setLogger(log);
         this.configurations = new ConfigurationManager(args);
@@ -80,6 +93,20 @@ public class MagicEnvironment {
     }
 
     public void setup() throws MagicSetupException {
+        try {
+            doSetup();
+        }
+        catch (MagicSetupException e){
+            if(log.logger == null){
+                log.logger = new LoggerFallback();
+                log.passStoredLogs();
+            }
+
+            throw e;
+        }
+    }
+
+    private void doSetup() throws MagicSetupException {
         log.info("Setting up the environment with profile: [{}]", configurations.profile());
 
         log.debug("Initializing configurations from args and profile-resource...");
@@ -135,6 +162,10 @@ public class MagicEnvironment {
             throw new MagicSetupException(e.getMessage());
         }
 
+        log.debug("Searching for logger implementation...");
+        findLoggerImplementation(collectedUrls);
+        log.passStoredLogs();
+
         asyncManager.init(configurations);
 
         try {
@@ -146,7 +177,7 @@ public class MagicEnvironment {
         }
 
 
-        log.info("Starting main scan");
+        log.debug("Starting main scan");
         try {
             log.debug("Scanning through collected urls with a base package of [{}]...", basePackage);
             scanner.scan(collectedUrls, basePackage);
@@ -196,7 +227,7 @@ public class MagicEnvironment {
     public void startup() {
         log.info("Starting up the environment");
 
-        if(configurations.getBooleanOrDefault("core.shutdownhook.enabled", DEFAULT_ADD_SHUTDOWN_HOOK)){
+        if(configurations.getBooleanOrDefault(CONF_ADD_SHUTDOWN_HOOK_NAME, CONF_ADD_SHUTDOWN_HOOK_DEFAULT)){
             log.debug("Adding shutdown-hook...");
             addShutdownHook();
         }
@@ -270,6 +301,105 @@ public class MagicEnvironment {
         }
 
         return searchUrls;
+    }
+
+    private void findLoggerImplementation(List<URL> urls) throws MagicSetupException {
+        Class<?> loggerImplementationClass;
+        String loggerImplementationClassName = configurations.get(CONF_LOGGER_IMPL_CLASS_NAME);
+
+        if(loggerImplementationClassName != null){
+            try {
+                loggerImplementationClass = Class.forName(loggerImplementationClassName);
+            }
+            catch (ClassNotFoundException e){
+                throw new MagicSetupException("Could not find specified logger implementation for class name: [" + loggerImplementationClassName + "]!", e);
+            }
+
+            if(!loggerImplementationClass.isAssignableFrom(ILogger.class)) throw new MagicSetupException("The provided logger implementation [" + loggerImplementationClassName + "] does not implement the ILogger interface!");
+        }
+        else {
+            PlugzUrlClassScanner loggerScanner = new PlugzUrlClassScanner();
+            loggerScanner.setLogger(log);
+            loggerScanner.addSearchClass(ILogger.class);
+            loggerScanner.blacklistPackage("com.programm.plugz.");
+
+            log.debug("Starting logger scan");
+            try {
+                loggerScanner.scan(urls, "");
+            }
+            catch (ScanException e){
+                throw new MagicSetupException("Failed to scan for logger implementations!", e);
+            }
+
+            List<Class<?>> implementationClasses = loggerScanner.getImplementing(ILogger.class);
+            loggerImplementationClass = implementationClasses.isEmpty() ? null : implementationClasses.get(0);
+        }
+
+        ILogger loggerImplementation;
+        if(loggerImplementationClass == null){
+            log.info("No logger implementation provided. Using Logger fallback.");
+            loggerImplementation = new LoggerFallback();
+        }
+        else {
+            Constructor<?> emptyConstructor;
+            try {
+                emptyConstructor = loggerImplementationClass.getConstructor();
+            } catch (NoSuchMethodException e) {
+                throw new MagicSetupException("The provided logger implementation [" + loggerImplementationClassName + "] does not have an empty constructor!", e);
+            }
+
+            try {
+                loggerImplementation = (ILogger) emptyConstructor.newInstance();
+            } catch (InvocationTargetException | InstantiationException e) {
+                throw new MagicSetupException("Failed to instantiate the provided logger implementation [" + loggerImplementationClassName + "]!", e);
+            } catch (IllegalAccessException e) {
+                throw new MagicSetupException("The empty constructor for the provided logger implementation [" + loggerImplementationClassName + "] cannot be accessed!", e);
+            }
+        }
+
+        if(loggerImplementation instanceof IConfigurableLogger configurableLogger){
+            String _logLevel = configurations.getOrDefault(CONF_LOGGER_LEVEL_NAME, CONF_LOGGER_LEVEL_DEFAULT);
+            int logLevel;
+            try {
+                logLevel = Integer.parseInt(_logLevel);
+            }
+            catch (NumberFormatException e) {
+                logLevel = ILogger.fromString(_logLevel);
+            }
+
+            String logFormat = configurations.getOrDefault(CONF_LOGGER_FORMAT_NAME, CONF_LOGGER_FORMAT_DEFAULT);
+
+            try {
+                configurableLogger.level(logLevel);
+                configurableLogger.format(logFormat);
+
+                for(Map.Entry<String, Object> entry : configurations.configValues.entrySet()){
+                    String key = entry.getKey();
+                    Object value = entry.getValue();
+                    if(key.startsWith("log.pkg[") && key.endsWith("]")){
+                        if(value == null) continue;
+
+                        String pkgName = key.substring("log.pkg[".length(), key.length() - 1);
+                        String _value = value.toString();
+
+                        int pkgLevel;
+                        try {
+                            pkgLevel = Integer.parseInt(_value);
+                        }
+                        catch (NumberFormatException e) {
+                            pkgLevel = ILogger.fromString(_value);
+                        }
+
+                        configurableLogger.packageLevel(pkgName, pkgLevel);
+                    }
+                }
+            }
+            catch (LoggerConfigException e){
+                throw new MagicSetupException("Failed to configure the provided logger!", e);
+            }
+        }
+
+        log.setLogger(loggerImplementation);
     }
 
     private void addShutdownHook(){

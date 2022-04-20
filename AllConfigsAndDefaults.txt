@@ -3,8 +3,38 @@
 # If profile IS set than it will try to find a [plugz-PROFILE.xml, plugz-PROFILE.yml, plugz-PROFILE.yaml, plugz-PROFILE.properties] file and will throw an exception if it could not find even one of them.
 config.profile=
 
+
+
 # Adds a runtime-shutdownhook to the system when startup() is called.
 core.shutdownhook.enabled = true
+
+
+
+# Will try to find a ILogger implementation by the specified Class-Name.
+# If
+log.implementation=
+
+# The log level. Default is INFO.
+# Can be a one of the following or a number: TRACE(0), DEBUG(1), INFO(2), WARN(3), ERROR(4), NONE(5).
+log.level = INFO
+
+# The format for the logging message. Following placeholders can be used:
+# Placeholders:
+# $MSG -> The actual log message.
+# $LVL -> The level at which the log was called. ( logger.info(...) -> INFO )
+# $LOG -> The Logger name if present. Can be specified by using the @Logger annotation
+# $CLS -> The class name in which the log method was called.
+# $MET -> The method name in which the log method was called.
+# Formatter:
+# Ex. '%15<(Hello World)!'     -> 'Hello World    !'
+# Ex. '%20<(Hello World)!'     -> 'Hello World         !'
+# Ex. '%20>(Hello World)!'     -> '         Hello World!'
+# Ex. '%20|(Hello World)!'     -> '     Hello World    !'
+# Ex. '%20|[#](Hello World)!'  -> '#####Hello World####!'
+log.format = [%5<($LVL)] [%30>($CLS.$MET)]: $MSG
+
+# Setting package level:
+# log.pkg[com.programm.plugz.*] = WARN
 
 
 

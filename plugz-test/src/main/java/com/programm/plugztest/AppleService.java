@@ -1,4 +1,4 @@
-package com.programm.plugz.test;
+package com.programm.plugztest;
 
 import com.programm.plugz.api.Service;
 import com.programm.plugz.api.auto.Set;
