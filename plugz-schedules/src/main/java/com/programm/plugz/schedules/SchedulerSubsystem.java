@@ -31,16 +31,16 @@ public class SchedulerSubsystem implements ISubsystem {
         setupHelper.registerMethodAnnotation(Scheduled.class, this::setupScheduledMethods);
 
         //Does nothing as @Config classes are already instantiated
-        annocheck.blacklistClassAnnotations(Scheduled.class).set(Config.class);
+        annocheck.forClass(Scheduled.class).classAnnotations().blacklist().set(Config.class);
     }
 
     @Override
-    public void startup() throws MagicException {
+    public void startup() {
         scheduleManager.start();
     }
 
     @Override
-    public void shutdown() throws MagicException {
+    public void shutdown() {
         scheduleManager.stop();
     }
 

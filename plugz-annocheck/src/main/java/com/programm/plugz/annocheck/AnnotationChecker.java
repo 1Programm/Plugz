@@ -5,15 +5,121 @@ import java.lang.annotation.ElementType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class AnnotationChecker {
 
-    public interface ICondition {
-        ICondition set(Class<?> cls);
-        ICondition and(Class<?> cls);
-        ICondition or(Class<?> cls);
-        void seal();
+    private class ForAnnotationClassConfig implements IForAnnotationClassConfig {
+        private final AnnotationCheckConfig config;
+        private final ElementType[] types;
+
+        ForAnnotationClassConfig(Class<? extends Annotation> annotationClass, ElementType[] types) {
+            this.config = annotationConfigMap.computeIfAbsent(annotationClass, t -> new AnnotationCheckConfig());
+            this.types = types;
+        }
+
+        @Override
+        public IClassAnnotations classAnnotations() {
+            return new ClassAnnotations(config, types);
+        }
+
+        @Override
+        public IPartnerAnnotations partnerAnnotations(){
+            return new PartnerAnnotations(config, types);
+        }
+
+        @Override
+        public IContainingClasses containingClasses(){
+            return new ContainingClasses(config, types);
+        }
+
+    }
+
+    private class ClassAnnotations implements IClassAnnotations {
+        private final AnnotationCheckConfig config;
+        private final ElementType[] types;
+
+        public ClassAnnotations(AnnotationCheckConfig config, ElementType[] types) {
+            this.config = config;
+            this.types = types;
+        }
+
+        @Override
+        public ICondition whitelist() {
+            if(config.whitelistClassAnnotationsMap == null) config.whitelistClassAnnotationsMap = new HashMap<>();
+            return helpConfig(config.whitelistClassAnnotationsMap, types);
+        }
+
+        @Override
+        public ICondition blacklist() {
+            if(config.blacklistClassAnnotationsMap == null) config.blacklistClassAnnotationsMap = new HashMap<>();
+            return helpConfig(config.blacklistClassAnnotationsMap, types);
+        }
+
+    }
+
+    private class PartnerAnnotations implements IPartnerAnnotations{
+        private final AnnotationCheckConfig config;
+        private final ElementType[] types;
+
+        public PartnerAnnotations(AnnotationCheckConfig config, ElementType[] types) {
+            this.config = config;
+            this.types = types;
+        }
+
+        @Override
+        public ICondition whitelist() {
+            if(config.whitelistPartnerAnnotationsMap == null) config.whitelistPartnerAnnotationsMap = new HashMap<>();
+            return helpConfig(config.whitelistPartnerAnnotationsMap, types);
+        }
+
+        @Override
+        public ICondition blacklist() {
+            if(config.blacklistPartnerAnnotationsMap == null) config.blacklistPartnerAnnotationsMap = new HashMap<>();
+            return helpConfig(config.blacklistPartnerAnnotationsMap, types);
+        }
+    }
+
+    private static class ContainingClasses implements IContainingClasses {
+        private final AnnotationCheckConfig config;
+        private final ElementType[] types;
+
+        public ContainingClasses(AnnotationCheckConfig config, ElementType[] types) {
+            this.config = config;
+            this.types = types;
+        }
+
+        @Override
+        public void whitelist(Class<?>... classes) {
+            if(config.whitelistContainingClassesMap == null) config.whitelistContainingClassesMap = new HashMap<>();
+            for(Class<?> cls : classes) {
+                if ((types == null || types.length == 0)) {
+                    config.whitelistContainingClassesMap.computeIfAbsent(null, t -> new ArrayList<>()).add(cls);
+                } else {
+                    for (ElementType type : types) {
+                        config.whitelistContainingClassesMap.computeIfAbsent(type, t -> new ArrayList<>()).add(cls);
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void blacklist(Class<?>... classes) {
+            if(config.blacklistContainingClassesMap == null) config.blacklistContainingClassesMap = new HashMap<>();
+            for(Class<?> cls : classes) {
+                if((types == null || types.length == 0)) {
+                    config.blacklistContainingClassesMap.computeIfAbsent(null, t -> new ArrayList<>()).add(cls);
+                }
+                else {
+                    for(ElementType type : types) {
+                        config.blacklistContainingClassesMap.computeIfAbsent(type, t -> new ArrayList<>()).add(cls);
+                    }
+                }
+            }
+        }
     }
 
     private static class ConditionConfigGroup implements ICondition {
@@ -123,57 +229,13 @@ public class AnnotationChecker {
         }
     }
 
-    public ICondition whitelistClassAnnotations(Class<? extends Annotation> target, ElementType... types) {
-        AnnotationCheckConfig config = annotationConfigMap.computeIfAbsent(target, t -> new AnnotationCheckConfig());
-        if(config.whitelistClassAnnotationsMap == null) config.whitelistClassAnnotationsMap = new HashMap<>();
-        return helpConfig(config.whitelistClassAnnotationsMap, types);
+
+
+    public IForAnnotationClassConfig forClass(Class<? extends Annotation> target, ElementType... types){
+        return new ForAnnotationClassConfig(target, types);
     }
 
-    public ICondition blacklistClassAnnotations(Class<? extends Annotation> target, ElementType... types) {
-        AnnotationCheckConfig config = annotationConfigMap.computeIfAbsent(target, t -> new AnnotationCheckConfig());
-        if(config.blacklistClassAnnotationsMap == null) config.blacklistClassAnnotationsMap = new HashMap<>();
-        return helpConfig(config.blacklistClassAnnotationsMap, types);
-    }
 
-    public ICondition whitelistPartnerAnnotations(Class<? extends Annotation> target, ElementType... types) {
-        AnnotationCheckConfig config = annotationConfigMap.computeIfAbsent(target, t -> new AnnotationCheckConfig());
-        if(config.whitelistPartnerAnnotationsMap == null) config.whitelistPartnerAnnotationsMap = new HashMap<>();
-        return helpConfig(config.whitelistPartnerAnnotationsMap, types);
-    }
-
-    public ICondition blacklistPartnerAnnotations(Class<? extends Annotation> target, ElementType... types) {
-        AnnotationCheckConfig config = annotationConfigMap.computeIfAbsent(target, t -> new AnnotationCheckConfig());
-        if(config.blacklistPartnerAnnotationsMap == null) config.blacklistPartnerAnnotationsMap = new HashMap<>();
-        return helpConfig(config.blacklistPartnerAnnotationsMap, types);
-    }
-
-    public void whitelistContainingClass(Class<? extends Annotation> target, Class<?> cls, ElementType... types) {
-        AnnotationCheckConfig config = annotationConfigMap.computeIfAbsent(target, t -> new AnnotationCheckConfig());
-        if(config.whitelistContainingClassesMap == null) config.whitelistContainingClassesMap = new HashMap<>();
-
-        if((types == null || types.length == 0)) {
-            config.whitelistContainingClassesMap.computeIfAbsent(null, t -> new ArrayList<>()).add(cls);
-        }
-        else {
-            for(ElementType type : types) {
-                config.whitelistContainingClassesMap.computeIfAbsent(type, t -> new ArrayList<>()).add(cls);
-            }
-        }
-    }
-
-    public void blacklistContainingClass(Class<? extends Annotation> target, Class<?> cls, ElementType... types) {
-        AnnotationCheckConfig config = annotationConfigMap.computeIfAbsent(target, t -> new AnnotationCheckConfig());
-        if(config.blacklistContainingClassesMap == null) config.blacklistContainingClassesMap = new HashMap<>();
-
-        if((types == null || types.length == 0)) {
-            config.blacklistContainingClassesMap.computeIfAbsent(null, t -> new ArrayList<>()).add(cls);
-        }
-        else {
-            for(ElementType type : types) {
-                config.blacklistContainingClassesMap.computeIfAbsent(type, t -> new ArrayList<>()).add(cls);
-            }
-        }
-    }
 
 
 
@@ -422,305 +484,6 @@ public class AnnotationChecker {
 
 
 
-//    public void checkAllDeclared(Class<?> cls) throws AnnotationCheckException {
-//        checkClass(cls);
-//
-//        Constructor<?>[] declaredConstructors = cls.getDeclaredConstructors();
-//        for(Constructor<?> constructor : declaredConstructors){
-//            checkConstructor(constructor);
-//        }
-//
-//        Field[] declaredFields = cls.getDeclaredFields();
-//        for(Field field : declaredFields){
-//            checkField(field);
-//        }
-//
-//        Method[] declaredMethods = cls.getDeclaredMethods();
-//        for(Method method : declaredMethods){
-//            checkMethod(method);
-//        }
-//    }
-
-//    public void checkClass(Class<?> cls) throws AnnotationCheckException {
-//        try {
-//            Annotation[] declaredAnnotations = cls.getDeclaredAnnotations();
-//
-//            for (Annotation annotation : declaredAnnotations) {
-//                Class<? extends Annotation> annotationCls = annotation.annotationType();
-//
-//                AnnotationCheckConfig config = annotationConfigMap.get(annotationCls);
-//                if(config == null) continue;
-//
-//                if(config.whitelistClassAnnotationsMap != null) {
-//                    List<Class<? extends Annotation>> allClassAnnotations = config.whitelistClassAnnotationsMap.get(null);
-//                    if(allClassAnnotations != null){
-//                        for(Class<? extends Annotation> classAnnotation : allClassAnnotations){
-//                            if(!containsAnnotationCls(declaredAnnotations, classAnnotation)){
-//                                throw new AnnotationCheckException("Classes annotated with [" + annotationCls.getName() + "] MUST also be annotated with " + concatMsg(allClassAnnotations, "AND") + "!");
-//                            }
-//                        }
-//                    }
-//
-//                    List<Class<? extends Annotation>> classAnnotations = config.whitelistClassAnnotationsMap.get(ElementType.TYPE);
-//                    if(classAnnotations != null){
-//                        for(Class<? extends Annotation> classAnnotation : classAnnotations){
-//                            if(!containsAnnotationCls(declaredAnnotations, classAnnotation)){
-//                                throw new AnnotationCheckException("Classes annotated with [" + annotationCls.getName() + "] MUST also be annotated with " + concatMsg(classAnnotations, "AND") + "!");
-//                            }
-//                        }
-//                    }
-//                }
-//
-//                if(config.blacklistClassAnnotationsMap != null) {
-//                    List<Class<? extends Annotation>> allClassAnnotations = config.blacklistClassAnnotationsMap.get(null);
-//                    if(allClassAnnotations != null){
-//                        for(Class<? extends Annotation> classAnnotation : allClassAnnotations){
-//                            if(containsAnnotationCls(declaredAnnotations, classAnnotation)){
-//                                throw new AnnotationCheckException("Classes annotated with [" + annotationCls.getName() + "] MUST NOT be annotated with " + concatMsg(allClassAnnotations, "OR") + "!");
-//                            }
-//                        }
-//                    }
-//
-//                    List<Class<? extends Annotation>> classAnnotations = config.blacklistClassAnnotationsMap.get(ElementType.TYPE);
-//                    if(classAnnotations != null){
-//                        for(Class<? extends Annotation> classAnnotation : classAnnotations){
-//                            if(containsAnnotationCls(declaredAnnotations, classAnnotation)){
-//                                throw new AnnotationCheckException("Classes annotated with [" + annotationCls.getName() + "] MUST NOT be annotated with " + concatMsg(classAnnotations, "OR") + "!");
-//                            }
-//                        }
-//                    }
-//                }
-//
-//                if(config.whitelistPartnerAnnotationsMap != null) {
-//                    List<Class<? extends Annotation>> allClassAnnotations = config.whitelistPartnerAnnotationsMap.get(null);
-//                    if(allClassAnnotations != null){
-//                        for(Class<? extends Annotation> classAnnotation : allClassAnnotations){
-//                            if(!containsAnnotationCls(declaredAnnotations, classAnnotation)){
-//                                throw new AnnotationCheckException("Classes annotated with [" + annotationCls.getName() + "] MUST also be annotated with " + concatMsg(allClassAnnotations, "AND") + "!");
-//                            }
-//                        }
-//                    }
-//
-//                    List<Class<? extends Annotation>> classAnnotations = config.whitelistPartnerAnnotationsMap.get(ElementType.TYPE);
-//                    if(classAnnotations != null){
-//                        for(Class<? extends Annotation> classAnnotation : classAnnotations){
-//                            if(!containsAnnotationCls(declaredAnnotations, classAnnotation)){
-//                                throw new AnnotationCheckException("Classes annotated with [" + annotationCls.getName() + "] MUST also be annotated with " + concatMsg(classAnnotations, "AND") + "!");
-//                            }
-//                        }
-//                    }
-//                }
-//
-//                throw new AnnotationCheckException("");
-//
-////                Check singleCheck = annotationCls.getAnnotation(Check.class);
-////                if (singleCheck != null) {
-////                    checkClass(cls, annotationCls, declaredAnnotations, singleCheck);
-////                }
-////
-////                Checks multiCheck = annotationCls.getAnnotation(Checks.class);
-////                if (multiCheck != null) {
-////                    for(Check check : multiCheck.value()) {
-////                        checkClass(cls, annotationCls, declaredAnnotations, check);
-////                    }
-////                }
-//            }
-//        }
-//        catch (AnnotationCheckException e){
-//            throw new AnnotationCheckException("Check failed for class: [" + cls.getName() + "]!", e);
-//        }
-//    }
-
-//    private boolean helpAnnotationsContains(Annotation[] declaredAnnotations, List<Class<? extends Annotation>> annotations, boolean defaultValue) throws AnnotationCheckException {
-//        if(annotations == null) return defaultValue;
-//
-//        for(Class<? extends Annotation> annotationCls : annotations){
-//            if(containsAnnotationCls(declaredAnnotations, annotationCls)){
-//                return true;
-//            }
-//        }
-//
-//        return defaultValue;
-//    }
-
-//    public void checkConstructor(Constructor<?> constructor) throws AnnotationCheckException {
-//        try {
-//            Class<?> declaringCls = constructor.getDeclaringClass();
-//            Annotation[] clsDeclaredAnnotations = declaringCls.getDeclaredAnnotations();
-//            Annotation[] declaredAnnotations = constructor.getDeclaredAnnotations();
-//
-//            for (Annotation annotation : declaredAnnotations) {
-//                Class<? extends Annotation> annotationCls = annotation.annotationType();
-//
-//                Check singleCheck = annotationCls.getAnnotation(Check.class);
-//                if (singleCheck != null) {
-//                    checkType(declaringCls, annotationCls, clsDeclaredAnnotations, declaredAnnotations, singleCheck, ElementType.CONSTRUCTOR, "Constructors");
-//                }
-//
-//                Checks multiCheck = annotationCls.getAnnotation(Checks.class);
-//                if (multiCheck != null) {
-//                    for(Check check : multiCheck.value()) {
-//                        checkType(declaringCls, annotationCls, clsDeclaredAnnotations, declaredAnnotations, check, ElementType.CONSTRUCTOR, "Constructors");
-//                    }
-//                }
-//            }
-//        }
-//        catch (AnnotationCheckException e){
-//            throw new AnnotationCheckException("Check failed for constructor: [" + constructor + "]!", e);
-//        }
-//    }
-//
-//    public void checkField(Field field) throws AnnotationCheckException {
-//        try {
-//            Class<?> declaringCls = field.getDeclaringClass();
-//            Annotation[] clsDeclaredAnnotations = declaringCls.getDeclaredAnnotations();
-//            Annotation[] declaredAnnotations = field.getDeclaredAnnotations();
-//
-//            for (Annotation annotation : declaredAnnotations) {
-//                Class<? extends Annotation> annotationCls = annotation.annotationType();
-//
-//                Check singleCheck = annotationCls.getAnnotation(Check.class);
-//                if (singleCheck != null) {
-//                    checkType(declaringCls, annotationCls, clsDeclaredAnnotations, declaredAnnotations, singleCheck, ElementType.FIELD, "Fields");
-//                }
-//
-//                Checks multiCheck = annotationCls.getAnnotation(Checks.class);
-//                if (multiCheck != null) {
-//                    for(Check check : multiCheck.value()) {
-//                        checkType(declaringCls, annotationCls, clsDeclaredAnnotations, declaredAnnotations, check, ElementType.FIELD, "Fields");
-//                    }
-//                }
-//            }
-//        }
-//        catch (AnnotationCheckException e){
-//            throw new AnnotationCheckException("Check failed for field: [" + field + "]!", e);
-//        }
-//    }
-//
-//    public void checkMethod(Method method) throws AnnotationCheckException {
-//        try {
-//            Class<?> declaringCls = method.getDeclaringClass();
-//            Annotation[] clsDeclaredAnnotations = declaringCls.getDeclaredAnnotations();
-//            Annotation[] declaredAnnotations = method.getDeclaredAnnotations();
-//
-//            for (Annotation annotation : declaredAnnotations) {
-//                Class<? extends Annotation> annotationCls = annotation.annotationType();
-//
-//                Check singleCheck = annotationCls.getAnnotation(Check.class);
-//                if (singleCheck != null) {
-//                    checkType(declaringCls, annotationCls, clsDeclaredAnnotations, declaredAnnotations, singleCheck, ElementType.METHOD, "Methods");
-//                }
-//
-//                Checks multiCheck = annotationCls.getAnnotation(Checks.class);
-//                if (multiCheck != null) {
-//                    for(Check check : multiCheck.value()) {
-//                        checkType(declaringCls, annotationCls, clsDeclaredAnnotations, declaredAnnotations, check, ElementType.METHOD, "Methods");
-//                    }
-//                }
-//            }
-//        }
-//        catch (AnnotationCheckException e){
-//            throw new AnnotationCheckException("Check failed for method: [" + method + "]!", e);
-//        }
-//    }
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//    private void checkClass(Class<?> cls, Class<? extends Annotation> selectedAnnotation, Annotation[] declaredAnnotations, Check check) throws AnnotationCheckException {
-//        if(invalidTargetType(check, ElementType.TYPE)) return;
-//
-//        if(!checkOrAnnotated(check.clsAnnotatedWith(), declaredAnnotations, true)){
-//            throw new AnnotationCheckException("Classes annotated with [" + selectedAnnotation.getName() + "] MUST also be annotated with " + orString(check.clsAnnotatedWith()) + "!");
-//        }
-//
-//        if(!checkOrAnnotated(check.annotatedWith(), declaredAnnotations, true)){
-//            throw new AnnotationCheckException("Classes annotated with [" + selectedAnnotation.getName() + "] MUST also be annotated with " + orString(check.annotatedWith()) + "!");
-//        }
-//
-//        if(checkOrAnnotated(check.clsNotAnnotatedWith(), declaredAnnotations, false)){
-//            throw new AnnotationCheckException("Classes annotated with [" + selectedAnnotation.getName() + "] MUST NOT be annotated with " + orString(check.clsNotAnnotatedWith()) + "!");
-//        }
-//
-//        if(checkOrAnnotated(check.notAnnotatedWith(), declaredAnnotations, false)){
-//            throw new AnnotationCheckException("Classes annotated with [" + selectedAnnotation.getName() + "] MUST NOT be annotated with " + orString(check.notAnnotatedWith()) + "!");
-//        }
-//
-//        if(!checkOrImplementing(check.clsImplementing(), cls, true)){
-//            throw new AnnotationCheckException("Classes annotated with [" + selectedAnnotation.getName() + "] MUST implement " + orString(check.clsImplementing()) + "!");
-//        }
-//
-//        if(checkOrImplementing(check.clsNotImplementing(), cls, false)){
-//            throw new AnnotationCheckException("Classes annotated with [" + selectedAnnotation.getName() + "] MUST NOT implement " + orString(check.clsNotImplementing()) + "!");
-//        }
-//    }
-
-//    private void checkType(Class<?> declaringCls, Class<? extends Annotation> selectedAnnotation, Annotation[] clsDeclaredAnnotations, Annotation[] declaredAnnotations, Check check, ElementType type, String name) throws AnnotationCheckException {
-//        if(invalidTargetType(check, type)) return;
-//
-//        if(!checkOrAnnotated(check.clsAnnotatedWith(), clsDeclaredAnnotations, true)){
-//            throw new AnnotationCheckException(name + " annotated with [" + selectedAnnotation.getName() + "] MUST be inside a class annotated with " + orString(check.clsAnnotatedWith()) + "!");
-//        }
-//
-//        if(!checkOrAnnotated(check.annotatedWith(), declaredAnnotations, true)){
-//            throw new AnnotationCheckException(name + " annotated with [" + selectedAnnotation.getName() + "] MUST also be annotated with " + orString(check.annotatedWith()) + "!");
-//        }
-//
-//        if(checkOrAnnotated(check.clsNotAnnotatedWith(), clsDeclaredAnnotations, false)){
-//            throw new AnnotationCheckException(name + " annotated with [" + selectedAnnotation.getName() + "] MUST NOT be inside a class annotated with " + orString(check.clsNotAnnotatedWith()) + "!");
-//        }
-//
-//        if(checkOrAnnotated(check.notAnnotatedWith(), declaredAnnotations, false)){
-//            throw new AnnotationCheckException(name + " annotated with [" + selectedAnnotation.getName() + "] MUST NOT be annotated with " + orString(check.notAnnotatedWith()) + "!");
-//        }
-//
-//        if(!checkOrImplementing(check.clsImplementing(), declaringCls, true)){
-//            throw new AnnotationCheckException(name + " annotated with [" + selectedAnnotation.getName() + "] MUST be inside a class which implements " + orString(check.clsImplementing()) + "!");
-//        }
-//
-//        if(checkOrImplementing(check.clsNotImplementing(), declaringCls, false)){
-//            throw new AnnotationCheckException(name + " annotated with [" + selectedAnnotation.getName() + "] MUST NOT be inside a class which implements " + orString(check.clsNotImplementing()) + "!");
-//        }
-//    }
-
-//    private boolean checkOrAnnotated(Class<? extends Annotation>[] annotations, Annotation[] declaredAnnotations, boolean defaultValue) {
-//        for(Class<? extends Annotation> annotationCls : annotations){
-//            if(containsAnnotationCls(declaredAnnotations, annotationCls)){
-//                return true;
-//            }
-//        }
-//
-//        return defaultValue;
-//    }
-//
-//    private boolean checkOrAnnotated2(List<Class<? extends Annotation>> annotations, Annotation[] declaredAnnotations, boolean defaultValue) {
-//        for(Class<? extends Annotation> annotationCls : annotations){
-//            if(containsAnnotationCls(declaredAnnotations, annotationCls)){
-//                return true;
-//            }
-//        }
-//
-//        return defaultValue;
-//    }
-
-//    private boolean checkOrImplementing(Class<?>[] toImplement, Class<?> target, boolean defaultValue){
-//        for(Class<?> cls : toImplement){
-//            if(isImplementing(target, cls)){
-//                return true;
-//            }
-//        }
-//
-//        return defaultValue;
-//    }
-
-
-
 
 
 
@@ -739,80 +502,6 @@ public class AnnotationChecker {
         }
         return false;
     }
-
-//    private boolean isImplementing(Class<?> cls, Class<?> toImplement){
-//        Queue<Class<?>> queue = new ArrayDeque<>();
-//        queue.add(cls);
-//
-//        while(!queue.isEmpty()){
-//            Class<?> cur = queue.poll();
-//
-//            Class<?>[] interfaceClasses = cur.getInterfaces();
-//            for(Class<?> i : interfaceClasses){
-//                if(i == toImplement) return true;
-//                queue.add(i);
-//            }
-//
-//            Class<?> superClass = cur.getSuperclass();
-//            if(superClass != null){
-//                if(superClass == toImplement) return true;
-//                queue.add(superClass);
-//            }
-//        }
-//
-//        return false;
-//    }
-
-//    private boolean invalidTargetType(Check check, ElementType type){
-//        if(check.target().length == 0) return false;
-//
-//        for(ElementType t : check.target()){
-//            if(type == t) return false;
-//        }
-//        return true;
-//    }
-
-//    private String orString(Class<?>[] classes){
-//        StringBuilder sb = new StringBuilder();
-//        sb.append("[");
-//
-//        for(Class<?> cls : classes){
-//            if(sb.length() != 1) sb.append("] OR [");
-//            sb.append(cls.getName());
-//        }
-//
-//        sb.append("]");
-//
-//        return sb.toString();
-//    }
-//
-//    private String orString2(List<Class<? extends Annotation>> classes){
-//        StringBuilder sb = new StringBuilder();
-//        sb.append("[");
-//
-//        for(Class<?> cls : classes){
-//            if(sb.length() != 1) sb.append("] OR [");
-//            sb.append(cls.getName());
-//        }
-//
-//        sb.append("]");
-//
-//        return sb.toString();
-//    }
-//
-//    private String concatMsg(List<Class<? extends Annotation>> classes, String fill){
-//        StringBuilder sb = new StringBuilder();
-//        sb.append("[");
-//
-//        for(Class<?> cls : classes){
-//            if(sb.length() != 1) sb.append("] ").append(fill).append(" [");
-//            sb.append(cls.getName());
-//        }
-//
-//        sb.append("]");
-//
-//        return sb.toString();
-//    }
 
     private String buildOrAndString(Map<ElementType, ConditionConfig> map, ElementType type){
         ConditionConfig config = map.get(type);

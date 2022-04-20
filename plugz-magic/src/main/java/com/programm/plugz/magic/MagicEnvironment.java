@@ -27,7 +27,7 @@ public class MagicEnvironment {
     }
 
     public static MagicEnvironment Start(String... args) throws MagicSetupException {
-        MagicEnvironment env =  MagicEnvironmentBuilder.create(args);
+        MagicEnvironment env = MagicEnvironmentBuilder.create(args);
         env.setup();
         env.startup();
         return env;
@@ -74,9 +74,9 @@ public class MagicEnvironment {
 
     private void setupAnnocheck(){
         //SetConfig annotation can only be used inside classes annotated by Config
-        this.annocheck.whitelistClassAnnotations(SetConfig.class).set(Config.class).seal();
+        this.annocheck.forClass(SetConfig.class).classAnnotations().whitelist().set(Config.class).seal();
 
-        this.annocheck.blacklistPartnerAnnotations(Get.class).set(GetConfig.class);
+        this.annocheck.forClass(Get.class).partnerAnnotations().blacklist().set(GetConfig.class);
     }
 
     public void setup() throws MagicSetupException {
