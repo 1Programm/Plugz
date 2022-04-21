@@ -18,6 +18,7 @@
         <module>plugz-schedules</module>
         <module>plugz-webserv</module>
         <module>plugz-cls-analyzer</module>
+        <module>plugz-debugger</module>
     </modules>
 
     <properties>
