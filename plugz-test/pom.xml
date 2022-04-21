@@ -25,9 +25,9 @@
         </dependency>
 
         <dependency>
-            <groupId>com.programm.projects</groupId>
-            <artifactId>ioutils-jlogger</artifactId>
-            <version>1.0</version>
+            <groupId>com.programm.ioutils</groupId>
+            <artifactId>ioutils-log-jlogger</artifactId>
+            <version>1.0.0</version>
         </dependency>
     </dependencies>
 

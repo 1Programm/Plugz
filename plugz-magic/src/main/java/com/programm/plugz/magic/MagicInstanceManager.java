@@ -1,5 +1,7 @@
 package com.programm.plugz.magic;
 
+import com.programm.ioutils.log.api.ILogger;
+import com.programm.ioutils.log.api.Logger;
 import com.programm.plugz.annocheck.AnnotationCheckException;
 import com.programm.plugz.annocheck.AnnotationChecker;
 import com.programm.plugz.api.*;
@@ -10,8 +12,6 @@ import com.programm.plugz.api.auto.Set;
 import com.programm.plugz.api.instance.*;
 import com.programm.plugz.api.lifecycle.LifecycleState;
 import com.programm.plugz.api.utils.ValueUtils;
-import com.programm.projects.ioutils.log.api.out.ILogger;
-import com.programm.projects.ioutils.log.api.out.Logger;
 import lombok.RequiredArgsConstructor;
 
 import java.lang.annotation.Annotation;

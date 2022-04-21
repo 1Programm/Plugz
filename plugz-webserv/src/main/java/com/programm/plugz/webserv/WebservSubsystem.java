@@ -1,12 +1,12 @@
 package com.programm.plugz.webserv;
 
+import com.programm.ioutils.log.api.ILogger;
 import com.programm.plugz.annocheck.AnnotationChecker;
 import com.programm.plugz.api.ISubsystem;
 import com.programm.plugz.api.ISubsystemSetupHelper;
 import com.programm.plugz.api.MagicException;
 import com.programm.plugz.api.PlugzConfig;
 import com.programm.plugz.api.auto.Get;
-import com.programm.projects.ioutils.log.api.out.ILogger;
 
 public class WebservSubsystem implements ISubsystem {
 

@@ -1,10 +1,10 @@
 package com.programm.plugz.schedules;
 
+import com.programm.ioutils.log.api.ILogger;
+import com.programm.ioutils.log.api.Logger;
 import com.programm.plugz.api.IAsyncManager;
 import com.programm.plugz.api.MagicInstanceException;
 import com.programm.plugz.api.MagicRuntimeException;
-import com.programm.projects.ioutils.log.api.out.ILogger;
-import com.programm.projects.ioutils.log.api.out.Logger;
 import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;

@@ -1,7 +1,11 @@
 package com.programm.plugz.magic;
 
+import com.programm.ioutils.io.api.IOutput;
+import com.programm.ioutils.log.api.IConfigurableLogger;
+import com.programm.ioutils.log.api.ILogger;
+import com.programm.ioutils.log.api.LevelLogger;
+import com.programm.ioutils.log.api.LoggerConfigException;
 import com.programm.plugz.api.utils.StringUtils;
-import com.programm.projects.ioutils.log.api.out.*;
 
 class LoggerFallback extends LevelLogger implements IConfigurableLogger {
 

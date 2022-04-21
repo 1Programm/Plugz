@@ -19,9 +19,9 @@
 
     <dependencies>
         <dependency>
-            <groupId>com.programm.projects</groupId>
+            <groupId>com.programm.ioutils</groupId>
             <artifactId>ioutils-log-api</artifactId>
-            <version>1.3</version>
+            <version>1.0.0</version>
         </dependency>
     </dependencies>
 

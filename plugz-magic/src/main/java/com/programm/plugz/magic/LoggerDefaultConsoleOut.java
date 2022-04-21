@@ -1,6 +1,6 @@
 package com.programm.plugz.magic;
 
-import com.programm.projects.ioutils.log.api.out.IOutput;
+import com.programm.ioutils.io.api.IOutput;
 
 class LoggerDefaultConsoleOut implements IOutput {
 

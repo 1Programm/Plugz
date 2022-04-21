@@ -1,5 +1,10 @@
 package com.programm.plugz.magic;
 
+import com.programm.ioutils.io.api.IOutput;
+import com.programm.ioutils.log.api.IConfigurableLogger;
+import com.programm.ioutils.log.api.ILogger;
+import com.programm.ioutils.log.api.Logger;
+import com.programm.ioutils.log.api.LoggerConfigException;
 import com.programm.plugz.annocheck.AnnotationChecker;
 import com.programm.plugz.api.*;
 import com.programm.plugz.api.auto.Get;
@@ -8,7 +13,6 @@ import com.programm.plugz.api.auto.SetConfig;
 import com.programm.plugz.api.lifecycle.LifecycleState;
 import com.programm.plugz.inject.PlugzUrlClassScanner;
 import com.programm.plugz.inject.ScanException;
-import com.programm.projects.ioutils.log.api.out.*;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;

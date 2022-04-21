@@ -1,12 +1,12 @@
 package com.programm.plugz.schedules;
 
+import com.programm.ioutils.log.api.ILogger;
+import com.programm.ioutils.log.api.Logger;
 import com.programm.plugz.annocheck.AnnotationChecker;
 import com.programm.plugz.api.*;
 import com.programm.plugz.api.auto.Get;
 import com.programm.plugz.api.instance.IInstanceManager;
 import com.programm.plugz.api.instance.MagicMethod;
-import com.programm.projects.ioutils.log.api.out.ILogger;
-import com.programm.projects.ioutils.log.api.out.Logger;
 
 import java.lang.reflect.Method;
 

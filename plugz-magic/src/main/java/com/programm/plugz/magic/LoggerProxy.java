@@ -1,8 +1,7 @@
 package com.programm.plugz.magic;
 
-import com.programm.projects.ioutils.log.api.out.IConfigurableLogger;
-import com.programm.projects.ioutils.log.api.out.ILogger;
-import com.programm.projects.ioutils.log.api.out.Logger;
+import com.programm.ioutils.log.api.IConfigurableLogger;
+import com.programm.ioutils.log.api.ILogger;
 
 import java.util.ArrayList;
 import java.util.List;

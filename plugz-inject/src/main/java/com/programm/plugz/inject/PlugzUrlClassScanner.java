@@ -1,8 +1,8 @@
 package com.programm.plugz.inject;
 
-import com.programm.projects.ioutils.log.api.out.ILogger;
-import com.programm.projects.ioutils.log.api.out.Logger;
-import com.programm.projects.ioutils.log.api.out.NullLogger;
+import com.programm.ioutils.log.api.ILogger;
+import com.programm.ioutils.log.api.Logger;
+import com.programm.ioutils.log.api.NullLogger;
 
 import java.io.File;
 import java.io.IOException;
