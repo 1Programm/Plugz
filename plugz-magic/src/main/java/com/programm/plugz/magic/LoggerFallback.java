@@ -1,12 +1,11 @@
 package com.programm.plugz.magic;
 
 import com.programm.plugz.api.utils.StringUtils;
-import com.programm.projects.ioutils.log.api.out.IConfigurableLogger;
-import com.programm.projects.ioutils.log.api.out.ILogger;
-import com.programm.projects.ioutils.log.api.out.LevelLogger;
-import com.programm.projects.ioutils.log.api.out.LoggerConfigException;
+import com.programm.projects.ioutils.log.api.out.*;
 
 class LoggerFallback extends LevelLogger implements IConfigurableLogger {
+
+    private IOutput out;
 
     @Override
     protected void log(String msg, int level, Object... args) {
@@ -14,7 +13,7 @@ class LoggerFallback extends LevelLogger implements IConfigurableLogger {
         String _level = ILogger.levelToString(level);
 
         String msgWithArgs = StringUtils.format(msg, "{", "}", args);
-        System.out.println("[" + _level + " ".repeat(5 - _level.length()) + "] " + msgWithArgs);
+        out.println("[" + _level + " ".repeat(5 - _level.length()) + "] " + msgWithArgs);
     }
 
     public LoggerFallback level(int level) throws LoggerConfigException {
@@ -24,12 +23,18 @@ class LoggerFallback extends LevelLogger implements IConfigurableLogger {
 
 
     @Override
-    public LoggerFallback format(String s) throws LoggerConfigException {
+    public LoggerFallback format(String format) throws LoggerConfigException {
         return this;
     }
 
     @Override
-    public LoggerFallback packageLevel(String s, int i) throws LoggerConfigException {
+    public LoggerFallback packageLevel(String pkg, int level) throws LoggerConfigException {
+        return this;
+    }
+
+    @Override
+    public IConfigurableLogger output(IOutput out) throws LoggerConfigException {
+        this.out = out;
         return this;
     }
 }

@@ -34,6 +34,15 @@ public class MagicInstanceManager implements IInstanceManager {
         return "Constructor#" + constructor.getDeclaringClass().getName() + "#" + Arrays.toString(constructor.getParameterTypes());
     }
 
+    public static Object createFromEmptyConstructor(String clsName) throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException, IllegalAccessException {
+        Class<?> cls = Class.forName(clsName);
+        return createFromEmptyConstructor(cls);
+    }
+
+    public static <T> T createFromEmptyConstructor(Class<T> cls) throws InvocationTargetException, NoSuchMethodException, InstantiationException, IllegalAccessException {
+        return cls.getDeclaredConstructor().newInstance();
+    }
+
     private interface InstanceProvider {
         Object get() throws MagicInstanceException;
     }

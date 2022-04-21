@@ -8,19 +8,14 @@ import com.programm.plugz.api.auto.SetConfig;
 import com.programm.plugz.api.lifecycle.LifecycleState;
 import com.programm.plugz.inject.PlugzUrlClassScanner;
 import com.programm.plugz.inject.ScanException;
-import com.programm.projects.ioutils.log.api.out.IConfigurableLogger;
-import com.programm.projects.ioutils.log.api.out.ILogger;
-import com.programm.projects.ioutils.log.api.out.Logger;
-import com.programm.projects.ioutils.log.api.out.LoggerConfigException;
+import com.programm.projects.ioutils.log.api.out.*;
 
 import java.io.IOException;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
 
@@ -35,6 +30,8 @@ public class MagicEnvironment {
     private static final String CONF_LOGGER_LEVEL_DEFAULT = "INFO";
     private static final String CONF_LOGGER_FORMAT_NAME = "log.format";
     private static final String CONF_LOGGER_FORMAT_DEFAULT = "[%5<($LVL)] [%30>($CLS.$MET)]: $MSG";
+    private static final String CONF_LOGGER_OUT_NAME = "log.out";
+    private static final String CONF_LOGGER_OUT_DEFAULT = "com.programm.plugz.magic.LoggerDefaultConsoleOut";
 
 
     public static MagicEnvironment Start() throws MagicSetupException {
@@ -103,7 +100,7 @@ public class MagicEnvironment {
         }
         catch (MagicSetupException e){
             if(log.logger == null){
-                log.logger = new LoggerFallback();
+                log.logger = new LoggerFallback().output(new LoggerDefaultConsoleOut());
                 log.passStoredLogs();
             }
 
@@ -137,9 +134,10 @@ public class MagicEnvironment {
         log.debug("Starting config scan");
         try {
             scanner.addSearchClass(ISubsystem.class);
+            scanner.addSearchClass(ILogger.class);
             scanner.addSearchAnnotation(Config.class);
 
-            log.debug("Scanning through collected urls with a base package of [{}]...", basePackage);
+            log.debug("Scanning through {} collected urls with a base package of [{}]...", collectedUrls.size(), basePackage);
             scanner.scan(collectedUrls, basePackage);
         }
         catch (ScanException e){
@@ -170,7 +168,7 @@ public class MagicEnvironment {
         }
 
         log.debug("Searching for logger implementation...");
-        findLoggerImplementation(collectedUrls);
+        findLoggerImplementation(scanner.getImplementing(ILogger.class));
         log.passStoredLogs();
 
         asyncManager.init(configurations);
@@ -187,7 +185,7 @@ public class MagicEnvironment {
 
         log.debug("Starting main scan");
         try {
-            log.debug("Scanning through collected urls with a base package of [{}]...", basePackage);
+            log.debug("Scanning through {} collected urls with a base package of [{}]...", collectedUrls.size(), basePackage);
             scanner.scan(collectedUrls, basePackage);
         }
         catch (ScanException e){
@@ -311,7 +309,7 @@ public class MagicEnvironment {
         for(String searchUrlAsString : searchUrlsAsString){
             try {
                 URL url = Paths.get(searchUrlAsString).toAbsolutePath().toUri().toURL();
-                log.trace("# Found [{}].", url);
+                log.debug("# Found [{}].", url);
                 searchUrls.add(url);
             }
             catch (MalformedURLException e){
@@ -322,7 +320,7 @@ public class MagicEnvironment {
         return searchUrls;
     }
 
-    private void findLoggerImplementation(List<URL> urls) throws MagicSetupException {
+    private void findLoggerImplementation(List<Class<?>> loggerImplementations) throws MagicSetupException {
         Class<?> loggerImplementationClass;
         String loggerImplementationClassName = configurations.get(CONF_LOGGER_IMPL_CLASS_NAME);
 
@@ -334,24 +332,21 @@ public class MagicEnvironment {
                 throw new MagicSetupException("Could not find specified logger implementation for class name: [" + loggerImplementationClassName + "]!", e);
             }
 
-            if(!loggerImplementationClass.isAssignableFrom(ILogger.class)) throw new MagicSetupException("The provided logger implementation [" + loggerImplementationClassName + "] does not implement the ILogger interface!");
+            if(!ILogger.class.isAssignableFrom(loggerImplementationClass)) throw new MagicSetupException("The provided logger implementation [" + loggerImplementationClassName + "] does not implement the ILogger interface!");
+
+            log.debug("Using provided logger implementation from config.");
         }
         else {
-            PlugzUrlClassScanner loggerScanner = new PlugzUrlClassScanner();
-            loggerScanner.setLogger(log);
-            loggerScanner.addSearchClass(ILogger.class);
-            loggerScanner.blacklistPackage("com.programm.plugz.");
-
-            log.debug("Starting logger scan");
-            try {
-                loggerScanner.scan(urls, "");
-            }
-            catch (ScanException e){
-                throw new MagicSetupException("Failed to scan for logger implementations!", e);
+            loggerImplementationClass = null;
+            for(Class<?> loggerImplCls : loggerImplementations) {
+                if(loggerImplCls == LoggerFallback.class || loggerImplCls == LoggerProxy.class) continue;
+                loggerImplementationClass = loggerImplCls;
+                break;
             }
 
-            List<Class<?>> implementationClasses = loggerScanner.getImplementing(ILogger.class);
-            loggerImplementationClass = implementationClasses.isEmpty() ? null : implementationClasses.get(0);
+            if(loggerImplementationClass != null) {
+                log.debug("Using logger found through class scan.");
+            }
         }
 
         ILogger loggerImplementation;
@@ -360,18 +355,16 @@ public class MagicEnvironment {
             loggerImplementation = new LoggerFallback();
         }
         else {
-            Constructor<?> emptyConstructor;
             try {
-                emptyConstructor = loggerImplementationClass.getConstructor();
-            } catch (NoSuchMethodException e) {
+                loggerImplementation = (ILogger) MagicInstanceManager.createFromEmptyConstructor(loggerImplementationClass);
+            }
+            catch (NoSuchMethodException e){
                 throw new MagicSetupException("The provided logger implementation [" + loggerImplementationClassName + "] does not have an empty constructor!", e);
             }
-
-            try {
-                loggerImplementation = (ILogger) emptyConstructor.newInstance();
-            } catch (InvocationTargetException | InstantiationException e) {
+            catch (InvocationTargetException | InstantiationException e) {
                 throw new MagicSetupException("Failed to instantiate the provided logger implementation [" + loggerImplementationClassName + "]!", e);
-            } catch (IllegalAccessException e) {
+            }
+            catch (IllegalAccessException e) {
                 throw new MagicSetupException("The empty constructor for the provided logger implementation [" + loggerImplementationClassName + "] cannot be accessed!", e);
             }
 
@@ -389,10 +382,32 @@ public class MagicEnvironment {
             }
 
             String logFormat = configurations.getOrDefault(CONF_LOGGER_FORMAT_NAME, CONF_LOGGER_FORMAT_DEFAULT);
+            String _logOut = configurations.getOrDefault(CONF_LOGGER_OUT_NAME, CONF_LOGGER_OUT_DEFAULT);
 
             try {
                 configurableLogger.level(logLevel);
                 configurableLogger.format(logFormat);
+
+                if(!_logOut.isEmpty()){
+                    IOutput logOut;
+                    try {
+                        logOut = (IOutput) MagicInstanceManager.createFromEmptyConstructor(_logOut);
+                    }
+                    catch (ClassNotFoundException e){
+                        throw new MagicSetupException("Could not find specified logger - output implementation for class name: [" + _logOut + "]!", e);
+                    }
+                    catch (NoSuchMethodException e){
+                        throw new MagicSetupException("The provided logger implementation [" + loggerImplementationClassName + "] does not have an empty constructor!", e);
+                    }
+                    catch (InvocationTargetException | InstantiationException e) {
+                        throw new MagicSetupException("Failed to instantiate the provided logger implementation [" + loggerImplementationClassName + "]!", e);
+                    }
+                    catch (IllegalAccessException e) {
+                        throw new MagicSetupException("The empty constructor for the provided logger implementation [" + loggerImplementationClassName + "] cannot be accessed!", e);
+                    }
+
+                    configurableLogger.output(logOut);
+                }
 
                 for(Map.Entry<String, Object> entry : configurations.configValues.entrySet()){
                     String key = entry.getKey();

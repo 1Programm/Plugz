@@ -33,6 +33,10 @@ log.level = INFO
 # Ex. '%20|[#](Hello World)!'  -> '#####Hello World####!'
 log.format = [%5<($LVL)] [%30>($CLS.$MET)]: $MSG
 
+# The output for the logs. Must implement the IOutput class.
+# Default is a standard System.out - implementation of IOutput.
+log.out = com.programm.plugz.magic.LoggerDefaultConsoleOut
+
 # Setting package level:
 # log.pkg[com.programm.plugz.*] = WARN
 
@@ -42,7 +46,7 @@ log.format = [%5<($LVL)] [%30>($CLS.$MET)]: $MSG
 async.workers.max = 5
 
 # Timeout time after which workers will be killed. With the default they will wait 5 seconds after finishing a task and will look for new tasks.
-async.workers.timeout = 5000
+async.workers.timeout = 2000
 
 
 

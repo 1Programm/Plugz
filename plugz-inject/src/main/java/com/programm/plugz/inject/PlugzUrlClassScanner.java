@@ -16,36 +16,41 @@ import java.util.zip.ZipInputStream;
 public class PlugzUrlClassScanner {
 
     private final List<String> blacklistedPackages = new ArrayList<>();
+    private final List<String> tmpBlacklistedPackages = new ArrayList<>();
+
     private final Map<Class<? extends Annotation>, List<Class<?>>> foundAnnotatedClasses = new HashMap<>();
     private final Map<Class<?>, List<Class<?>>> foundImplementingClasses = new HashMap<>();
 
     private ILogger log = new NullLogger();
 
     public void scan(List<URL> searchUrls, String basePackage) throws ScanException {
-        if(searchUrls == null || searchUrls.isEmpty()){
-            log.warn("# No urls to search through!");
-            return;
+        try {
+            if (searchUrls == null || searchUrls.isEmpty()) {
+                log.warn("# No urls to search through!");
+                return;
+            }
+            if (basePackage == null) basePackage = "";
+
+            for (int i = 0; i < searchUrls.size(); i++) {
+                URL url = searchUrls.get(i);
+                String urlFile = url.getFile();
+
+                if (i != 0 && log.level() == ILogger.LEVEL_TRACE) log.debug("");
+
+                if (urlFile.endsWith(".jar")) {
+                    log.debug("# Scanning url as jar: [{}]...", url);
+                    searchInJar(url, basePackage);
+                } else if (url.getProtocol().equals("file")) {
+                    log.debug("# Scanning url as class folder: [{}]...", url);
+                    File file = new File(urlFile);
+                    searchInFolder(file, basePackage);
+                } else {
+                    throw new ScanException("Could not scan url: [" + url + "]: Invalid url type!");
+                }
+            }
         }
-        if(basePackage == null) basePackage = "";
-
-        for(int i=0;i<searchUrls.size();i++) {
-            URL url = searchUrls.get(i);
-            String urlFile = url.getFile();
-
-            if(i != 0) log.debug("");
-
-            if(urlFile.endsWith(".jar")){
-                log.debug("# Scanning url as jar: [{}]...", url);
-                searchInJar(url, basePackage);
-            }
-            else if(url.getProtocol().equals("file")){
-                log.debug("# Scanning url as class folder: [{}]...", url);
-                File file = new File(urlFile);
-                searchInFolder(file, basePackage);
-            }
-            else {
-                throw new ScanException("Could not scan url: [" + url + "]: Invalid url type!");
-            }
+        finally {
+            tmpBlacklistedPackages.clear();
         }
     }
 
@@ -67,6 +72,10 @@ public class PlugzUrlClassScanner {
 
     public void blacklistPackage(String pkg){
         blacklistedPackages.add(pkg);
+    }
+
+    public void blacklistPackageTemporary(String pkg){
+        tmpBlacklistedPackages.add(pkg);
     }
 
     public void setLogger(ILogger log){
@@ -138,6 +147,11 @@ public class PlugzUrlClassScanner {
 
     private boolean isBlacklisted(String pkg, boolean isPath){
         for(String blacklistedPkg : blacklistedPackages){
+            if(isPath) blacklistedPkg = blacklistedPkg.replaceAll("\\.", "/");
+            if(pkg.startsWith(blacklistedPkg)) return true;
+        }
+
+        for(String blacklistedPkg : tmpBlacklistedPackages){
             if(isPath) blacklistedPkg = blacklistedPkg.replaceAll("\\.", "/");
             if(pkg.startsWith(blacklistedPkg)) return true;
         }

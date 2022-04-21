@@ -14,8 +14,11 @@ import java.util.concurrent.TimeUnit;
 @Logger("Thread-Pool-Manager")
 class ThreadPoolManager implements IAsyncManager {
 
-    private static final int DEFAULT_MAX_WORKERS = 5;
-    private static final int DEFAULT_MAX_TIMEOUT = 5000;
+    private static final String CONF_MAX_WORKERS_NAME = "async.workers.max";
+    private static final int CONF_MAX_WORKERS_DEFAULT = 5;
+
+    private static final String CONF_TIMEOUT_NAME = "async.workers.timeout";
+    private static final int CONF_TIMEOUT_DEFAULT = 2000;
 
     @RequiredArgsConstructor
     private class Worker {
@@ -92,8 +95,8 @@ class ThreadPoolManager implements IAsyncManager {
     }
 
     public void init(ConfigurationManager configurations){
-        this.maxWorkers = configurations.getIntOrDefault("async.workers.max", DEFAULT_MAX_WORKERS);
-        this.timeoutTime = configurations.getLongOrDefault("async.workers.timeout", DEFAULT_MAX_TIMEOUT);
+        this.maxWorkers = configurations.getIntOrDefault(CONF_MAX_WORKERS_NAME, CONF_MAX_WORKERS_DEFAULT);
+        this.timeoutTime = configurations.getLongOrDefault(CONF_TIMEOUT_NAME, CONF_TIMEOUT_DEFAULT);
         this.workerExists = new boolean[maxWorkers];
 
         initialized = true;

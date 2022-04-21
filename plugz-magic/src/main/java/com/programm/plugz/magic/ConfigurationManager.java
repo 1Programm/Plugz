@@ -68,22 +68,12 @@ class ConfigurationManager implements PlugzConfig {
                     value =  true;
                 }
                 else {
-                    value = getPrimitiveConfigValue(args[i + 1]);
+                    value = ValueUtils.getPrimitiveValue(args[i + 1]);
                 }
 
                 configValues.put(key, value);
             }
         }
-    }
-
-    private Object getPrimitiveConfigValue(String s){
-        Object value = ValueUtils.getPrimitiveValue(s);
-
-        if(value == s){
-            try{ return Class.forName(s); } catch (ClassNotFoundException ignore){}
-        }
-
-        return value;
     }
 
     private void readProfile() throws MagicSetupException {
@@ -181,7 +171,7 @@ class ConfigurationManager implements PlugzConfig {
         }
 
         if(_value != null){
-            Object value = getPrimitiveConfigValue(_value);
+            Object value = ValueUtils.getPrimitiveValue(_value);
             configValues.put(nPath, value);
             return;
         }
