@@ -16,7 +16,9 @@ import com.programm.projects.ioutils.log.api.out.LoggerConfigException;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
@@ -57,6 +59,11 @@ public class MagicEnvironment {
     private final MagicInstanceManager instanceManager;
     private final SubsystemManager subsystems;
 
+    private long setupBeginTime;
+    private long setupEndTime;
+    private long startBeginTime;
+    private long startEndTime;
+
     public MagicEnvironment(String... args){
         this("", args);
     }
@@ -93,6 +100,7 @@ public class MagicEnvironment {
     }
 
     public void setup() throws MagicSetupException {
+        this.setupBeginTime = System.currentTimeMillis();
         try {
             doSetup();
         }
@@ -104,6 +112,8 @@ public class MagicEnvironment {
 
             throw e;
         }
+        this.setupEndTime = System.currentTimeMillis();
+        log.debug("Setting up the environment took [{}] milliseconds!", setupEndTime - setupBeginTime);
     }
 
     private void doSetup() throws MagicSetupException {
@@ -226,6 +236,7 @@ public class MagicEnvironment {
     }
 
     public void startup() {
+        this.startBeginTime = System.currentTimeMillis();
         log.info("Starting up the environment");
 
         if(configurations.getBooleanOrDefault(CONF_ADD_SHUTDOWN_HOOK_NAME, CONF_ADD_SHUTDOWN_HOOK_DEFAULT)){
@@ -254,7 +265,9 @@ public class MagicEnvironment {
             throw new MagicRuntimeException(e);
         }
 
-        log.info("Environment started up!");
+        this.startEndTime = System.currentTimeMillis();
+        log.debug("Only starting up the environment took [{}] milliseconds!", startEndTime - startBeginTime);
+        log.info("Environment started up in [{}] milliseconds!", startEndTime - setupBeginTime);
     }
 
     public void shutdown(){
@@ -292,13 +305,17 @@ public class MagicEnvironment {
 
     private List<URL> collectScanUrls() throws IOException {
         List<URL> searchUrls = new ArrayList<>();
-        ClassLoader cl = Thread.currentThread().getContextClassLoader();
-        Enumeration<URL> urls = cl.getResources("");
 
-        while(urls.hasMoreElements()) {
-            URL url = urls.nextElement();
-            log.trace("# Found [{}].", url);
-            searchUrls.add(url);
+        String[] searchUrlsAsString = System.getProperty("java.class.path").split(System.getProperty("path.separator"));
+        for(String searchUrlAsString : searchUrlsAsString){
+            try {
+                URL url = Paths.get(searchUrlAsString).toAbsolutePath().toUri().toURL();
+                log.trace("# Found [{}].", url);
+                searchUrls.add(url);
+            }
+            catch (MalformedURLException e){
+                log.warn("Malformed url [{}]: {}", searchUrlsAsString, e.getMessage());
+            }
         }
 
         return searchUrls;

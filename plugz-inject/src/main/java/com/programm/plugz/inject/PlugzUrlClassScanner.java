@@ -183,6 +183,9 @@ public class PlugzUrlClassScanner {
             e.printStackTrace();
             return;
         }
+        catch (NoClassDefFoundError e){
+            return;
+        }
 
         log.trace("### Found class: [{}]", cls);
 
