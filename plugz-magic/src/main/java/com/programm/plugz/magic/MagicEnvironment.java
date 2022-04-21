@@ -140,6 +140,7 @@ public class MagicEnvironment {
             scanner.addSearchClass(ISubsystem.class);
             scanner.addSearchClass(ILogger.class);
             scanner.addSearchAnnotation(Config.class);
+            scanner.blacklistPackage("com.programm.ioutils.log.api");
 
             log.debug("Scanning through {} collected urls with a base package of [{}]...", collectedUrls.size(), basePackage);
             scanner.scan(collectedUrls, basePackage);

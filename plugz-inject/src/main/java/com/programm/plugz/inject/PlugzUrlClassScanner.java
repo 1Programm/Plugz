@@ -96,13 +96,14 @@ public class PlugzUrlClassScanner {
                     String name = entry.getName();
 
                     if(!name.endsWith(".class") || !name.startsWith(basePackage)) continue;
+
+                    name = name.substring(0, name.length() - ".class".length());
+                    name = name.replaceAll("/", ".");
+
                     if(isBlacklisted(name, false)){
                         log.trace("# Encountered blacklisted package [{}]", name);
                         continue;
                     }
-
-                    name = name.substring(0, name.length() - ".class".length());
-                    name = name.replaceAll("/", ".");
 
                     loadAndScanClassFromName(name);
                 }

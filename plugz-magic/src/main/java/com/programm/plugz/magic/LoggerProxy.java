@@ -87,7 +87,7 @@ class LoggerProxy implements ILogger {
 
     @Override
     public int level() {
-        if(logger == null) return LEVEL_NONE;
+        if(logger == null) return LEVEL_TRACE;
         return logger.level();
     }
 
