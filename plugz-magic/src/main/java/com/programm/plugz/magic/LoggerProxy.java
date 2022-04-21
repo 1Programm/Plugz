@@ -1,6 +1,8 @@
 package com.programm.plugz.magic;
 
+import com.programm.projects.ioutils.log.api.out.IConfigurableLogger;
 import com.programm.projects.ioutils.log.api.out.ILogger;
+import com.programm.projects.ioutils.log.api.out.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,11 +17,15 @@ class LoggerProxy implements ILogger {
         private final int level;
         private final String s;
         private final Object[] args;
+        private final Class<?> logInfoCallingCls;
+        private final String logInfoCallingMethodName;
 
-        public LogInfo(int level, String s, Object[] args) {
+        public LogInfo(int level, String s, Object[] args, Class<?> logInfoCallingCls, String logInfoCallingMethodName) {
             this.level = level;
             this.s = s;
             this.args = args;
+            this.logInfoCallingCls = logInfoCallingCls;
+            this.logInfoCallingMethodName = logInfoCallingMethodName;
         }
     }
 
@@ -27,7 +33,13 @@ class LoggerProxy implements ILogger {
     private final List<LogInfo> storedLogs = new ArrayList<>();
 
     public void passStoredLogs(){
+        if(logger == null) return;
+
+        boolean isConfigLogger = logger instanceof IConfigurableLogger;
         for(LogInfo info : storedLogs){
+            if (isConfigLogger && info.logInfoCallingCls != null) {
+                ((IConfigurableLogger)logger).setNextLogInfo(info.logInfoCallingCls, info.logInfoCallingMethodName);
+            }
             doLog(info.level, info.s, info.args);
         }
 
@@ -61,7 +73,7 @@ class LoggerProxy implements ILogger {
 
     private void doLog(int level, String s, Object... args){
         if(logger == null) {
-            storedLogs.add(new LogInfo(level, s, args));
+            storedLogs.add(getInfo(level, s, args));
         }
         else {
             switch (level){
@@ -82,5 +94,33 @@ class LoggerProxy implements ILogger {
 
     public void setLogger(ILogger logger) {
         this.logger = logger;
+    }
+
+    private LogInfo getInfo(int level, String s, Object... args){
+        Class<?> callingClass = null;
+        String callingMethodName = null;
+
+        StackTraceElement[] callers = Thread.currentThread().getStackTrace();
+
+        for(int i=callers.length-2;i>2;i--) {
+            StackTraceElement caller = callers[i];
+            String curMethodName = caller.getMethodName();
+
+            if (curMethodName.equals("trace") || curMethodName.equals("debug") || curMethodName.equals("info") || curMethodName.equals("warn") || curMethodName.equals("error")) {
+                String fullClsName = callers[i + 1].getClassName();
+                String methodName = callers[i + 1].getMethodName();
+                try {
+                    callingClass = LoggerProxy.class.getClassLoader().loadClass(fullClsName);
+                    callingMethodName = methodName;
+                    break;
+                } catch (ClassNotFoundException ignore) {}
+            }
+        }
+
+        if(callingClass == null) {
+            throw new IllegalStateException("Could not find caller method of logger!");
+        }
+
+        return new LogInfo(level, s, args, callingClass, callingMethodName);
     }
 }

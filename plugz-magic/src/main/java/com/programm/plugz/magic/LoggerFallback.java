@@ -21,16 +21,14 @@ class LoggerFallback extends LevelLogger implements IConfigurableLogger {
         return this;
     }
 
+    @Override
+    public void setNextLogInfo(Class<?> cls, String methodName) {}
 
     @Override
-    public LoggerFallback format(String format) throws LoggerConfigException {
-        return this;
-    }
+    public LoggerFallback format(String format) throws LoggerConfigException { return this; }
 
     @Override
-    public LoggerFallback packageLevel(String pkg, int level) throws LoggerConfigException {
-        return this;
-    }
+    public LoggerFallback packageLevel(String pkg, int level) throws LoggerConfigException { return this; }
 
     @Override
     public IConfigurableLogger output(IOutput out) throws LoggerConfigException {
