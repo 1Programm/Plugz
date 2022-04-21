@@ -5,12 +5,12 @@
     <parent>
         <artifactId>parent</artifactId>
         <groupId>com.programm.plugz</groupId>
-        <version>1.0-SNAPSHOT</version>
+        <version>1.0</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>plugz-magic</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0</version>
 
     <properties>
         <maven.compiler.source>16</maven.compiler.source>
@@ -21,17 +21,17 @@
         <dependency>
             <groupId>com.programm.plugz</groupId>
             <artifactId>plugz-api</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.0</version>
         </dependency>
         <dependency>
             <groupId>com.programm.plugz</groupId>
             <artifactId>plugz-inject</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.0</version>
         </dependency>
         <dependency>
             <groupId>com.programm.plugz</groupId>
             <artifactId>plugz-files</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.0</version>
         </dependency>
 
         <dependency>
