@@ -60,9 +60,6 @@ public class MagicEnvironment {
     private final SubsystemManager subsystems;
 
     private long setupBeginTime;
-    private long setupEndTime;
-    private long startBeginTime;
-    private long startEndTime;
 
     public MagicEnvironment(String... args){
         this("", args);
@@ -112,7 +109,7 @@ public class MagicEnvironment {
 
             throw e;
         }
-        this.setupEndTime = System.currentTimeMillis();
+        long setupEndTime = System.currentTimeMillis();
         log.debug("Setting up the environment took [{}] milliseconds!", setupEndTime - setupBeginTime);
     }
 
@@ -236,7 +233,7 @@ public class MagicEnvironment {
     }
 
     public void startup() {
-        this.startBeginTime = System.currentTimeMillis();
+        long startBeginTime = System.currentTimeMillis();
         log.info("Starting up the environment");
 
         if(configurations.getBooleanOrDefault(CONF_ADD_SHUTDOWN_HOOK_NAME, CONF_ADD_SHUTDOWN_HOOK_DEFAULT)){
@@ -265,12 +262,13 @@ public class MagicEnvironment {
             throw new MagicRuntimeException(e);
         }
 
-        this.startEndTime = System.currentTimeMillis();
+        long startEndTime = System.currentTimeMillis();
         log.debug("Only starting up the environment took [{}] milliseconds!", startEndTime - startBeginTime);
         log.info("Environment started up in [{}] milliseconds!", startEndTime - setupBeginTime);
     }
 
     public void shutdown(){
+        long shutdownBeginTime = System.currentTimeMillis();
         log.info("Shutting down the environment");
         try {
             instanceManager.callLifecycleMethods(LifecycleState.PRE_SHUTDOWN);
@@ -296,6 +294,9 @@ public class MagicEnvironment {
             log.error(e.getMessage());
             e.printStackTrace();
         }
+
+        long shutdownEndTime = System.currentTimeMillis();
+        log.debug("Shutting down the environment took [{}] milliseconds!", shutdownEndTime - shutdownBeginTime);
     }
 
 

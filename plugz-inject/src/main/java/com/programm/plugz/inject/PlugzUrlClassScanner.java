@@ -28,8 +28,11 @@ public class PlugzUrlClassScanner {
         }
         if(basePackage == null) basePackage = "";
 
-        for(URL url : searchUrls) {
+        for(int i=0;i<searchUrls.size();i++) {
+            URL url = searchUrls.get(i);
             String urlFile = url.getFile();
+
+            if(i != 0) log.debug("");
 
             if(urlFile.endsWith(".jar")){
                 log.debug("# Scanning url as jar: [{}]...", url);
