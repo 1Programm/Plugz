@@ -31,7 +31,7 @@ log.level = INFO
 # Ex. '%20>(Hello World)!'     -> '         Hello World!'
 # Ex. '%20|(Hello World)!'     -> '     Hello World    !'
 # Ex. '%20|[#](Hello World)!'  -> '#####Hello World####!'
-log.format = [%5<($LVL)] [%30>($CLS.$MET)]: $MSG
+log.format = [%5<($LVL)] [%30>($LOG?{$CLS.$MET})]: $MSG
 
 # The output for the logs. Must implement the IOutput class.
 # Default is a standard System.out - implementation of IOutput.
