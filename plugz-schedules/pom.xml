@@ -10,7 +10,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>plugz-schedules</artifactId>
-    <version>1.1</version>
+    <version>1.2-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>16</maven.compiler.source>
@@ -21,7 +21,7 @@
         <dependency>
             <groupId>com.programm.plugz</groupId>
             <artifactId>plugz-api</artifactId>
-            <version>1.1</version>
+            <version>1.2-SNAPSHOT</version>
         </dependency>
 
         <dependency>
