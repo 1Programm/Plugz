@@ -134,14 +134,16 @@ public class MagicInstanceManager implements IInstanceManager {
     private class MissingParamsConstructor {
         private final Class<?> cls;
         private final Constructor<?> constructor;
+        private final boolean needsAccess;
         private final Object[] params;
         private final SetupFunction setupFunction;
 
         private int missingParams;
 
-        public MissingParamsConstructor(Class<?> cls, Constructor<?> constructor, Object[] params, SetupFunction setupFunction) {
+        public MissingParamsConstructor(Class<?> cls, Constructor<?> constructor, boolean needsAccess, Object[] params, SetupFunction setupFunction) {
             this.cls = cls;
             this.constructor = constructor;
+            this.needsAccess = needsAccess;
             this.params = params;
             this.setupFunction = setupFunction;
             this.missingParams = params.length;
@@ -154,7 +156,13 @@ public class MagicInstanceManager implements IInstanceManager {
         }
 
         public void invoke() throws MagicInstanceException {
-            Object instance = invokeConstructor(constructor, params);
+            Object instance;
+            if(needsAccess){
+                instance = invokePrivateConstructor(constructor, params);
+            }
+            else {
+                instance = invokeConstructor(constructor, params);
+            }
             setupFunction.setup(cls, instance);
         }
     }
@@ -976,7 +984,11 @@ public class MagicInstanceManager implements IInstanceManager {
 
     private void tryInvokeConstructor(Class<?> cls, Constructor<?> con, boolean canWait, SetupFunction setupFunction, Object... params) throws MagicInstanceException {
         Object[] collectedParams = new Object[con.getParameterCount()];
-        MissingParamsConstructor mpc = new MissingParamsConstructor(cls, con, collectedParams, setupFunction);
+        int mods = con.getModifiers();
+        int clsMods = cls.getModifiers();
+        boolean needsAccess = !(Modifier.isPublic(mods) && Modifier.isPublic(clsMods));
+
+        MissingParamsConstructor mpc = new MissingParamsConstructor(cls, con, needsAccess, collectedParams, setupFunction);
 
         int i = 0, c = 0;
         for (Parameter parameter : con.getParameters()) {
@@ -1033,6 +1045,13 @@ public class MagicInstanceManager implements IInstanceManager {
         if(mpc.missingParams == 0) {
             mpc.invoke();
         }
+    }
+
+    private Object invokePrivateConstructor(Constructor<?> con, Object... args) throws MagicInstanceException {
+        con.setAccessible(true);
+        Object instance = invokeConstructor(con, args);
+        con.setAccessible(false);
+        return instance;
     }
 
     private Object invokeConstructor(Constructor<?> con, Object... args) throws MagicInstanceException {

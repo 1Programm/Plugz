@@ -100,7 +100,7 @@ public class ScheduleManager implements Runnable, ISchedules {
         running = true;
         paused = false;
 
-        asyncManager.runAsyncVipTask(this, 0);
+        asyncManager.runAsyncTask(this, null, 0, true, false);
     }
 
     public void stop(){
@@ -116,7 +116,7 @@ public class ScheduleManager implements Runnable, ISchedules {
         if(running && paused) {
             paused = false;
             log.info("Restarting paused thread for scheduling.");
-            asyncManager.runAsyncVipTask(this, 0);
+            asyncManager.runAsyncTask(this, null, 0, true, false);
         }
 
         if(running){

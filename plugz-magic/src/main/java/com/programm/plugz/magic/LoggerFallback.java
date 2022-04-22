@@ -35,6 +35,9 @@ class LoggerFallback extends LevelLogger implements IConfigurableLogger {
     public LoggerFallback packageLevel(String pkg, int level) throws LoggerConfigException { return this; }
 
     @Override
+    public IConfigurableLogger logNameLevel(String s, int i) throws LoggerConfigException { return this; }
+
+    @Override
     public IConfigurableLogger output(IOutput out) throws LoggerConfigException {
         this.out = out;
         return this;

@@ -33,7 +33,7 @@ public class MagicEnvironment {
     private static final String CONF_LOGGER_LEVEL_NAME = "log.level";
     private static final String CONF_LOGGER_LEVEL_DEFAULT = "INFO";
     private static final String CONF_LOGGER_FORMAT_NAME = "log.format";
-    private static final String CONF_LOGGER_FORMAT_DEFAULT = "[%5<($LVL)] [%30>($LOG?{$CLS.$MET})]: $MSG";
+    private static final String CONF_LOGGER_FORMAT_DEFAULT = "[$TIME] [%5<($LVL)] [%30>($LOG?{$CLS.$MET})]: $MSG";
     private static final String CONF_LOGGER_OUT_NAME = "log.out";
     private static final String CONF_LOGGER_OUT_DEFAULT = "com.programm.plugz.magic.LoggerDefaultConsoleOut";
 
@@ -417,9 +417,9 @@ public class MagicEnvironment {
                 for(Map.Entry<String, Object> entry : configurations.configValues.entrySet()){
                     String key = entry.getKey();
                     Object value = entry.getValue();
-                    if(key.startsWith("log.pkg[") && key.endsWith("]")){
-                        if(value == null) continue;
+                    if(value == null) continue;
 
+                    if(key.startsWith("log.pkg[") && key.endsWith("]")){
                         String pkgName = key.substring("log.pkg[".length(), key.length() - 1);
                         String _value = value.toString();
 
@@ -432,6 +432,20 @@ public class MagicEnvironment {
                         }
 
                         configurableLogger.packageLevel(pkgName, pkgLevel);
+                    }
+                    else if(key.startsWith("log.name[") && key.endsWith("]")){
+                        String logName = key.substring("log.name[".length(), key.length() - 1);
+                        String _value = value.toString();
+
+                        int logNameLevel;
+                        try {
+                            logNameLevel = Integer.parseInt(_value);
+                        }
+                        catch (NumberFormatException e) {
+                            logNameLevel = ILogger.fromString(_value);
+                        }
+
+                        configurableLogger.logNameLevel(logName, logNameLevel);
                     }
                 }
             }

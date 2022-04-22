@@ -40,6 +40,10 @@ log.out = com.programm.plugz.magic.LoggerDefaultConsoleOut
 # Setting package level:
 # log.pkg[com.programm.plugz.*] = WARN
 
+# Setting logName level:
+# Only this sets the log level to error for all classes annotated with @Logger("MyLoggerName")
+# log.name[MyLoggerName] = ERROR
+
 
 
 # Maximum worker size so with the default there can be max 5 workers and other tasks will be queued
