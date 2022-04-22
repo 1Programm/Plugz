@@ -59,5 +59,13 @@ scheduler.min-sleep = 1000
 
 
 
+# The refresh rate of fps - debug - values (All debug values that are not encapsulated by DValue)
+debugger.sleep.fps = 100
+
+# The sleep time to check if a fps - debug - value must be updated
+debugger.sleep.long = 1000
+
+
+
 # Port on which the Server socket should listen
 webserv.port = 8080
