@@ -236,7 +236,7 @@ class ThreadPoolManager implements IAsyncManager {
     }
 
     @Override
-    public void notifyThreadClose(String threadName) {
+    public synchronized void notifyThreadClose(String threadName) {
         if(enteredAutoClosableState) return;
 
         log.debug("Thread [{}] closed. Will try to start the auto-close mechanism...", threadName);

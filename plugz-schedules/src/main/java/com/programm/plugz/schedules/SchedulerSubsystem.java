@@ -47,7 +47,6 @@ public class SchedulerSubsystem implements ISubsystem {
 
     private void setupScheduledMethods(Scheduled annotation, Object instance, Method method, IInstanceManager manager, PlugzConfig config) {
         String methodBeanString = instance.getClass().getName() + "#" + method.getName();
-        log.trace("Registering schedule method: {}", methodBeanString);
 
         if(annotation.repeat() < scheduleManager.minSleep){
             log.warn("Scheduled method ({}) cannot run faster than every {} milliseconds!", methodBeanString, scheduleManager.minSleep);
