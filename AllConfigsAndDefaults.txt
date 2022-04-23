@@ -31,7 +31,7 @@ log.level = INFO
 # Ex. '%20>(Hello World)!'     -> '         Hello World!'
 # Ex. '%20|(Hello World)!'     -> '     Hello World    !'
 # Ex. '%20|[#](Hello World)!'  -> '#####Hello World####!'
-log.format = [%5<($LVL)] [%30>($LOG?{$CLS.$MET})]: $MSG
+log.format = [$TIME] [%5<($LVL)] [%30>($LOG?{$CLS.$MET})]: $MSG
 
 # The output for the logs. Must implement the IOutput class.
 # Default is a standard System.out - implementation of IOutput.
@@ -64,6 +64,12 @@ debugger.sleep.fps = 100
 
 # The sleep time to check if a fps - debug - value must be updated
 debugger.sleep.long = 1000
+
+
+
+# Specifies if the events should be handled by a separate event - handler - thread.
+# If set to false, emitted events will be handled by the caller of the emit method.
+events.handler.enabled = false
 
 
 
