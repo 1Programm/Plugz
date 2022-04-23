@@ -19,6 +19,7 @@
         <module>plugz-webserv</module>
         <module>plugz-cls-analyzer</module>
         <module>plugz-debugger</module>
+        <module>plugz-events</module>
     </modules>
 
     <properties>
