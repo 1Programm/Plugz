@@ -75,6 +75,8 @@ class ThreadPoolManager implements IAsyncManager {
                     if(taskInfo.delay > 0) Thread.sleep(taskInfo.delay);
                     taskInfo.task.run();
                     if(taskInfo.onTaskFinished != null) taskInfo.onTaskFinished.run();
+                    taskInfo.free();
+
                     if(!running) break;
 
                     if(vip){
@@ -136,8 +138,8 @@ class ThreadPoolManager implements IAsyncManager {
     }
 
     public void init(ConfigurationManager configurations){
-        this.maxWorkers = configurations.getIntOrDefault(CONF_MAX_WORKERS_NAME, CONF_MAX_WORKERS_DEFAULT);
-        this.timeoutTime = configurations.getLongOrDefault(CONF_TIMEOUT_NAME, CONF_TIMEOUT_DEFAULT);
+        this.maxWorkers = configurations.getIntOrRegisterDefault(CONF_MAX_WORKERS_NAME, CONF_MAX_WORKERS_DEFAULT);
+        this.timeoutTime = configurations.getLongOrRegisterDefault(CONF_TIMEOUT_NAME, CONF_TIMEOUT_DEFAULT);
         this.workers = new Worker[maxWorkers];
 
         initialized = true;

@@ -30,6 +30,9 @@ public class ScheduleManager implements Runnable, ISchedules {
         long now = curTime();
         for(ScheduledMethodConfig config : schedulerConfigs) {
             config.startedAt = now;
+            if(config.startAfter == 0){
+                runConfig(config);
+            }
         }
 
         try {

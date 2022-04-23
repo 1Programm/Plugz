@@ -73,6 +73,9 @@ public class MagicEnvironment {
         this.scanner = new PlugzUrlClassScanner();
         this.scanner.setLogger(log);
         this.configurations = new ConfigurationManager(args);
+
+        initDefaultConfigs();
+
         this.asyncManager = new ThreadPoolManager(log);
         this.annocheck = new AnnotationChecker();
         this.instanceManager = new MagicInstanceManager(log, configurations, asyncManager, annocheck);
@@ -88,6 +91,15 @@ public class MagicEnvironment {
         catch (MagicInstanceException e){
             throw new IllegalStateException("INVALID STATE: There should be no class waiting yet!", e);
         }
+    }
+
+    private void initDefaultConfigs(){
+        configurations.registerDefaultConfiguration(CONF_ADD_SHUTDOWN_HOOK_NAME, CONF_ADD_SHUTDOWN_HOOK_DEFAULT);
+
+        configurations.registerDefaultConfiguration(CONF_LOGGER_IMPL_CLASS_NAME, null);
+        configurations.registerDefaultConfiguration(CONF_LOGGER_LEVEL_NAME, CONF_LOGGER_LEVEL_DEFAULT);
+        configurations.registerDefaultConfiguration(CONF_LOGGER_FORMAT_NAME, CONF_LOGGER_FORMAT_DEFAULT);
+        configurations.registerDefaultConfiguration(CONF_LOGGER_OUT_NAME, CONF_LOGGER_OUT_DEFAULT);
     }
 
     private void setupAnnocheck(){
@@ -218,16 +230,6 @@ public class MagicEnvironment {
         }
 
         try {
-            instanceManager.checkWaitMap(true);
-        }
-        catch (MagicInstanceException e) {
-            throw new MagicSetupException("Exception solving wait dependencies in the service-setup phase!", e);
-        }
-        catch (MagicInstanceWaitException e){
-            throw new MagicSetupException(e.getMessage());
-        }
-
-        try {
             instanceManager.callLifecycleMethods(LifecycleState.POST_SETUP);
         }
         catch (MagicInstanceException e){
@@ -239,7 +241,18 @@ public class MagicEnvironment {
         long startBeginTime = System.currentTimeMillis();
         log.info("Starting up the environment");
 
-        if(configurations.getBooleanOrDefault(CONF_ADD_SHUTDOWN_HOOK_NAME, CONF_ADD_SHUTDOWN_HOOK_DEFAULT)){
+        try {
+            instanceManager.checkWaitMap(true);
+        }
+        catch (MagicInstanceException e) {
+            throw new MagicRuntimeException("Exception solving wait dependencies in the service-setup phase!", e);
+        }
+        catch (MagicInstanceWaitException e){
+            throw new MagicRuntimeException(e.getMessage());
+        }
+
+
+        if(configurations.getBoolOrError(CONF_ADD_SHUTDOWN_HOOK_NAME, MagicRuntimeException::new)){
             log.debug("Adding shutdown-hook...");
             addShutdownHook();
         }
@@ -377,7 +390,7 @@ public class MagicEnvironment {
         }
 
         if(loggerImplementation instanceof IConfigurableLogger configurableLogger){
-            String _logLevel = configurations.getOrDefault(CONF_LOGGER_LEVEL_NAME, CONF_LOGGER_LEVEL_DEFAULT);
+            String _logLevel = configurations.getOrError(CONF_LOGGER_LEVEL_NAME, MagicSetupException::new);
             int logLevel;
             try {
                 logLevel = Integer.parseInt(_logLevel);
@@ -386,12 +399,12 @@ public class MagicEnvironment {
                 logLevel = ILogger.fromString(_logLevel);
             }
 
-            String logFormat = configurations.getOrDefault(CONF_LOGGER_FORMAT_NAME, CONF_LOGGER_FORMAT_DEFAULT);
-            String _logOut = configurations.getOrDefault(CONF_LOGGER_OUT_NAME, CONF_LOGGER_OUT_DEFAULT);
+            String logFormat = configurations.get(CONF_LOGGER_FORMAT_NAME);
+            String _logOut = configurations.get(CONF_LOGGER_OUT_NAME);
 
             try {
                 configurableLogger.level(logLevel);
-                configurableLogger.format(logFormat);
+                if(logFormat != null) configurableLogger.format(logFormat);
 
                 if(!_logOut.isEmpty()){
                     IOutput logOut;
@@ -471,6 +484,24 @@ public class MagicEnvironment {
 
     public void setLogger(ILogger log){
         this.log.setLogger(log);
+    }
+
+    public void setInstance(Class<?> cls, Object instance){
+        try {
+            instanceManager.registerInstance(cls, instance);
+        }
+        catch (MagicInstanceException e){
+            throw new MagicRuntimeException(e);
+        }
+    }
+
+    public <T> T getInstance(Class<T> cls){
+        try {
+            return instanceManager.getInstance(cls);
+        }
+        catch (MagicInstanceException e){
+            throw new MagicRuntimeException(e);
+        }
     }
 
 }

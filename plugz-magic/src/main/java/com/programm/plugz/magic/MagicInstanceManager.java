@@ -139,6 +139,7 @@ public class MagicInstanceManager implements IInstanceManager {
         private final SetupFunction setupFunction;
 
         private int missingParams;
+        private boolean registered;
 
         public MissingParamsConstructor(Class<?> cls, Constructor<?> constructor, boolean needsAccess, Object[] params, SetupFunction setupFunction) {
             this.cls = cls;
@@ -152,7 +153,6 @@ public class MagicInstanceManager implements IInstanceManager {
         public void putParam(int pos, Object param) throws MagicInstanceException {
             params[pos] = param;
             missingParams--;
-            if(missingParams == 0) invoke();
         }
 
         public void invoke() throws MagicInstanceException {
@@ -196,10 +196,26 @@ public class MagicInstanceManager implements IInstanceManager {
     private class MagicMethodImpl implements MagicMethod {
         private final Object instance;
         private final Method method;
-        private final Consumer<Object> waitedResponse;
+        private final int argsC, magicArgsC, nonMagicArgsC;
 
+        @Override
+        public int argsCount() {
+            return argsC;
+        }
+
+        @Override
+        public int magicArgsCount() {
+            return magicArgsC;
+        }
+
+        @Override
+        public int nonMagicArgsCount() {
+            return nonMagicArgsC;
+        }
+
+        @Override
         public Object invoke(Object... args) throws MagicInstanceException {
-            return tryInvokeMethod(instance, method, canWait, waitedResponse, args);
+            return tryInvokeMethod(instance, method, canWait, args);
         }
 
         @Override
@@ -572,7 +588,22 @@ public class MagicInstanceManager implements IInstanceManager {
 
     @Override
     public MagicMethod buildMagicMethod(Object instance, Method method) {
-        return new MagicMethodImpl(instance, method, null);
+        int argsC = method.getParameterCount();
+        int magicArgsC = 0;
+
+        Annotation[][] annotations = method.getParameterAnnotations();
+        for(int i=0;i<argsC;i++){
+            Annotation[] paramAnnotations = annotations[i];
+            for(Annotation paramAnnotation : paramAnnotations) {
+                Class<? extends Annotation> annotationType = paramAnnotation.annotationType();
+                if (annotationType == Get.class || annotationType == GetConfig.class) {
+                    magicArgsC++;
+                    break;
+                }
+            }
+        }
+
+        return new MagicMethodImpl(instance, method, argsC, magicArgsC, argsC - magicArgsC);
     }
 
     private void tryMagicMethods(Class<?> cls, Object instance) throws MagicInstanceException {
@@ -624,7 +655,7 @@ public class MagicInstanceManager implements IInstanceManager {
                         tryInvokeMethod(instance, method, canWait, null);
                     }
                     else {
-                        lifecycleMethods.computeIfAbsent(state, s -> new ArrayList<>()).add(new MagicMethodImpl(instance, method, null));
+                        lifecycleMethods.computeIfAbsent(state, s -> new ArrayList<>()).add(buildMagicMethod(instance, method));
                     }
                     continue annotationsLoop;
                 }
@@ -654,12 +685,7 @@ public class MagicInstanceManager implements IInstanceManager {
         for(int i=0;i<parameters.length;i++){
             Parameter parameter = parameters[i];
             Class<?> parameterType = parameter.getType();
-            if(!parameter.isAnnotationPresent(Get.class)){
-                if(getInstanceType != null) throw new MagicInstanceException("Magic getter method [" + method + "] cannot have more than 1 non - magic parameter!");
-                getInstanceType = parameterType;
-                _getInstancePos = i;
-            }
-            else {
+            if(parameter.isAnnotationPresent(Get.class)){
                 Get paramGetAnnotation = parameter.getAnnotation(Get.class);
                 final boolean required = paramGetAnnotation.required();
                 final int pos = i;
@@ -696,6 +722,17 @@ public class MagicInstanceManager implements IInstanceManager {
                         System.out.println("TODO 1");
                     }
                 }
+            }
+            else if(parameter.isAnnotationPresent(GetConfig.class)){
+                GetConfig paramGetConfigAnnotation = parameter.getAnnotation(GetConfig.class);
+                Object value = _getConfigValueAsInstanceFunction(parameterType, paramGetConfigAnnotation);
+                if(value == null) throw new MagicInstanceException("Missing config value [" + paramGetConfigAnnotation.value() + "] for parameter of type: [" + parameterType + "]!");
+                mpm.putParam(i, value);
+            }
+            else {
+                if(getInstanceType != null) throw new MagicInstanceException("Magic getter method [" + method + "] cannot have more than 1 non - magic parameter!");
+                getInstanceType = parameterType;
+                _getInstancePos = i;
             }
         }
 
@@ -753,17 +790,14 @@ public class MagicInstanceManager implements IInstanceManager {
         for(int i=0;i<parameters.length;i++){
             Parameter parameter = parameters[i];
             Class<?> parameterType = parameter.getType();
-            if(!parameter.isAnnotationPresent(Get.class)){
-                throw new MagicInstanceException("Magic setter method [" + method + "] cannot have non - magic parameters!");
-            }
-            else {
+            if(parameter.isAnnotationPresent(Get.class)){
                 Get paramGetAnnotation = parameter.getAnnotation(Get.class);
                 final boolean required = paramGetAnnotation.required();
                 final int pos = i;
                 Object paramInstance = getInstance(parameterType);
 
                 if(paramInstance != null){
-                    mip.putParam(pos, paramInstance);
+                    mip.putParam(i, paramInstance);
                 }
                 else {
                     if(canWait) {
@@ -796,13 +830,22 @@ public class MagicInstanceManager implements IInstanceManager {
                     else {
                         if(required) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + parameterType + "]!");
                         Object defaultValue = ValueUtils.getDefaultValue(parameterType);
-                        mip.putParam(pos, defaultValue);
-                        if (mip.missingParams == 0 && !mip.registered) {
-                            mip.registered = true;
-                            registerFunction.register(providedType, setAnnotation, mip);
-                        }
+                        mip.putParam(i, defaultValue);
+//                        if (mip.missingParams == 0 && !mip.registered) {
+//                            mip.registered = true;
+//                            registerFunction.register(providedType, setAnnotation, mip);
+//                        }
                     }
                 }
+            }
+            else if(parameter.isAnnotationPresent(GetConfig.class)){
+                GetConfig paramGetConfigAnnotation = parameter.getAnnotation(GetConfig.class);
+                Object value = _getConfigValueAsInstanceFunction(parameterType, paramGetConfigAnnotation);
+                if(value == null) throw new MagicInstanceException("Missing config value [" + paramGetConfigAnnotation.value() + "] for parameter of type: [" + parameterType + "]!");
+                mip.putParam(i, value);
+            }
+            else {
+                throw new MagicInstanceException("Magic setter method [" + method + "] cannot have non - magic parameters!");
             }
         }
 
@@ -812,7 +855,7 @@ public class MagicInstanceManager implements IInstanceManager {
         }
     }
 
-    private Object tryInvokeMethod(Object instance, Method method, boolean canWait, Consumer<Object> waitedResponse, Object... parameters) throws MagicInstanceException {
+    private Object tryInvokeMethod(Object instance, Method method, boolean canWait, Object... parameters) throws MagicInstanceException {
         Object[] params = new Object[method.getParameterCount()];
         AtomicInteger missingParams = new AtomicInteger(params.length);
 
@@ -821,12 +864,7 @@ public class MagicInstanceManager implements IInstanceManager {
         for(int i=0;i<mParameters.length;i++){
             Parameter parameter = mParameters[i];
             Class<?> parameterType = parameter.getType();
-            if(!parameter.isAnnotationPresent(Get.class)){
-                if(o >= parameters.length) throw new MagicInstanceException("Missing non-magic parameter of type: [" + parameterType + "]!");
-                params[i] = parameters[o++];
-                missingParams.decrementAndGet();
-            }
-            else {
+            if(parameter.isAnnotationPresent(Get.class)){
                 Get paramGetAnnotation = parameter.getAnnotation(Get.class);
                 final boolean required = paramGetAnnotation.required();
                 final int pos = i;
@@ -860,8 +898,7 @@ public class MagicInstanceManager implements IInstanceManager {
                                 missingParams.decrementAndGet();
 
                                 if (missingParams.get() == 0) {
-                                    Object result = invokeMethod(instance, method, params);
-                                    if(waitedResponse != null) waitedResponse.accept(result);
+                                    /*Object result = */invokeMethod(instance, method, params);
                                 }
                             }
                         });
@@ -873,6 +910,18 @@ public class MagicInstanceManager implements IInstanceManager {
                         missingParams.decrementAndGet();
                     }
                 }
+            }
+            else if(parameter.isAnnotationPresent(GetConfig.class)){
+                GetConfig paramGetConfigAnnotation = parameter.getAnnotation(GetConfig.class);
+                Object value = _getConfigValueAsInstanceFunction(parameterType, paramGetConfigAnnotation);
+                if(value == null) throw new MagicInstanceException("Missing config value [" + paramGetConfigAnnotation.value() + "] for parameter of type: [" + parameterType + "]!");
+                params[i] = value;
+                missingParams.decrementAndGet();
+            }
+            else {
+                if(o >= parameters.length) throw new MagicInstanceException("Missing non-magic parameter of type: [" + parameterType + "]!");
+                params[i] = parameters[o++];
+                missingParams.decrementAndGet();
             }
         }
 
@@ -960,9 +1009,7 @@ public class MagicInstanceManager implements IInstanceManager {
 
             int c = 0;
             for(Parameter parameter : parameters){
-                Get getAnnotation = parameter.getAnnotation(Get.class);
-
-                if(getAnnotation == null){
+                if(!parameter.isAnnotationPresent(Get.class) && !parameter.isAnnotationPresent(GetConfig.class)){
                     if(params == null || c >= params.length) continue nextConstructor;
                     Object param = params[c];
                     if(param != null) {
@@ -993,13 +1040,8 @@ public class MagicInstanceManager implements IInstanceManager {
         int i = 0, c = 0;
         for (Parameter parameter : con.getParameters()) {
             Class<?> parameterType = parameter.getType();
-            Get getAnnotation = parameter.getAnnotation(Get.class);
-
-            if (getAnnotation == null) {
-                if(params == null || c >= params.length) throw new MagicInstanceException("Invalid number of non - magic parameters!");
-                collectedParams[i] = params[c++];
-            }
-            else {
+            if (parameter.isAnnotationPresent(Get.class)) {
+                Get getAnnotation = parameter.getAnnotation(Get.class);
                 Object instance = getInstance(parameterType);
 
                 if(instance == null){
@@ -1025,9 +1067,12 @@ public class MagicInstanceManager implements IInstanceManager {
                             @Override
                             public void accept(Object o) throws MagicInstanceException {
                                 mpc.putParam(pos, o);
+                                if(mpc.missingParams == 0 && !mpc.registered){
+                                    mpc.registered = true;
+                                    mpc.invoke();
+                                }
                             }
                         });
-
                     }
                     else {
                         if(getAnnotation.required()) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + parameterType + "]!");
@@ -1035,14 +1080,24 @@ public class MagicInstanceManager implements IInstanceManager {
                     }
                 }
 
-                collectedParams[i] = instance;
-                mpc.missingParams--;
+                mpc.putParam(i, instance);
+            }
+            else if(parameter.isAnnotationPresent(GetConfig.class)){
+                GetConfig getConfigAnnotation = parameter.getAnnotation(GetConfig.class);
+                Object value = _getConfigValueAsInstanceFunction(parameterType, getConfigAnnotation);
+                if(value == null) throw new MagicInstanceException("Missing config value [" + getConfigAnnotation.value() + "] for parameter of type: [" + parameterType + "]!");
+                mpc.putParam(i, value);
+            }
+            else {
+                if(params == null || c >= params.length) throw new MagicInstanceException("Invalid number of non - magic parameters!");
+                mpc.putParam(i, params[c++]);
             }
 
             i++;
         }
 
-        if(mpc.missingParams == 0) {
+        if(mpc.missingParams == 0 && !mpc.registered) {
+            mpc.registered = true;
             mpc.invoke();
         }
     }

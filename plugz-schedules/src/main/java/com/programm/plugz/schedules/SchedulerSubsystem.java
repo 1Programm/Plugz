@@ -21,7 +21,7 @@ public class SchedulerSubsystem implements ISubsystem {
 
     public SchedulerSubsystem(@Get ILogger log, @Get IAsyncManager asyncManager, @Get PlugzConfig config){
         this.log = log;
-        long minSleep = config.getLongOrDefault(CONF_MIN_SLEEP_NAME, CONF_MIN_SLEEP_DEFAULT);
+        long minSleep = config.getLongOrRegisterDefault(CONF_MIN_SLEEP_NAME, CONF_MIN_SLEEP_DEFAULT);
         this.scheduleManager = new ScheduleManager(log, asyncManager, minSleep);
     }
 

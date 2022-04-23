@@ -34,6 +34,12 @@ class ConfigurationManager implements PlugzConfig {
     }
 
     @Override
+    public void registerDefaultConfiguration(String key, Object value){
+        if(configValues.containsKey(key)) return;
+        configValues.put(key, value);
+    }
+
+    @Override
     public void registerConfiguration(String key, Object value){
         configValues.put(key, value);
     }

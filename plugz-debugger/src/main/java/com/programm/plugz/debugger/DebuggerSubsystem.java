@@ -31,8 +31,8 @@ class DebuggerSubsystem implements ISubsystem {
         this.asyncManager = asyncManager;
         this.window = new DebuggerWindow(asyncManager);
 
-        long fpsSleepMillis = config.getLongOrDefault(CONF_FPS_SLEEP_NAME, CONF_FPS_SLEEP_DEFAULT);
-        long longSleepMillis = config.getLongOrDefault(CONF_LONG_SLEEP_NAME, CONF_LONG_SLEEP_DEFAULT);
+        long fpsSleepMillis = config.getLongOrRegisterDefault(CONF_FPS_SLEEP_NAME, CONF_FPS_SLEEP_DEFAULT);
+        long longSleepMillis = config.getLongOrRegisterDefault(CONF_LONG_SLEEP_NAME, CONF_LONG_SLEEP_DEFAULT);
         this.updater = new DebugUpdater(window, fpsSleepMillis, longSleepMillis);
     }
 
