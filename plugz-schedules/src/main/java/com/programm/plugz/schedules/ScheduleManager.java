@@ -36,8 +36,11 @@ public class ScheduleManager implements Runnable, ISchedules {
         }
 
         try {
+            long delta = 0;
             while(running && !paused){
-                Thread.sleep(minSleep);
+                if(delta < minSleep) {
+                    Thread.sleep(minSleep - delta);
+                }
 
                 now = curTime();
 
@@ -55,19 +58,21 @@ public class ScheduleManager implements Runnable, ISchedules {
                             }
                         }
                     } else {
-                        if (config.startedLast + config.repeatAfter < now) {
+                        if (config.startedLast + config.repeatAfter <= now) {
                             config.startedLast = now;
                             runConfig(config);
                         }
                     }
 
                     if (config.stopAfter != 0) {
-                        if (config.startedAt + config.stopAfter < now) {
+                        if (config.startedAt + config.stopAfter <= now) {
                             schedulerConfigs.remove(i);
                             i--;
                         }
                     }
                 }
+
+                delta = curTime() - now;
 
                 if(schedulerConfigs.isEmpty()){
                     paused = true;
