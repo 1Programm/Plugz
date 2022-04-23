@@ -1,5 +1,7 @@
 package com.programm.plugz.magic;
 
+import com.programm.ioutils.log.api.ILogger;
+import com.programm.ioutils.log.api.Logger;
 import com.programm.plugz.api.MagicSetupException;
 import com.programm.plugz.api.PlugzConfig;
 import com.programm.plugz.api.utils.ValueParseException;
@@ -20,12 +22,16 @@ import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 
+@Logger("Config Manager")
 class ConfigurationManager implements PlugzConfig {
+
+    private final ILogger log;
 
     public final Map<String, Object> configValues = new HashMap<>();
     public String configProfile;
 
-    public ConfigurationManager(String... args) {
+    public ConfigurationManager(ILogger log, String... args) {
+        this.log = log;
         collectConfigArgs(args);
     }
 
@@ -36,11 +42,13 @@ class ConfigurationManager implements PlugzConfig {
     @Override
     public void registerDefaultConfiguration(String key, Object value){
         if(configValues.containsKey(key)) return;
+        log.trace("Default Config: %20<({}) -> {}", key, value);
         configValues.put(key, value);
     }
 
     @Override
     public void registerConfiguration(String key, Object value){
+        log.trace("Config: %20<({}) -> {}", key, value);
         configValues.put(key, value);
     }
 
@@ -58,6 +66,7 @@ class ConfigurationManager implements PlugzConfig {
     }
 
     private void collectConfigArgs(String... args) {
+        log.trace("Reading configs from program args...");
         for(int i=0;i<args.length;i++){
             if(args[i].startsWith("-")){
                 String key = args[i].substring(1);
@@ -77,12 +86,14 @@ class ConfigurationManager implements PlugzConfig {
                     value = ValueUtils.getPrimitiveValue(args[i + 1]);
                 }
 
+                log.trace("# %20<({}) -> {}", key, value);
                 configValues.put(key, value);
             }
         }
     }
 
     private void readProfile() throws MagicSetupException {
+        log.debug("Searching config file for profile [{}]", configProfile);
         if(configProfile == null) {
             tryLoadConfigResource(true, "" +
                     "plugz.xml",
@@ -101,17 +112,21 @@ class ConfigurationManager implements PlugzConfig {
 
     private void tryLoadConfigResource(boolean allowFail, String... names) throws MagicSetupException {
         for(String name : names){
+            log.trace("Try to get config resource [{}]...", name);
             InputStream is = ConfigurationManager.class.getResourceAsStream("/" + name);
             if(is == null) continue;
 
             try{
                 if(name.endsWith(".xml")){
+                    log.trace("Reading configs from xml - file...");
                     loadXmlConfigResource(is);
                 }
                 else if(name.endsWith(".yml") || name.endsWith(".yaml")){
+                    log.trace("Reading configs from yml/yaml - file...");
                     loadYamlConfigResource(is);
                 }
                 else if(name.endsWith(".properties")){
+                    log.trace("Reading configs from properties - file...");
                     loadPropsConfigResource(is);
                 }
                 else {
@@ -134,7 +149,10 @@ class ConfigurationManager implements PlugzConfig {
             }
         }
 
-        if(!allowFail) {
+        if(allowFail){
+            log.trace("No default config file found");
+        }
+        else {
             throw new MagicSetupException("Could not find the configuration profile [" + configProfile + "]!");
         }
     }
@@ -178,6 +196,7 @@ class ConfigurationManager implements PlugzConfig {
 
         if(_value != null){
             Object value = ValueUtils.getPrimitiveValue(_value);
+            log.trace("# %20<({}) -> {}", nPath, value);
             configValues.put(nPath, value);
             return;
         }

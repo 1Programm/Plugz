@@ -35,7 +35,7 @@ public class PlugzUrlClassScanner {
                 URL url = searchUrls.get(i);
                 String urlFile = url.getFile();
 
-                if (i != 0 && log.level() == ILogger.LEVEL_TRACE) log.debug("");
+                if (i != 0 && log.level() == ILogger.LEVEL_TRACE) log.trace("");
 
                 if (urlFile.endsWith(".jar")) {
                     log.debug("# Scanning url as jar: [{}]...", url);
@@ -212,7 +212,7 @@ public class PlugzUrlClassScanner {
             Class<?> annotationType = annotation.annotationType();
             List<Class<?>> registeredClasses = foundAnnotatedClasses.get(annotationType);
             if(registeredClasses != null && !registeredClasses.contains(cls)) {
-                log.trace("###    %70<({}) is annotated with [{}]", cls, annotationType);
+                log.trace("### {} is annotated with [{}]", cls, annotationType);
                 registeredClasses.add(cls);
             }
         }
@@ -227,7 +227,7 @@ public class PlugzUrlClassScanner {
         else {
             List<Class<?>> registeredImplementations = foundImplementingClasses.get(cls);
             if(registeredImplementations != null && !registeredImplementations.contains(actualCls)) {
-                log.trace("###    %70<({}) is an implementation of [{}]", actualCls, cls);
+                log.trace("### {} is an implementation of [{}]", actualCls, cls);
                 registeredImplementations.add(actualCls);
             }
         }

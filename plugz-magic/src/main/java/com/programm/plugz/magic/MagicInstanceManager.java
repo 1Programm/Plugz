@@ -831,10 +831,6 @@ public class MagicInstanceManager implements IInstanceManager {
                         if(required) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + parameterType + "]!");
                         Object defaultValue = ValueUtils.getDefaultValue(parameterType);
                         mip.putParam(i, defaultValue);
-//                        if (mip.missingParams == 0 && !mip.registered) {
-//                            mip.registered = true;
-//                            registerFunction.register(providedType, setAnnotation, mip);
-//                        }
                     }
                 }
             }

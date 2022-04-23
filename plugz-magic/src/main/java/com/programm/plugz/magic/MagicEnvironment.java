@@ -72,7 +72,7 @@ public class MagicEnvironment {
         this.log = new LoggerProxy();
         this.scanner = new PlugzUrlClassScanner();
         this.scanner.setLogger(log);
-        this.configurations = new ConfigurationManager(args);
+        this.configurations = new ConfigurationManager(log, args);
 
         initDefaultConfigs();
 
@@ -129,8 +129,8 @@ public class MagicEnvironment {
     private void doSetup() throws MagicSetupException {
         log.info("Setting up the environment with profile: [{}]", configurations.profile());
 
-        log.debug("Initializing configurations from args and profile-resource...");
         try {
+            log.debug("Initializing configurations from args and profile-resource...");
             configurations.init();
         }
         catch (MagicSetupException e){
@@ -138,17 +138,19 @@ public class MagicEnvironment {
         }
 
         List<URL> collectedUrls;
-
-        log.debug("Collecting urls to scan through...");
         try {
+            log.debug("Collecting context urls...");
             collectedUrls = collectScanUrls();
         }
         catch (IOException e){
             throw new MagicSetupException("Failed to collect scan urls.", e);
         }
 
-        log.debug("Starting config scan");
+        logLifecycleState(LifecycleState.PRE_SETUP);
+
         try {
+            log.debug("Starting config scan");
+
             scanner.addSearchClass(ISubsystem.class);
             scanner.addSearchClass(ILogger.class);
             scanner.addSearchAnnotation(Config.class);
@@ -199,9 +201,8 @@ public class MagicEnvironment {
             throw new MagicSetupException("Failed to prepare subsystems!", e);
         }
 
-
-        log.debug("Starting main scan");
         try {
+            log.debug("Starting main scan");
             log.debug("Scanning through {} collected urls with a base package of [{}]...", collectedUrls.size(), basePackage);
             scanner.scan(collectedUrls, basePackage);
         }
@@ -221,8 +222,8 @@ public class MagicEnvironment {
             }
         }
 
-        log.debug("Setting up discovered classes from subsystems...");
         try {
+            log.debug("Setting up discovered classes from subsystems...");
             subsystems.setupFoundClasses();
         }
         catch (MagicInstanceException e){
@@ -230,6 +231,7 @@ public class MagicEnvironment {
         }
 
         try {
+            logLifecycleState(LifecycleState.POST_SETUP);
             instanceManager.callLifecycleMethods(LifecycleState.POST_SETUP);
         }
         catch (MagicInstanceException e){
@@ -258,6 +260,7 @@ public class MagicEnvironment {
         }
 
         try {
+            logLifecycleState(LifecycleState.PRE_STARTUP);
             instanceManager.callLifecycleMethods(LifecycleState.PRE_STARTUP);
         }
         catch (MagicInstanceException e){
@@ -272,6 +275,7 @@ public class MagicEnvironment {
         }
 
         try {
+            logLifecycleState(LifecycleState.POST_STARTUP);
             instanceManager.callLifecycleMethods(LifecycleState.POST_STARTUP);
         }
         catch (MagicInstanceException e){
@@ -287,6 +291,7 @@ public class MagicEnvironment {
         long shutdownBeginTime = System.currentTimeMillis();
         log.info("Shutting down the environment");
         try {
+            logLifecycleState(LifecycleState.PRE_SHUTDOWN);
             instanceManager.callLifecycleMethods(LifecycleState.PRE_SHUTDOWN);
         }
         catch (MagicInstanceException e){
@@ -304,6 +309,7 @@ public class MagicEnvironment {
         asyncManager.shutdown();
 
         try {
+            logLifecycleState(LifecycleState.POST_SHUTDOWN);
             instanceManager.callLifecycleMethods(LifecycleState.POST_SHUTDOWN);
         }
         catch (MagicInstanceException e){
@@ -468,6 +474,14 @@ public class MagicEnvironment {
         }
 
         log.setLogger(loggerImplementation);
+    }
+
+    private void logLifecycleState(LifecycleState state){
+        String _state = state.toString().toUpperCase();
+        int numEquals = 50 - _state.length();
+        int half = numEquals / 2;
+        boolean even = numEquals % 2 == 0;
+        log.debug("=".repeat(half) + "[ " + _state + " ]" + "=".repeat(even ? half : half + 1));
     }
 
     private void addShutdownHook(){
