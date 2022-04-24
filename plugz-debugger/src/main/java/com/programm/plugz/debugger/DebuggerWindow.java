@@ -93,19 +93,7 @@ public class DebuggerWindow extends WindowAdapter {
     }
 
     private boolean isFPSValue(MagicDebugValueUI value){
-        if(value.debugValue.children.length == 0) {
-            if (value.debugValue.dValueInstance != null) return false;
-            return value.enabled();
-        }
-        else {
-            if(value.isChildrenVisible && value.enabled()){
-                for(MagicDebugValueUI childValue : value.childrenUI){
-                    if(isFPSValue(childValue)) return true;
-                }
-            }
-
-            return false;
-        }
+        return value.debugValue.dValueInstance == null && value.enabled();
     }
 
     public void updateFPSValues(){
@@ -118,22 +106,33 @@ public class DebuggerWindow extends WindowAdapter {
         if(value.debugValue.children.length == 0) {
             if (value.debugValue.dValueInstance != null || !value.enabled()) return;
 
-            String _value = getValueFromMagicDebugValue(value.debugValue);
-            value.setValue(_value);
+            if(value.debugValue.instance != null) {
+                String _value = Objects.toString(getValueFromMagicDebugValue(value.debugValue));
+                value.setValue(_value);
+            }
         }
         else {
-            if(value.isChildrenVisible && value.enabled()) {
-                for (MagicDebugValueUI childValue : value.childrenUI) {
-                    updateFPSValue(childValue);
+            if(value.enabled()){
+                if(value.debugValue.dValueInstance == null && value.debugValue.instance != null && value.isChildrenVisible) {
+                    Object _value = getValueFromMagicDebugValue(value.debugValue);
+                    for (MagicDebugValueUI childValue : value.childrenUI) {
+                        childValue.debugValue.instance = _value;
+                    }
+                }
+
+                if(value.isChildrenVisible) {
+                    for (MagicDebugValueUI childValue : value.childrenUI) {
+                        updateFPSValue(childValue);
+                    }
                 }
             }
         }
     }
 
-    private String getValueFromMagicDebugValue(MagicDebugValue magicValue){
+    private Object getValueFromMagicDebugValue(MagicDebugValue magicValue){
         try {
             if(magicValue.needsAccess) magicValue.field.setAccessible(true);
-            String value =  Objects.toString(magicValue.field.get(magicValue.instance));
+            Object value = magicValue.field.get(magicValue.instance);
             if(magicValue.needsAccess) magicValue.field.setAccessible(false);
             return value;
         }

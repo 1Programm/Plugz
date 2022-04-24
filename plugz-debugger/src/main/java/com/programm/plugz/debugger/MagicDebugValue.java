@@ -4,7 +4,7 @@ import java.lang.reflect.Field;
 
 class MagicDebugValue {
 
-    public final Object instance;
+    public Object instance;
     public final Field field;
     public final boolean needsAccess;
     public final String name;
