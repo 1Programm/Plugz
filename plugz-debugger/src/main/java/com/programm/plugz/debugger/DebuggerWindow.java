@@ -14,7 +14,7 @@ import java.util.Objects;
 public class DebuggerWindow extends WindowAdapter {
 
     private static final String WIN_TITLE = "Plugz Debugger";
-    private static final int WIN_INIT_WIDTH = 600;
+    private static final int WIN_INIT_WIDTH = 800;
     private static final int WIN_INIT_HEIGHT = 500;
 
     private final IAsyncManager asyncManager;
@@ -55,10 +55,7 @@ public class DebuggerWindow extends WindowAdapter {
 
     public void addDebugValue(MagicDebugValue value){
         MagicDebugValueUI ui = new MagicDebugValueUI(value);
-
-        if(value.dValueInstance != null){
-            value.dValueInstance.addChangeListener(ui.getChangeListener());
-        }
+        tryRegisterMagicValue(ui);
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridwidth = GridBagConstraints.REMAINDER;
@@ -66,6 +63,19 @@ public class DebuggerWindow extends WindowAdapter {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         listPane.add(ui, gbc, debugValues.size());
         debugValues.add(ui);
+    }
+
+    private void tryRegisterMagicValue(MagicDebugValueUI value){
+        if(value.debugValue.dValueInstance != null){
+            if(value.childrenUI.length == 0) {
+                value.debugValue.dValueInstance.addChangeListener(value.getChangeListener());
+            }
+            else {
+                for(MagicDebugValueUI childValue : value.childrenUI){
+                    tryRegisterMagicValue(childValue);
+                }
+            }
+        }
     }
 
     @Override
@@ -76,19 +86,47 @@ public class DebuggerWindow extends WindowAdapter {
 
     public boolean hasFPSValues(){
         for(MagicDebugValueUI uiValue : debugValues){
-            if(uiValue.debugValue.dValueInstance != null) continue;
-            if(uiValue.enabled()) return true;
+            if(isFPSValue(uiValue)) return true;
         }
 
         return false;
     }
 
+    private boolean isFPSValue(MagicDebugValueUI value){
+        if(value.debugValue.children.length == 0) {
+            if (value.debugValue.dValueInstance != null) return false;
+            return value.enabled();
+        }
+        else {
+            if(value.isChildrenVisible && value.enabled()){
+                for(MagicDebugValueUI childValue : value.childrenUI){
+                    if(isFPSValue(childValue)) return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
     public void updateFPSValues(){
         for(MagicDebugValueUI uiValue : debugValues){
-            if(uiValue.debugValue.dValueInstance != null || !uiValue.enabled()) continue;
+            updateFPSValue(uiValue);
+        }
+    }
 
-            String value = getValueFromMagicDebugValue(uiValue.debugValue);
-            uiValue.setValue(value);
+    private void updateFPSValue(MagicDebugValueUI value){
+        if(value.debugValue.children.length == 0) {
+            if (value.debugValue.dValueInstance != null || !value.enabled()) return;
+
+            String _value = getValueFromMagicDebugValue(value.debugValue);
+            value.setValue(_value);
+        }
+        else {
+            if(value.isChildrenVisible && value.enabled()) {
+                for (MagicDebugValueUI childValue : value.childrenUI) {
+                    updateFPSValue(childValue);
+                }
+            }
         }
     }
 

@@ -6,11 +6,14 @@ import com.programm.plugz.annocheck.AnnotationChecker;
 import com.programm.plugz.api.*;
 import com.programm.plugz.api.auto.Get;
 import com.programm.plugz.api.instance.IInstanceManager;
+import com.programm.plugz.api.utils.ValueUtils;
 
 import javax.swing.*;
 import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.List;
 
 @Logger("Debugger")
 class DebuggerSubsystem implements ISubsystem {
@@ -69,16 +72,48 @@ class DebuggerSubsystem implements ISubsystem {
             debugName = field.getDeclaringClass().getSimpleName() + "#" + field.getName();
         }
 
+        MagicDebugValue magicDebugValue = getDebugValue(instance, field, debugName, manager);
+        window.addDebugValue(magicDebugValue);
+    }
+
+    private MagicDebugValue getDebugValue(Object instance, Field field, String debugName, IInstanceManager manager){
         DValue<?> debugValueInstance = null;
 
         Class<?> type = field.getType();
+        Object theInstance = manager.getField(field, instance);
         if(DValue.class.isAssignableFrom(type)){
-            debugValueInstance = (DValue<?>) manager.getField(field, instance);
+            debugValueInstance = (DValue<?>) theInstance;
+            type = debugValueInstance.type;
+            theInstance = debugValueInstance.value;
+        }
+
+        List<MagicDebugValue> childrenList = new ArrayList<>();
+        if(theInstance != null && isValidField(type)) {
+            Field[] fields = type.getDeclaredFields();
+            for(Field childField : fields){
+                String childName = childField.getName();
+                if(childField.isAnnotationPresent(DebugValue.class)){
+                    DebugValue debugValueAnnotation = childField.getAnnotation(DebugValue.class);
+                    String _childName = debugValueAnnotation.value();
+                    if(!_childName.isEmpty()){
+                        childName = _childName;
+                    }
+                }
+                MagicDebugValue childValue = getDebugValue(theInstance, childField, childName, manager);
+                childrenList.add(childValue);
+            }
         }
 
         boolean needsAccess = !Modifier.isPublic(field.getModifiers());
 
-        MagicDebugValue magicDebugValue = new MagicDebugValue(instance, field, needsAccess, debugName, debugValueInstance);
-        window.addDebugValue(magicDebugValue);
+
+        MagicDebugValue[] children = childrenList.toArray(new MagicDebugValue[0]);
+        return new MagicDebugValue(instance, field, needsAccess, debugName, debugValueInstance, children);
+    }
+
+    private boolean isValidField(Class<?> type){
+        if(type == String.class) return false;
+        type = ValueUtils.unwrapPrimitiveWrapper(type);
+        return !type.isPrimitive();
     }
 }

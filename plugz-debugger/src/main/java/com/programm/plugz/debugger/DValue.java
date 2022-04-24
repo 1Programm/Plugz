@@ -12,7 +12,7 @@ public class DValue<T> {
         }
 
         public Bool(Boolean value) {
-            super(value);
+            super(value, Boolean.class);
         }
 
         public void toggle(){
@@ -26,7 +26,7 @@ public class DValue<T> {
         }
 
         public Int(Integer value) {
-            super(value);
+            super(value, Integer.class);
         }
 
         public void add(int i){
@@ -52,7 +52,7 @@ public class DValue<T> {
         }
 
         public Long(java.lang.Long value) {
-            super(value);
+            super(value, java.lang.Long.class);
         }
 
         public void add(long i){
@@ -78,7 +78,7 @@ public class DValue<T> {
         }
 
         public Float(java.lang.Float value) {
-            super(value);
+            super(value, java.lang.Float.class);
         }
 
         public void add(float i){
@@ -104,7 +104,7 @@ public class DValue<T> {
         }
 
         public Double(java.lang.Double value) {
-            super(value);
+            super(value, java.lang.Double.class);
         }
 
         public void add(double i){
@@ -129,11 +129,20 @@ public class DValue<T> {
 
     private final List<Runnable> changeListeners = new ArrayList<>();
     protected T value;
+    protected Class<T> type;
 
-    public DValue(){}
+    public DValue(Class<T> type){
+        this.type = type;
+    }
 
-    public DValue(T value){
+    public DValue(T value, Class<T> type){
         this.value = value;
+        this.type = type;
+    }
+
+    @SuppressWarnings("unchecked")
+    void setValue(Object value){
+        set((T) value);
     }
 
     public void set(T value){
