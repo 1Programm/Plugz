@@ -96,7 +96,6 @@ class ThreadPoolManager implements IAsyncManager {
             }
             catch (InterruptedException e){
                 running = false;
-                log.info("INTERRUPTED");
             }
 
             log.trace("[{}]: no tasks available. Waiting for restart ...", name);
