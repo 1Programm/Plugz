@@ -19,17 +19,24 @@ public class TestService {
         Test e;
     }
 
-    @DebugValue
+    //@DebugValue
     Test test = new Test(10, 0, null, null, new Test());
 
     @DebugValue
-    int a;
+    Test a;
 
-    @Scheduled(repeat = 1000)
+    @Scheduled(repeat = 1000, stopAfter = 10000)
     public void test(@Get ILogger log){
         test.a++;
-        log.info("{}", test.a);
+        //log.info("{}", test.a);
         test.e.a = test.a * 2;
+
+        if((test.a - 5) % 10 == 0){
+            a = new Test(9, 9, "a", "b", null);
+        }
+        else if((test.a - 10) % 10 == 0){
+            a = null;
+        }
     }
 
 }

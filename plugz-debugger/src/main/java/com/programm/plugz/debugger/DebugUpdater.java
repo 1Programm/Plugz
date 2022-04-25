@@ -20,11 +20,17 @@ class DebugUpdater {
         this.running = true;
         try {
             while(running){
-                if(window.hasFPSValues()){
-                    window.updateFPSValues();
-                    Thread.sleep(fpsSleepMillis);
+                if(window.tabIndex == 0){
+                    if(window.tabValues.hasFPSValues()){
+                        window.tabValues.update();
+                        Thread.sleep(fpsSleepMillis);
+                    }
+                    else {
+                        Thread.sleep(longSleepMillis);
+                    }
                 }
                 else {
+                    window.getCurrentTab().update();
                     Thread.sleep(longSleepMillis);
                 }
             }

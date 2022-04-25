@@ -14,6 +14,7 @@ class MagicDebugValueUI extends JPanel {
 
     final MagicDebugValue debugValue;
     private final JButton collapseChildren;
+    private final Component collapseChildrenReplacement;
     private final JCheckBox enabledCheckbox;
     private final JLabel valueLabel;
     private final JButton editSaveButton;
@@ -41,9 +42,22 @@ class MagicDebugValueUI extends JPanel {
         gbc.gridy = 0;
 
         if(numChildren != 0){
+            this.collapseChildrenReplacement = Box.createHorizontalStrut(20);
+            gbc.gridwidth = 1;
+            gbc.weightx = 0;
+            gbc.ipadx = 5;
+            this.add(collapseChildrenReplacement, gbc);
+
             this.collapseChildren = new JButton(">");
             this.collapseChildren.setPreferredSize(new Dimension(20, 18));
             this.collapseChildren.addActionListener(this::onCollapseChildren);
+            if(debugValue.children[0].instance == null) {
+                this.collapseChildren.setVisible(false);
+            }
+            else {
+                this.collapseChildrenReplacement.setVisible(false);
+            }
+
             gbc.gridwidth = 1;
             gbc.weightx = 0;
             gbc.ipadx = 5;
@@ -69,6 +83,7 @@ class MagicDebugValueUI extends JPanel {
             gbc.ipadx = 5;
             this.add(Box.createHorizontalStrut(20), gbc);
             this.collapseChildren = null;
+            this.collapseChildrenReplacement = null;
         }
 
         this.enabledCheckbox = new JCheckBox();
@@ -143,15 +158,21 @@ class MagicDebugValueUI extends JPanel {
             for(int i=0;i<numChildren;i++){
                 childrenUI[i].setVisible(false);
             }
+            isChildrenVisible = false;
         }
         else {
-            this.collapseChildren.setText("V");
-            for(int i=0;i<numChildren;i++){
-                childrenUI[i].setVisible(true);
+            if(childrenUI.length == 0){
+                this.collapseChildren.setText("V");
+                isChildrenVisible = true;
+            }
+            else if(childrenUI[0].debugValue.instance != null){
+                this.collapseChildren.setText("V");
+                for(int i=0;i<numChildren;i++){
+                    childrenUI[i].setVisible(true);
+                }
+                isChildrenVisible = true;
             }
         }
-
-        isChildrenVisible = !isChildrenVisible;
     }
 
     private void onEnabledToggle(ActionEvent e){
@@ -255,6 +276,29 @@ class MagicDebugValueUI extends JPanel {
         }
         finally {
             if (debugValue.needsAccess) f.setAccessible(false);
+        }
+    }
+
+    public void setInstance(Object instance){
+        if(numChildren != 0){
+            if(childrenUI[0].debugValue.instance == null && instance != null) {
+                collapseChildren.setVisible(true);
+                collapseChildrenReplacement.setVisible(false);
+            }
+            else if(childrenUI[0].debugValue.instance != null && instance == null){
+                collapseChildren.setVisible(false);
+                collapseChildrenReplacement.setVisible(true);
+
+                this.collapseChildren.setText(">");
+                for(int i=0;i<numChildren;i++){
+                    childrenUI[i].setVisible(false);
+                }
+                isChildrenVisible = false;
+            }
+
+            for(MagicDebugValueUI childValue : childrenUI) {
+                childValue.debugValue.instance = instance;
+            }
         }
     }
 }

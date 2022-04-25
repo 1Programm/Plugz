@@ -9,6 +9,8 @@ import com.programm.plugz.api.PlugzConfig;
 import com.programm.plugz.api.auto.Get;
 import com.programm.plugz.webserv.ex.WebservSetupException;
 
+import java.net.ServerSocket;
+
 public class WebservSubsystem implements ISubsystem {
 
     private static final String CONF_SERVER_PORT_NAME = "webserv.port";

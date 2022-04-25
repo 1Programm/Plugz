@@ -9,6 +9,7 @@ import com.programm.plugz.api.instance.IInstanceManager;
 import com.programm.plugz.api.utils.ValueUtils;
 
 import javax.swing.*;
+import java.awt.*;
 import java.io.PrintStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -17,6 +18,10 @@ import java.util.List;
 
 @Logger("Debugger")
 class DebuggerSubsystem implements ISubsystem {
+
+    static {
+        UIManager.put("TabbedPane.foreground", Color.BLACK);
+    }
 
     private static final String CONF_FPS_SLEEP_NAME = "debugger.sleep.fps";
     private static final long CONF_FPS_SLEEP_DEFAULT = 100;
@@ -73,7 +78,7 @@ class DebuggerSubsystem implements ISubsystem {
         }
 
         MagicDebugValue magicDebugValue = getDebugValue(instance, field, debugName, manager);
-        window.addDebugValue(magicDebugValue);
+        window.tabValues.addDebugValue(magicDebugValue);
     }
 
     private MagicDebugValue getDebugValue(Object instance, Field field, String debugName, IInstanceManager manager){
