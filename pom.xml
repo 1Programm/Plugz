@@ -20,6 +20,7 @@
         <module>plugz-debugger</module>
         <module>plugz-events</module>
         <module>plugz-test</module>
+        <module>plugz-object-mapper</module>
     </modules>
 
     <properties>
