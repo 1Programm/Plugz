@@ -75,3 +75,9 @@ events.handler.enabled = false
 
 # Port on which the Server socket should listen
 webserv.port = 8080
+
+webserv.client.timeout = 1000
+
+webserv.log.mappings.register = false
+
+webserv.log.requests = false
