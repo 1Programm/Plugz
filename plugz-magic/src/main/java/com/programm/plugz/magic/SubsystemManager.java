@@ -22,7 +22,6 @@ class SubsystemManager implements ISubsystemSetupHelper {
 
     private final ILogger log;
     private final PlugzUrlClassScanner scanner;
-    private final PlugzConfig config;
     private final AnnotationChecker annocheck;
     private final MagicInstanceManager instanceManager;
     private final List<ISubsystem> subsystems = new ArrayList<>();
@@ -72,7 +71,7 @@ class SubsystemManager implements ISubsystemSetupHelper {
             List<Class<?>> annotatedClasses = scanner.getAnnotatedWith(annotationCls);
             for(Class<?> annotatedClass : annotatedClasses){
                 Object annotationValue = annotatedClass.getAnnotation(annotationCls);
-                setupFunction._setup(annotationValue, annotatedClass, instanceManager, config);
+                setupFunction._setup(annotationValue, annotatedClass, instanceManager);
             }
         }
     }

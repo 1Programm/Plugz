@@ -69,7 +69,7 @@ class DebuggerSubsystem implements ISubsystem {
         window.dispose();
     }
 
-    private void setupDebugValueField(DebugValue annotation, Object instance, Field field, IInstanceManager manager, PlugzConfig config) throws MagicInstanceException {
+    private void setupDebugValueField(DebugValue annotation, Object instance, Field field, IInstanceManager manager) {
         log.debug("DebugValue: {}", field);
 
         String debugName = annotation.value();

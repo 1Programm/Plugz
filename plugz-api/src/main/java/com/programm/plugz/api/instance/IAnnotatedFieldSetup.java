@@ -9,10 +9,10 @@ import java.lang.reflect.Field;
 public interface IAnnotatedFieldSetup <T extends Annotation> {
 
     @SuppressWarnings("unchecked")
-    default void _setup(Object annotation, Object instance, Field field, IInstanceManager manager, PlugzConfig config) throws MagicInstanceException{
-        setup((T)annotation, instance, field, manager, config);
+    default void _setup(Object annotation, Object instance, Field field, IInstanceManager manager) throws MagicInstanceException{
+        setup((T)annotation, instance, field, manager);
     }
 
-    void setup(T annotation, Object instance, Field field, IInstanceManager manager, PlugzConfig config) throws MagicInstanceException;
+    void setup(T annotation, Object instance, Field field, IInstanceManager manager) throws MagicInstanceException;
 
 }

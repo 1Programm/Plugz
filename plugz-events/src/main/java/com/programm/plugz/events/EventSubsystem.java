@@ -42,7 +42,7 @@ class EventSubsystem implements ISubsystem {
         eventHandler.eventHandlerRunning = false;
     }
 
-    private void registerEventMethod(Event annotation, Object instance, Method method, IInstanceManager manager, PlugzConfig config) throws MagicInstanceException {
+    private void registerEventMethod(Event annotation, Object instance, Method method, IInstanceManager manager) {
         String eventName = annotation.value();
         MagicMethod mm = manager.buildMagicMethod(instance, method);
         EventListenerMethodImpl eventListenerMethodWrapper = new EventListenerMethodImpl(mm, method);

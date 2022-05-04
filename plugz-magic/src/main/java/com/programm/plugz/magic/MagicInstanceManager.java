@@ -5,10 +5,10 @@ import com.programm.ioutils.log.api.Logger;
 import com.programm.plugz.annocheck.AnnotationCheckException;
 import com.programm.plugz.annocheck.AnnotationChecker;
 import com.programm.plugz.api.*;
-import com.programm.plugz.api.auto.SetConfig;
 import com.programm.plugz.api.auto.Get;
 import com.programm.plugz.api.auto.GetConfig;
 import com.programm.plugz.api.auto.Set;
+import com.programm.plugz.api.auto.SetConfig;
 import com.programm.plugz.api.instance.*;
 import com.programm.plugz.api.lifecycle.LifecycleState;
 import com.programm.plugz.api.utils.ValueUtils;
@@ -19,7 +19,6 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
 @Logger("Instance Manager")
@@ -150,7 +149,7 @@ public class MagicInstanceManager implements IInstanceManager {
             this.missingParams = params.length;
         }
 
-        public void putParam(int pos, Object param) throws MagicInstanceException {
+        public void putParam(int pos, Object param) {
             params[pos] = param;
             missingParams--;
         }
@@ -245,47 +244,6 @@ public class MagicInstanceManager implements IInstanceManager {
 
 
 
-    private static void handleFieldAnnotatedWithGet(Get annotation, Object instance, Field field, IInstanceManager manager, PlugzConfig config) throws MagicInstanceException {
-        Class<?> type = field.getType();
-        Object value = manager.getInstance(type);
-
-        if(value != null){
-            manager.setField(field, instance, value);
-        }
-        else if(manager.canWait()){
-            manager.waitForField(type, instance, field, annotation.required());
-        }
-        else {
-            if(annotation.required()) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + type + "]!");
-            Object defaultValue = ValueUtils.getDefaultValue(type);
-            manager.setField(field, instance, defaultValue);
-        }
-    }
-
-    private static void handleFieldAnnotatedWithGetConfig(GetConfig annotation, Object instance, Field field, IInstanceManager manager, PlugzConfig config) throws MagicInstanceException {
-        Class<?> type = field.getType();
-        Object value = config.get(annotation.value());
-
-        if(value == null) {
-            value = ValueUtils.getDefaultValue(type);
-        }
-
-        manager.setField(field, instance, value);
-    }
-
-    private static void handleFieldAnnotatedWithSetConfig(SetConfig annotation, Object instance, Field field, IInstanceManager manager, PlugzConfig config) throws MagicInstanceException {
-        int mods = field.getModifiers();
-        if(!Modifier.isFinal(mods)) throw new MagicInstanceException("Field [" + field + "] must be final to be used as a config value!");
-        boolean isStatic = Modifier.isStatic(mods);
-
-        SetConfig configValueAnnotation = field.getAnnotation(SetConfig.class);
-        String key = configValueAnnotation.value();
-        Object value = manager.getField(field, isStatic ? null : instance);
-
-        config.registerConfiguration(key, value);
-    }
-
-
 
 
 
@@ -308,9 +266,9 @@ public class MagicInstanceManager implements IInstanceManager {
 
     private final Map<Class<? extends Annotation>, IAnnotatedFieldSetup<?>> annotatedFieldSetupMap = new HashMap<>();
     {
-        registerFieldSetup(Get.class, MagicInstanceManager::handleFieldAnnotatedWithGet);
-        registerFieldSetup(GetConfig.class, MagicInstanceManager::handleFieldAnnotatedWithGetConfig);
-        registerFieldSetup(SetConfig.class, MagicInstanceManager::handleFieldAnnotatedWithSetConfig);
+        registerFieldSetup(Get.class, this::handleFieldAnnotatedWithGet);
+        registerFieldSetup(GetConfig.class, this::handleFieldAnnotatedWithGetConfig);
+        registerFieldSetup(SetConfig.class, this::handleFieldAnnotatedWithSetConfig);
     }
 
     private final Map<Class<? extends Annotation>, IAnnotatedMethodSetup<?>> annotatedMethodSetupMap = new HashMap<>();
@@ -520,6 +478,60 @@ public class MagicInstanceManager implements IInstanceManager {
 
 
 
+    private void handleFieldAnnotatedWithGet(Get annotation, Object instance, Field field, IInstanceManager manager) throws MagicInstanceException {
+        Class<?> type = field.getType();
+        Object value = manager.getInstance(type);
+
+        if(value != null){
+            manager.setField(field, instance, value);
+        }
+        else if(manager.canWait()){
+            manager.waitForField(type, instance, field, annotation.required());
+        }
+        else {
+            if(annotation.required()) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + type + "]!");
+            Object defaultValue = ValueUtils.getDefaultValue(type);
+            manager.setField(field, instance, defaultValue);
+        }
+    }
+
+    private void handleFieldAnnotatedWithGetConfig(GetConfig annotation, Object instance, Field field, IInstanceManager manager) {
+        Class<?> type = field.getType();
+        Object value = plugzConfig.get(annotation.value());
+
+        if(value == null) {
+            value = ValueUtils.getDefaultValue(type);
+        }
+
+        manager.setField(field, instance, value);
+    }
+
+    private void handleFieldAnnotatedWithSetConfig(SetConfig annotation, Object instance, Field field, IInstanceManager manager) throws MagicInstanceException {
+        int mods = field.getModifiers();
+        if(!Modifier.isFinal(mods)) throw new MagicInstanceException("Field [" + field + "] must be final to be used as a config value!");
+        boolean isStatic = Modifier.isStatic(mods);
+
+        SetConfig configValueAnnotation = field.getAnnotation(SetConfig.class);
+        String key = configValueAnnotation.value();
+        Object value = manager.getField(field, isStatic ? null : instance);
+
+        plugzConfig.registerConfiguration(key, value);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -539,7 +551,7 @@ public class MagicInstanceManager implements IInstanceManager {
 
             IAnnotatedFieldSetup<?> callback = annotatedFieldSetupMap.get(aType);
             if(callback != null){
-                callback._setup(annotation, instance, field, this, plugzConfig);
+                callback._setup(annotation, instance, field, this);
             }
         }
     }
@@ -622,7 +634,7 @@ public class MagicInstanceManager implements IInstanceManager {
 
             IAnnotatedMethodSetup<?> callback = annotatedMethodSetupMap.get(aType);
             if(callback != null){
-                callback._setup(annotation, instance, method, this, plugzConfig);
+                callback._setup(annotation, instance, method, this);
                 continue;
             }
 
@@ -652,7 +664,7 @@ public class MagicInstanceManager implements IInstanceManager {
                 Class<? extends Annotation> methodAnnotation = state.methodAnnotation;
                 if(aType == methodAnnotation){
                     if(state == LifecycleState.PRE_SETUP){
-                        tryInvokeMethod(instance, method, canWait, null);
+                        tryInvokeMethod(instance, method, canWait, (Object) null);
                     }
                     else {
                         lifecycleMethods.computeIfAbsent(state, s -> new ArrayList<>()).add(buildMagicMethod(instance, method));

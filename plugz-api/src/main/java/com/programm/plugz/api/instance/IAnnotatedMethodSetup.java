@@ -10,10 +10,10 @@ import java.lang.reflect.Method;
 public interface IAnnotatedMethodSetup <T extends Annotation> {
 
     @SuppressWarnings("unchecked")
-    default void _setup(Object annotation, Object instance, Method method, IInstanceManager manager, PlugzConfig config) throws MagicInstanceException{
-        setup((T)annotation, instance, method, manager, config);
+    default void _setup(Object annotation, Object instance, Method method, IInstanceManager manager) throws MagicInstanceException{
+        setup((T)annotation, instance, method, manager);
     }
 
-    void setup(T annotation, Object instance, Method method, IInstanceManager manager, PlugzConfig config) throws MagicInstanceException;
+    void setup(T annotation, Object instance, Method method, IInstanceManager manager) throws MagicInstanceException;
 
 }

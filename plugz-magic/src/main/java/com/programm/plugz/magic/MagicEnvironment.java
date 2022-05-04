@@ -79,7 +79,7 @@ public class MagicEnvironment {
         this.asyncManager = new ThreadPoolManager(log);
         this.annocheck = new AnnotationChecker();
         this.instanceManager = new MagicInstanceManager(log, configurations, asyncManager, annocheck);
-        this.subsystems = new SubsystemManager(log, scanner, configurations, annocheck, instanceManager);
+        this.subsystems = new SubsystemManager(log, scanner, annocheck, instanceManager);
 
         setupAnnocheck();
 

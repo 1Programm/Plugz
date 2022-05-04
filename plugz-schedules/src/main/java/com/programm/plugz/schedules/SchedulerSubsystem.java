@@ -45,7 +45,7 @@ public class SchedulerSubsystem implements ISubsystem {
         scheduleManager.stop();
     }
 
-    private void setupScheduledMethods(Scheduled annotation, Object instance, Method method, IInstanceManager manager, PlugzConfig config) {
+    private void setupScheduledMethods(Scheduled annotation, Object instance, Method method, IInstanceManager manager) {
         String methodBeanString = instance.getClass().getName() + "#" + method.getName();
 
         if(annotation.repeat() < scheduleManager.minSleep){

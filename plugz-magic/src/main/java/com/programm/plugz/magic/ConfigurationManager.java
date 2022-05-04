@@ -6,7 +6,7 @@ import com.programm.plugz.api.MagicSetupException;
 import com.programm.plugz.api.PlugzConfig;
 import com.programm.plugz.api.utils.ValueParseException;
 import com.programm.plugz.api.utils.ValueUtils;
-import com.programm.plugz.files.ResourceNode;
+import com.programm.plugz.files.NamedResourceNode;
 import com.programm.plugz.files.props.PropsBuilder;
 import com.programm.plugz.files.props.PropsNode;
 import com.programm.plugz.files.props.PropsParseException;
@@ -182,7 +182,7 @@ class ConfigurationManager implements PlugzConfig {
         }
     }
 
-    private void loadFromResourceNode(ResourceNode node, String curPath) {
+    private void loadFromResourceNode(NamedResourceNode node, String curPath) {
         String name = node.name();
         String _value = node.value();
 
@@ -201,7 +201,7 @@ class ConfigurationManager implements PlugzConfig {
             return;
         }
 
-        for(ResourceNode child : node.children()){
+        for(NamedResourceNode child : node.children()){
             loadFromResourceNode(child, nPath);
         }
     }
