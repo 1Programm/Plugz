@@ -1,21 +1,30 @@
 package com.programm.plugz.cls.analyzer;
 
+import lombok.RequiredArgsConstructor;
+
 import java.util.Map;
 
+@RequiredArgsConstructor
 public class AnalyzedPropertyClass {
 
-    private final Class<?> entityCls;
+    private final AnalyzedParameterizedType type;
     private final Map<String, PropertyEntry> fieldEntryMap;
     private final int classModifiers;
 
-    public AnalyzedPropertyClass(Class<?> entityCls, Map<String, PropertyEntry> fieldEntryMap, int classModifiers) {
-        this.entityCls = entityCls;
-        this.fieldEntryMap = fieldEntryMap;
-        this.classModifiers = classModifiers;
+    public Class<?> getType() {
+        return type.getType();
     }
 
-    public Class<?> getEntityCls() {
-        return entityCls;
+    public AnalyzedParameterizedType getParameterizedType() {
+        return type;
+    }
+
+    public Map<String, AnalyzedParameterizedType> getParameterizedTypeMap() {
+        return type.getParameterizedTypeMap();
+    }
+
+    public AnalyzedParameterizedType getParameterizedType(String name){
+        return type.getParameterizedType(name);
     }
 
     public Map<String, PropertyEntry> getFieldEntryMap() {
