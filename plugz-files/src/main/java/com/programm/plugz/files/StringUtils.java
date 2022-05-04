@@ -121,4 +121,81 @@ public class StringUtils {
         return end;
     }
 
+    public static int findClosingOutsideQuotationsAndNonEscaped(String s, int start, int end, char opening, char closing){
+        int numOpen = 1;
+
+        boolean escaped = false;
+        boolean insideQuotations = false;
+
+        for(int i=start+1;i<end;i++){
+            char c = s.charAt(i);
+
+            if(escaped){
+                escaped = false;
+            }
+            else if(insideQuotations){
+                if(c == '\\') {
+                    escaped = true;
+                }
+                else if(c == '"'){
+                    insideQuotations = false;
+                }
+            }
+            else {
+                if(c == '\\') {
+                    escaped = true;
+                }
+                else if(c == '"'){
+                    insideQuotations = true;
+                }
+                else if(c == opening){
+                    numOpen++;
+                }
+                else if(c == closing){
+                    numOpen--;
+
+                    if(numOpen == 0){
+                        return i;
+                    }
+                }
+            }
+        }
+
+        return -1;
+    }
+
+    public static int findNextOutsideQuotationsAndNonEscaped(String s, int start, int end, char toFind){
+        boolean escaped = false;
+        boolean insideQuotations = false;
+
+        for(int i=start;i<end;i++){
+            char c = s.charAt(i);
+
+            if(escaped){
+                escaped = false;
+            }
+            else if(insideQuotations){
+                if(c == '\\') {
+                    escaped = true;
+                }
+                else if(c == '"'){
+                    insideQuotations = false;
+                }
+            }
+            else {
+                if(c == '\\') {
+                    escaped = true;
+                }
+                else if(c == '"'){
+                    insideQuotations = true;
+                }
+                else if(c == toFind){
+                    return i;
+                }
+            }
+        }
+
+        return -1;
+    }
+
 }
