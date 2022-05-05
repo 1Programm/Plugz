@@ -13,9 +13,9 @@ public class TestController {
         return userService.getDefaultUser();
     }
 
-    @PutMapping
-    public void hello1(){
-
+    @GetMapping(value = "test2", contentType = "xml")
+    public String hello1(){
+        return "<h1>Hello World!</h1>";
     }
 
     @PostMapping

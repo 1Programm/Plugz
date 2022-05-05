@@ -208,7 +208,7 @@ class Webserver {
                 StringBuilder contentBuilder = new StringBuilder();
 
                 try {
-                    for (int o = 0; o < cLength; o++) {
+                    for (int o=0;o<cLength;o++) {
                         char c = (char) in.read();
                         contentBuilder.append(c);
                     }
