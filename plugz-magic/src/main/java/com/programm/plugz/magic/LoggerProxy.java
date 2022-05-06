@@ -70,6 +70,16 @@ class LoggerProxy implements ILogger {
         doLog(LEVEL_ERROR, s, args);
     }
 
+    @Override
+    public void logException(String s, Throwable throwable) {
+        if(logger == null){
+            //TODO
+        }
+        else {
+            logger.logException(s, throwable);
+        }
+    }
+
     private void doLog(int level, String s, Object... args){
         if(logger == null) {
             storedLogs.add(getInfo(level, s, args));

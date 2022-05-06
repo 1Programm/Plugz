@@ -44,6 +44,9 @@ log.out = com.programm.plugz.magic.LoggerDefaultConsoleOut
 # Only this sets the log level to error for all classes annotated with @Logger("MyLoggerName")
 # log.name[MyLoggerName] = ERROR
 
+# Tells the logger to print the stacktrace of an exception when calling ILogger.logException(...)
+log.stacktrace = true
+
 
 
 # Maximum worker size so with the default there can be max 5 workers and other tasks will be queued

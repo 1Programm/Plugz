@@ -30,7 +30,7 @@
         <dependency>
             <groupId>com.programm.ioutils</groupId>
             <artifactId>ioutils-log-jlogger</artifactId>
-            <version>1.0.3</version>
+            <version>1.0.5</version>
         </dependency>
     </dependencies>
 

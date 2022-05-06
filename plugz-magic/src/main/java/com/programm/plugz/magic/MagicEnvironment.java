@@ -36,6 +36,8 @@ public class MagicEnvironment {
     private static final String CONF_LOGGER_FORMAT_DEFAULT = "[$TIME] [%5<($LVL)] [%30>($LOG?{$CLS.$MET})]: $MSG";
     private static final String CONF_LOGGER_OUT_NAME = "log.out";
     private static final String CONF_LOGGER_OUT_DEFAULT = "com.programm.plugz.magic.LoggerDefaultConsoleOut";
+    private static final String CONF_LOGGER_LOG_STACKTRACE_NAME = "log.stacktrace";
+    private static final String CONF_LOGGER_LOG_STACKTRACE_DEFAULT = "true";
 
 
     public static MagicEnvironment Start() throws MagicSetupException {
@@ -100,6 +102,7 @@ public class MagicEnvironment {
         configurations.registerDefaultConfiguration(CONF_LOGGER_LEVEL_NAME, CONF_LOGGER_LEVEL_DEFAULT);
         configurations.registerDefaultConfiguration(CONF_LOGGER_FORMAT_NAME, CONF_LOGGER_FORMAT_DEFAULT);
         configurations.registerDefaultConfiguration(CONF_LOGGER_OUT_NAME, CONF_LOGGER_OUT_DEFAULT);
+        configurations.registerDefaultConfiguration(CONF_LOGGER_LOG_STACKTRACE_NAME, CONF_LOGGER_LOG_STACKTRACE_DEFAULT);
     }
 
     private void setupAnnocheck(){
@@ -116,7 +119,7 @@ public class MagicEnvironment {
         }
         catch (MagicSetupException e){
             if(log.logger == null){
-                log.logger = new LoggerFallback().output(new LoggerDefaultConsoleOut());
+                log.logger = new LoggerFallback().config("output", new LoggerDefaultConsoleOut());
                 log.passStoredLogs();
             }
 
@@ -407,10 +410,12 @@ public class MagicEnvironment {
 
             String logFormat = configurations.get(CONF_LOGGER_FORMAT_NAME);
             String _logOut = configurations.get(CONF_LOGGER_OUT_NAME);
+            boolean doLogStacktrace = configurations.getBool(CONF_LOGGER_LOG_STACKTRACE_NAME);
 
             try {
-                configurableLogger.level(logLevel);
-                if(logFormat != null) configurableLogger.format(logFormat);
+                configurableLogger.config("level", logLevel);
+                if(logFormat != null) configurableLogger.config("format", logFormat);
+                configurableLogger.config("printStacktraceForExceptions", doLogStacktrace);
 
                 if(!_logOut.isEmpty()){
                     IOutput logOut;
@@ -430,7 +435,7 @@ public class MagicEnvironment {
                         throw new MagicSetupException("The empty constructor for the provided logger implementation [" + loggerImplementationClassName + "] cannot be accessed!", e);
                     }
 
-                    configurableLogger.output(logOut);
+                    configurableLogger.config("output", logOut);
                 }
 
                 for(Map.Entry<String, Object> entry : configurations.configValues.entrySet()){
@@ -450,7 +455,7 @@ public class MagicEnvironment {
                             pkgLevel = ILogger.fromString(_value);
                         }
 
-                        configurableLogger.packageLevel(pkgName, pkgLevel);
+                        configurableLogger.config("packageLevel", pkgName, pkgLevel);
                     }
                     else if(key.startsWith("log.name[") && key.endsWith("]")){
                         String logName = key.substring("log.name[".length(), key.length() - 1);
@@ -464,7 +469,7 @@ public class MagicEnvironment {
                             logNameLevel = ILogger.fromString(_value);
                         }
 
-                        configurableLogger.logNameLevel(logName, logNameLevel);
+                        configurableLogger.config("logNameLevel", logName, logNameLevel);
                     }
                 }
             }

@@ -4,9 +4,6 @@ import com.programm.ioutils.log.api.ILogger;
 import com.programm.ioutils.log.api.Logger;
 import com.programm.plugz.api.MagicInstanceException;
 import com.programm.plugz.api.MagicRuntimeException;
-import com.programm.plugz.files.json.JsonBuilder;
-import com.programm.plugz.files.json.JsonNode;
-import com.programm.plugz.files.json.JsonParseException;
 import com.programm.plugz.object.mapper.ObjectMapException;
 import com.programm.plugz.webserv.api.RequestParam;
 import com.programm.plugz.webserv.content.ContentHandler;
@@ -59,7 +56,7 @@ class Webserver {
                     handleClient(client);
                 }
                 catch (IOException e){
-                    log.error("IOException when handling the client: {}", e);
+                    log.logException("IOException when handling the client: " + e.getMessage(), e);
                 }
             }
         }
@@ -171,8 +168,7 @@ class Webserver {
             try {
                 doMapping(out, in, info);
             } catch (WebservException e) {
-                log.error(e.getMessage());
-                e.printStackTrace();
+                log.logException("Failed to do mapping [" + info.fullQuery + "]", e);
                 replyError(out, "500 Internal Server Error");
             }
 

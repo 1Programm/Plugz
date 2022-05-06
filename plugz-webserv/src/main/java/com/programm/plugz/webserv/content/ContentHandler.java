@@ -18,8 +18,9 @@ public class ContentHandler {
         readers.put("application/json", new JsonContentReader(analyzer));
 
         writers.put("application/text", Objects::toString);
+        writers.put("text/html", Objects::toString);
+        writers.put("text/plain", Objects::toString);
         writers.put("application/json", new JsonContentWriter(analyzer));
-        writers.put("application/xml", Objects::toString);
     }
 
     public IContentReader getReader(String name) {
