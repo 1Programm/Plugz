@@ -33,6 +33,10 @@ public class ContentHandler {
         return writers.get(name);
     }
 
+    public boolean supportsMimeType(String type){
+        return writers.containsKey(type);
+    }
+
     public void registerSpecializedMapper(Class<?> dataCls, Class<?> entityCls, IObjectMapper<?, ?> specializedMapper) throws ObjectMapException {
         Map<Class<?>, IObjectMapper<?, ?>> specializedMappers = specializedMappersMap.computeIfAbsent(dataCls, c -> new HashMap<>());
 

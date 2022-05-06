@@ -172,6 +172,10 @@ public class WebservSubsystem implements ISubsystem {
             contentType = restControllerAnnotation.defaultContentType();
         }
 
+        if(!contentHandler.supportsMimeType(contentType)){
+            throw new MagicInstanceException("MIME-Type [" + contentType + "] is not supported!");
+        }
+
         MagicMethod mm = manager.buildMagicMethod(instance, method);
 
         List<RequestParam> requestParams = new ArrayList<>();
