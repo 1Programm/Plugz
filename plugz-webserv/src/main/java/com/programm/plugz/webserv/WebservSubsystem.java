@@ -7,11 +7,17 @@ import com.programm.plugz.api.*;
 import com.programm.plugz.api.auto.Get;
 import com.programm.plugz.api.instance.IInstanceManager;
 import com.programm.plugz.api.instance.MagicMethod;
+import com.programm.plugz.object.mapper.IObjectMapper;
+import com.programm.plugz.object.mapper.ObjectMapException;
 import com.programm.plugz.webserv.api.*;
+import com.programm.plugz.webserv.content.ContentHandler;
 import com.programm.plugz.webserv.ex.WebservSetupException;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,6 +39,7 @@ public class WebservSubsystem implements ISubsystem {
     private final ILogger log;
     private final PlugzConfig config;
     private final IAsyncManager asyncManager;
+    private final ContentHandler contentHandler;
     private final Webserver webserver;
 
     private boolean logRegisterMappings;
@@ -41,7 +48,8 @@ public class WebservSubsystem implements ISubsystem {
         this.log = log;
         this.config = config;
         this.asyncManager = asyncManager;
-        webserver = new Webserver(log);
+        this.contentHandler = new ContentHandler();
+        webserver = new Webserver(log, contentHandler);
     }
 
     @Override
@@ -51,6 +59,8 @@ public class WebservSubsystem implements ISubsystem {
         this.logRegisterMappings = config.getBoolOrRegisterDefault(CONF_SERVER_LOG_REGISTER_MAPPING_NAME, CONF_SERVER_LOG_REGISTER_MAPPING_DEFAULT);
         config.registerDefaultConfiguration(CONF_SERVER_LOG_REQUESTS_NAME, CONF_SERVER_LOG_REQUESTS_DEFAULT);
 
+
+        setupHelper.registerSearchClass(IObjectMapper.class, this::registerImplementingObjectReaderClass);
         setupHelper.registerClassAnnotation(RestController.class, this::registerRestControllerClass);
         setupHelper.registerMethodAnnotation(GetMapping.class, this::registerGetMappingMethod);
         setupHelper.registerMethodAnnotation(PutMapping.class, this::registerPutMappingMethod);
@@ -83,6 +93,53 @@ public class WebservSubsystem implements ISubsystem {
     @Override
     public void shutdown() throws MagicException {
         webserver.stop();
+    }
+
+    private void registerImplementingObjectReaderClass(Class<?> implementingClass, IInstanceManager manager) throws MagicInstanceException {
+        if(implementingClass != com.programm.plugz.object.mapper.property.JsonNodePropertyObjectMapper.class
+        && implementingClass != com.programm.plugz.object.mapper.property.PropertyObjectJsonNodeMapper.class) {
+            Class<?> _dataCls = null;
+            Class<?> _entityCls = null;
+
+            Type[] types = implementingClass.getGenericInterfaces();
+            outer:
+            for(Type interfaceType : types){
+                if(interfaceType instanceof ParameterizedType parameterizedType){
+                    Type rawType = parameterizedType.getRawType();
+                    if(rawType == IObjectMapper.class){
+                        Type[] actualTypeArguments = parameterizedType.getActualTypeArguments();
+                        for(Type actualType : actualTypeArguments){
+                            if(actualType instanceof ParameterizedType || actualType instanceof  TypeVariable) throw new MagicInstanceException("Type variables in object mapper not allowed! [" + implementingClass.getName() + "]");
+                            Class<?> actualTypeCls = (Class<?>) actualType;
+
+                            if(_dataCls == null) {
+                                _dataCls = actualTypeCls;
+                            }
+                            else {
+                                _entityCls = actualTypeCls;
+                                break outer;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if(_entityCls == null) throw new IllegalStateException("INVALID STATE");
+
+            final Class<?> dataCls = _dataCls;
+            final Class<?> entityCls = _entityCls;
+
+            if(logRegisterMappings) log.info("[Object Mapper]: {} --- ({} -> {})", implementingClass.getName(), dataCls.getName(), entityCls.getName());
+
+            manager.instantiate(implementingClass, instance -> {
+                try {
+                    contentHandler.registerSpecializedMapper(dataCls, entityCls, (IObjectMapper<?, ?>) instance);
+                }
+                catch (ObjectMapException e){
+                    throw new MagicInstanceException("Could not register specialized mapper [" + implementingClass.getName() + "]!", e);
+                }
+            });
+        }
     }
 
     private void registerRestControllerClass(RestController annotation, Class<?> cls, IInstanceManager manager) throws MagicInstanceException {
@@ -119,7 +176,7 @@ public class WebservSubsystem implements ISubsystem {
 
         List<RequestParam> requestParams = new ArrayList<>();
         int requestBodyPos = -1;
-        Class<?> returnType = method.getReturnType();
+        Class<?> requestBodyTyp = null;
 
         Annotation[][] annotations = method.getParameterAnnotations();
         Class<?>[] paramTypes = method.getParameterTypes();
@@ -134,23 +191,35 @@ public class WebservSubsystem implements ISubsystem {
                 else if(paramAnnotations[o].annotationType() == RequestBody.class){
                     if(requestBodyPos != -1) throw new MagicInstanceException("There can not be multiple RequestBody parameters!");
                     requestBodyPos = i;
+                    requestBodyTyp = paramTypes[i];
                     break;
                 }
             }
         }
 
-        webserver.registerMapping(type, path, new RequestMethodConfig(mm, contentType, requestParams, requestBodyPos, returnType));
+        webserver.registerMapping(type, path, new RequestMethodConfig(mm, contentType, requestParams, requestBodyPos, requestBodyTyp));
     }
 
     private String concatPathMapping(String a, String b){
-        if(a.endsWith("/") && b.startsWith("/")){
-            return a + b.substring(1);
+        String path;
+
+        if(a.isEmpty()) {
+            path = b.isEmpty() ? "/" : b;
+        }
+        else if(b.isEmpty()) {
+            path = a;
+        }
+        else if(a.endsWith("/") && b.startsWith("/")){
+            path = a + b.substring(1);
         }
         else if(a.endsWith("/") || b.startsWith("/")){
-            return a + b;
+            path = a + b;
         }
         else {
-            return a + "/" + b;
+            path = a + "/" + b;
         }
+
+        if(path.charAt(0) != '/') path = "/" + path;
+        return path;
     }
 }

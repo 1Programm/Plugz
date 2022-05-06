@@ -31,13 +31,13 @@ import java.util.Map;
 class Webserver {
 
     private final ILogger log;
+    private final ContentHandler contentHandler;
+
+    private final Map<RequestType, Map<String, List<RequestMethodConfig>>> mappings = new HashMap<>();
+
     private int port;
     private int clientTimeout;
     private boolean logRequests;
-
-    private final ContentHandler contentHandler = new ContentHandler();
-    private final Map<RequestType, Map<String, List<RequestMethodConfig>>> mappings = new HashMap<>();
-
     private boolean running;
 
     public void init(int port, int clientTimeout, boolean logRequests){
@@ -145,6 +145,7 @@ class Webserver {
 
             if(requestingMethod.equals("POST")){
                 if(invalidMapping(RequestType.POST, info.query)){
+                    if(logRequests) log.info("[%7<({})]: {} was rejected: No request mapper found!", info.type, info.fullQuery);
                     replyError(out, "501 Not Implemented");
                     out.close();
                     return;
@@ -152,6 +153,7 @@ class Webserver {
             }
             else if(requestingMethod.equals("GET")){
                 if(invalidMapping(RequestType.GET, info.query)){
+                    if(logRequests) log.info("[%7<({})]: {} was rejected: No request mapper found!", info.type, info.fullQuery);
                     replyError(out, "501 Not Implemented");
                     out.close();
                     return;
@@ -180,6 +182,7 @@ class Webserver {
         List<RequestMethodConfig> configs = getConfigs(info.type, info.query);
 
         if(configs == null){
+            if(logRequests) log.info("[%7<({})]: {} was rejected: No request mapper found!", info.type, info.fullQuery);
             replyError(out, "501 Not Implemented");
             return;
         }

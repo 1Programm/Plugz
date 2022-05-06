@@ -67,6 +67,7 @@ class ConfigurationManager implements PlugzConfig {
 
     private void collectConfigArgs(String... args) {
         log.trace("Reading configs from program args...");
+        int numConfigs = 0;
         for(int i=0;i<args.length;i++){
             if(args[i].startsWith("-")){
                 String key = args[i].substring(1);
@@ -74,6 +75,7 @@ class ConfigurationManager implements PlugzConfig {
                 if(key.equals("config.profile")){
                     if(i + 1 < args.length) {
                         configProfile = args[i + 1];
+                        numConfigs++;
                     }
                     continue;
                 }
@@ -88,8 +90,11 @@ class ConfigurationManager implements PlugzConfig {
 
                 log.trace("# %20<({}) -> {}", key, value);
                 configValues.put(key, value);
+                numConfigs++;
             }
         }
+
+        log.trace("Registered [{}] configs from program args.", numConfigs);
     }
 
     private void readProfile() throws MagicSetupException {

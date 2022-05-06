@@ -203,6 +203,7 @@ public class ClassAnalyzer {
 
 
     private final boolean doCaching;
+    private final boolean generalizeFieldNames;
     private final Map<String, AnalyzedPropertyClass> cachedClasses;
     private final Map<String, AnalyzedParameterizedType> cachedAnalyzedParameterizedTypeMap = new HashMap<>();
 
@@ -211,8 +212,9 @@ public class ClassAnalyzer {
 
     private boolean deepAnalyze;
 
-    public ClassAnalyzer(boolean doCaching) {
+    public ClassAnalyzer(boolean doCaching, boolean generalizeFieldNames) {
         this.doCaching = doCaching;
+        this.generalizeFieldNames = generalizeFieldNames;
         cachedClasses = doCaching ? new HashMap<>() : null;
     }
 
@@ -257,7 +259,7 @@ public class ClassAnalyzer {
             String fName = field.getName();
             if(fName.startsWith("this$")) continue;
 
-            String stdName = nameToStd(fName);
+            String stdName = generalizeFieldNames ? nameToStd(fName) : fName;
 
             if(testIgnore(field, ignorePropertyFields)) {
                 ignoreMap.put(stdName, true);
@@ -271,7 +273,7 @@ public class ClassAnalyzer {
             int mods = field.getModifiers();
 
             if(!Modifier.isStatic(mods)) {
-                boolean accessible = !Modifier.isPrivate(mods);
+                boolean accessible = Modifier.isPublic(clsModifiers) && Modifier.isPublic(mods);
 
                 if (!Modifier.isFinal(mods)) {
                     entries.computeIfAbsent(stdName, n -> new PropertyEntry(getTypeOrObject(analyzedParameterizedType), field)).setter = new FieldPropertySetter(field, accessible);
@@ -287,13 +289,12 @@ public class ClassAnalyzer {
             if(testIgnore(method, ignorePropertyMethods)) continue;
 
             String mName = method.getName();
-            String stdName = nameToStd(mName);
+            String stdName = generalizeFieldNames ? nameToStd(mName) : mName;
 
             int mods = method.getModifiers();
 
             if(Modifier.isStatic(mods)) continue;
-
-            boolean accessible = !Modifier.isPrivate(mods);
+            boolean accessible = Modifier.isPublic(clsModifiers) && Modifier.isPublic(mods);
 
             if(stdName.startsWith("get_") || stdName.startsWith("is_")){
                 if(stdName.charAt(2) == '_'){
@@ -375,7 +376,8 @@ public class ClassAnalyzer {
         Class<?> parentCls = cls.getSuperclass();
         Type genericParentCls = cls.getGenericSuperclass();
 
-        AnalyzedParameterizedType analyzedParent = analyzeParameterizedType(genericParentCls, parentCls, genericTypesMap);
+        AnalyzedParameterizedType analyzedParent = null;
+        if(deepAnalyze) analyzedParent = analyzeParameterizedType(genericParentCls, parentCls, genericTypesMap);
         return newTypeAndAddToCache(beanString, cls, analyzedParent, genericTypesMap);
     }
 
@@ -407,7 +409,8 @@ public class ClassAnalyzer {
             Class<?> parentCls = typeClass.getSuperclass();
             Type genericParentCls = typeClass.getGenericSuperclass();
 
-            AnalyzedParameterizedType analyzedParent = analyzeParameterizedType(genericParentCls, parentCls, Collections.emptyMap());
+            AnalyzedParameterizedType analyzedParent = null;
+            if(deepAnalyze) analyzedParent = analyzeParameterizedType(genericParentCls, parentCls, Collections.emptyMap());
             return newTypeAndAddToCache(beanString, typeClass, analyzedParent, Collections.emptyMap());
         }
     }

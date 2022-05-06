@@ -4,15 +4,16 @@ import com.programm.plugz.cls.analyzer.ClassAnalyzer;
 import com.programm.plugz.files.json.JsonBuilder;
 import com.programm.plugz.files.json.JsonNode;
 import com.programm.plugz.files.json.JsonParseException;
+import com.programm.plugz.object.mapper.ISpecializedObjectMapperLookup;
 import com.programm.plugz.object.mapper.ObjectMapException;
-import com.programm.plugz.object.mapper.property.JsonPropertyReader;
+import com.programm.plugz.object.mapper.property.JsonNodePropertyObjectMapper;
 
 class JsonContentReader implements IContentReader {
 
-    private final JsonPropertyReader reader;
+    private final JsonNodePropertyObjectMapper reader;
 
-    public JsonContentReader(ClassAnalyzer classAnalyzer) {
-        this.reader = new JsonPropertyReader(classAnalyzer);
+    public JsonContentReader(ClassAnalyzer classAnalyzer, ISpecializedObjectMapperLookup specializedLookup) {
+        this.reader = new JsonNodePropertyObjectMapper(classAnalyzer, specializedLookup);
     }
 
     @Override
@@ -26,7 +27,7 @@ class JsonContentReader implements IContentReader {
             throw new ObjectMapException("Invalid json content [" + content + "]!", e);
         }
 
-        return (T) reader.read(contentNode, cls);
+        return (T) reader._read(contentNode, cls);
     }
 
 }

@@ -154,19 +154,14 @@ public class AnnotationChecker {
     }
 
     private static class ConditionConfig implements ICondition {
-        private List<List<Class<?>>> orAndList;
+        private final List<List<Class<?>>> orAndList = new ArrayList<>();
         private boolean sealed;
 
         @Override
         public ConditionConfig set(Class<?> cls){
             if(sealed) throw new IllegalStateException("This configuration is sealed!");
 
-            if(orAndList == null){
-                orAndList = new ArrayList<>();
-            }
-            else {
-                orAndList.clear();
-            }
+            orAndList.clear();
 
             List<Class<?>> classes = new ArrayList<>();
             classes.add(cls);
@@ -179,7 +174,7 @@ public class AnnotationChecker {
         public ConditionConfig and(Class<?> cls){
             if(sealed) throw new IllegalStateException("This configuration is sealed!");
 
-            if(orAndList == null) return set(cls);
+            if(orAndList.isEmpty()) return set(cls);
             orAndList.get(orAndList.size() - 1).add(cls);
             return this;
         }
@@ -428,7 +423,6 @@ public class AnnotationChecker {
     private boolean whitelistTestForAnnotations(ElementType type, Map<ElementType, ConditionConfig> conditionMap, Annotation[] declaredAnnotations){
         ConditionConfig condition = conditionMap.get(type);
         if(condition == null) return false;
-        if(condition.orAndList == null || condition.orAndList.isEmpty()) return true;
 
         return !testForCondition(condition.orAndList, declaredAnnotations);
     }
@@ -436,12 +430,13 @@ public class AnnotationChecker {
     private boolean blacklistTestForAnnotations(ElementType type, Map<ElementType, ConditionConfig> conditionMap, Annotation[] declaredAnnotations){
         ConditionConfig condition = conditionMap.get(type);
         if(condition == null) return false;
-        if(condition.orAndList == null || condition.orAndList.isEmpty()) return false;
 
         return testForCondition(condition.orAndList, declaredAnnotations);
     }
 
     private boolean testForCondition(List<List<Class<?>>> orAndList, Annotation[] annotations){
+        if(orAndList.isEmpty()) return annotations.length == 1;
+
         outerLoop:
         for(List<Class<?>> orPart : orAndList){
             for(Class<?> cls : orPart){
@@ -506,6 +501,8 @@ public class AnnotationChecker {
     private String buildOrAndString(Map<ElementType, ConditionConfig> map, ElementType type){
         ConditionConfig config = map.get(type);
         List<List<Class<?>>> orAndList = config.orAndList;
+
+        if(orAndList.isEmpty()) return "[No other annotation]";
 
         if(orAndList.size() == 1){
             return "[" + concatList(orAndList.get(0), "AND") + "]";

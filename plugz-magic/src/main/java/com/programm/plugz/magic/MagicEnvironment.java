@@ -96,6 +96,7 @@ public class MagicEnvironment {
     }
 
     private void initDefaultConfigs(){
+        log.debug("Setting up default configurations for the environment.");
         configurations.registerDefaultConfiguration(CONF_ADD_SHUTDOWN_HOOK_NAME, CONF_ADD_SHUTDOWN_HOOK_DEFAULT);
 
         configurations.registerDefaultConfiguration(CONF_LOGGER_IMPL_CLASS_NAME, null);
@@ -193,6 +194,7 @@ public class MagicEnvironment {
         findLoggerImplementation(scanner.getImplementing(ILogger.class));
         log.passStoredLogs();
 
+        log.debug("Setting up [Async-Manager].");
         asyncManager.init(configurations);
 
 

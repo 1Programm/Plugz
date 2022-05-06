@@ -5,43 +5,55 @@ import com.programm.plugz.files.json.JsonArrayNode;
 import com.programm.plugz.files.json.JsonNode;
 import com.programm.plugz.files.json.JsonObjectNode;
 import com.programm.plugz.files.json.JsonValueNode;
-import com.programm.plugz.object.mapper.IConfigurableObjectWriter;
-import com.programm.plugz.object.mapper.IObjectWriter;
+import com.programm.plugz.object.mapper.IObjectMapper;
+import com.programm.plugz.object.mapper.ISpecializedObjectMapperLookup;
 import com.programm.plugz.object.mapper.ObjectMapException;
 import com.programm.plugz.object.mapper.utils.ValueUtils;
 
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 
-public class JsonPropertyWriter implements IConfigurableObjectWriter<JsonNode, Object> {
+public class PropertyObjectJsonNodeMapper implements IObjectMapper<Object, JsonNode> {
 
     private final ClassAnalyzer analyzer;
-    private final Map<Class<?>, IObjectWriter<JsonNode, ?>> writers = new HashMap<>();
+    private final ISpecializedObjectMapperLookup specializedLookup;
+    private final boolean escapeInnerString;
 
-    public JsonPropertyWriter() {
-        this(new ClassAnalyzer(true));
+    public PropertyObjectJsonNodeMapper(ISpecializedObjectMapperLookup specializedLookup) {
+        this(new ClassAnalyzer(true, false), specializedLookup, false);
     }
 
-    public JsonPropertyWriter(ClassAnalyzer analyzer) {
+    public PropertyObjectJsonNodeMapper(ClassAnalyzer analyzer, ISpecializedObjectMapperLookup specializedLookup, boolean escapeInnerString) {
         this.analyzer = analyzer;
+        this.specializedLookup = specializedLookup;
+        this.escapeInnerString = escapeInnerString;
     }
 
     @Override
-    public JsonNode write(Object entity) throws ObjectMapException {
-        return write(entity, Collections.emptyMap());
+    public JsonNode read(Object entity, Class<? extends JsonNode> cls) throws ObjectMapException {
+        return read(entity, Collections.emptyMap());
     }
 
-    public JsonNode write(Object entity, Map<String, AnalyzedParameterizedType> parameterizedTypes) throws ObjectMapException {
+    public JsonNode read(Object entity) throws ObjectMapException {
+        return read(entity, Collections.emptyMap());
+    }
+
+    public JsonNode read(Object entity, Map<String, AnalyzedParameterizedType> parameterizedTypes) throws ObjectMapException {
         if(entity == null) throw new ObjectMapException("Cannot map null elements!");
 
         Class<?> cls = entity.getClass();
-        IObjectWriter<JsonNode, ?> writer = writers.get(cls);
 
-        if(writer != null){
-            return writer._write(entity);
+        if(specializedLookup != null) {
+            IObjectMapper<?, JsonNode> mapper = specializedLookup.get(cls, JsonNode.class);
+            if (mapper != null) return mapper._read(entity, JsonNode.class);
         }
 
-        if(cls == String.class || ValueUtils.isPrimitiveOrBoxed(cls)){
+        if(cls == String.class){
+            String _entity = entity.toString();
+            if(escapeInnerString) _entity = escapeEscapeSequences(_entity);
+            return new JsonValueNode(_entity);
+        }
+        else if(ValueUtils.isPrimitiveOrBoxed(cls)) {
             return new JsonValueNode(entity);
         }
         else if(cls.isArray()){
@@ -50,7 +62,7 @@ public class JsonPropertyWriter implements IConfigurableObjectWriter<JsonNode, O
 
             for(Object e : arrEntity){
                 if(e == null) continue;
-                arrList.add(write(e));
+                arrList.add(read(e));
             }
 
             return new JsonArrayNode(arrList);
@@ -61,7 +73,7 @@ public class JsonPropertyWriter implements IConfigurableObjectWriter<JsonNode, O
 
             for(Object e : arrEntity){
                 if(e == null) continue;
-                arrList.add(write(e));
+                arrList.add(read(e));
             }
 
             return new JsonArrayNode(arrList);
@@ -72,7 +84,7 @@ public class JsonPropertyWriter implements IConfigurableObjectWriter<JsonNode, O
 
             for(Object e : arrEntity){
                 if(e == null) continue;
-                arrList.add(write(e));
+                arrList.add(read(e));
             }
 
             return new JsonArrayNode(arrList);
@@ -85,7 +97,7 @@ public class JsonPropertyWriter implements IConfigurableObjectWriter<JsonNode, O
                 String key = entry.getKey().toString();
                 Object value = entry.getValue();
                 if(value == null) continue;
-                JsonNode valueNode = write(value);
+                JsonNode valueNode = read(value);
                 theMap.put(key, valueNode);
             }
 
@@ -108,7 +120,7 @@ public class JsonPropertyWriter implements IConfigurableObjectWriter<JsonNode, O
                 try {
                     Object entryValueInstance = getter.get(entity);
                     if(entryValueInstance == null) continue;
-                    JsonNode entryValueNode = write(entryValueInstance);
+                    JsonNode entryValueNode = read(entryValueInstance);
                     theObject.put(entry.getKey(), entryValueNode);
                 }
                 catch (InvocationTargetException e){
@@ -120,9 +132,53 @@ public class JsonPropertyWriter implements IConfigurableObjectWriter<JsonNode, O
         }
     }
 
-    @Override
-    public JsonPropertyWriter registerWriter(Class<?> cls, IObjectWriter<JsonNode, Object> writer){
-        writers.put(cls, writer);
-        return this;
+    private String escapeEscapeSequences(String s){
+        StringBuilder sb = new StringBuilder();
+
+        int last = 0;
+        int sLen = s.length();
+        for(int i=0;i<sLen;i++){
+            char c = s.charAt(i);
+
+            if(c == '\t'){
+                sb.append(s, last, i);
+                sb.append("\\t");
+                last = i + 1;
+            }
+            else if(c == '\b'){
+                sb.append(s, last, i);
+                sb.append("\\b");
+                last = i + 1;
+            }
+            else if(c == '\n'){
+                sb.append(s, last, i);
+                sb.append("\\n");
+                last = i + 1;
+            }
+            else if(c == '\r'){
+                sb.append(s, last, i);
+                sb.append("\\r");
+                last = i + 1;
+            }
+            else if(c == '\f'){
+                sb.append(s, last, i);
+                sb.append("\\f");
+                last = i + 1;
+            }
+            else if(c == '\"'){
+                sb.append(s, last, i);
+                sb.append("\\\"");
+                last = i + 1;
+            }
+        }
+
+        if(last == 0) return s;
+
+        if(last < sLen){
+            sb.append(s, last, sLen);
+        }
+
+        return sb.toString();
     }
+
 }

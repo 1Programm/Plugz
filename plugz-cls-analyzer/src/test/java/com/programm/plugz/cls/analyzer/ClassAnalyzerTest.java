@@ -29,7 +29,8 @@ public class ClassAnalyzerTest {
     @Test
     @DisplayName("Type Analyze [Simple]")
     void analyzeParameterizedTypeSimple() {
-        ClassAnalyzer analyzer = new ClassAnalyzer(false);
+        ClassAnalyzer analyzer = new ClassAnalyzer(false, true);
+        analyzer.doDeepAnalyze();
 
         assertDoesNotThrow(() -> {
             AnalyzedParameterizedType intType = analyzer.analyzeParameterizedCls(Integer.class);
@@ -56,7 +57,7 @@ public class ClassAnalyzerTest {
     @Test
     @DisplayName("Analyze Classes [Simple]")
     void analyzePropertySimple() {
-        ClassAnalyzer analyzer = new ClassAnalyzer(false);
+        ClassAnalyzer analyzer = new ClassAnalyzer(false, true);
 
         class SimpleClass {}
 
@@ -161,7 +162,7 @@ public class ClassAnalyzerTest {
     @Test
     @DisplayName("Analyze Classes [with caching]")
     void analyzePropertyWithCaching(){
-        ClassAnalyzer analyzer = new ClassAnalyzer(true);
+        ClassAnalyzer analyzer = new ClassAnalyzer(true, true);
 
         class SimpleClass {}
 
@@ -212,7 +213,7 @@ public class ClassAnalyzerTest {
     @Test
     @DisplayName("Analyze Classes [with ignoring]")
     void analyzePropertyWithIgnoring() {
-        ClassAnalyzer analyzer = new ClassAnalyzer(false);
+        ClassAnalyzer analyzer = new ClassAnalyzer(false, true);
         analyzer.ignorePropertyField(field -> field.getName().startsWith("ignore"));
         analyzer.ignorePropertyMethod(method -> method.getReturnType() == String.class);
 
@@ -269,7 +270,8 @@ public class ClassAnalyzerTest {
     @Test
     @DisplayName("Analyze Classes [Advanced Generics]")
     void analyzePropertyAdvanced() {
-        ClassAnalyzer analyzer = new ClassAnalyzer(false);
+        ClassAnalyzer analyzer = new ClassAnalyzer(false, true);
+        analyzer.doDeepAnalyze();
 
 
         class SimpleGenericClass <T> {}

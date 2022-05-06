@@ -5,8 +5,8 @@ import com.programm.plugz.files.json.JsonArrayNode;
 import com.programm.plugz.files.json.JsonNode;
 import com.programm.plugz.files.json.JsonObjectNode;
 import com.programm.plugz.files.json.JsonValueNode;
-import com.programm.plugz.object.mapper.IConfigurableObjectReader;
-import com.programm.plugz.object.mapper.IObjectReader;
+import com.programm.plugz.object.mapper.IObjectMapper;
+import com.programm.plugz.object.mapper.ISpecializedObjectMapperLookup;
 import com.programm.plugz.object.mapper.ObjectMapException;
 import com.programm.plugz.object.mapper.utils.ValueUtils;
 
@@ -16,17 +16,18 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Modifier;
 import java.util.*;
 
-public class JsonPropertyReader implements IConfigurableObjectReader<JsonNode> {
+public class JsonNodePropertyObjectMapper implements IObjectMapper<JsonNode, Object> {
 
     private final ClassAnalyzer analyzer;
-    private final Map<Class<?>, IObjectReader<JsonNode>> readers = new HashMap<>();
+    private final ISpecializedObjectMapperLookup specializedLookup;
 
-    public JsonPropertyReader() {
-        this(new ClassAnalyzer(true));
+    public JsonNodePropertyObjectMapper(ISpecializedObjectMapperLookup specializedLookup) {
+        this(new ClassAnalyzer(true, false), specializedLookup);
     }
 
-    public JsonPropertyReader(ClassAnalyzer analyzer) {
+    public JsonNodePropertyObjectMapper(ClassAnalyzer analyzer, ISpecializedObjectMapperLookup specializedLookup) {
         this.analyzer = analyzer;
+        this.specializedLookup = specializedLookup;
     }
 
     @Override
@@ -35,10 +36,9 @@ public class JsonPropertyReader implements IConfigurableObjectReader<JsonNode> {
     }
 
     public Object read(JsonNode node, Class<?> cls, Map<String, AnalyzedParameterizedType> parameterizedTypes) throws ObjectMapException {
-        IObjectReader<JsonNode> reader = readers.get(cls);
-
-        if(reader != null){
-            return reader.read(node, cls);
+        if(specializedLookup != null) {
+            IObjectMapper<JsonNode, ?> reader = specializedLookup.get(JsonNode.class, cls);
+            if (reader != null) return reader._read(node, cls);
         }
 
         if(ValueUtils.isPrimitiveOrBoxed(cls)){
@@ -80,7 +80,7 @@ public class JsonPropertyReader implements IConfigurableObjectReader<JsonNode> {
                     JsonNode childNode = arrayNode.get(i);
                     AnalyzedParameterizedType analyzedChildType = parameterizedTypes.get("E");
                     Class<?> childType = analyzedChildType == null ? Object.class : analyzedChildType.getType();
-                    Object arrValue = read(childNode, childType);
+                    Object arrValue = _read(childNode, childType);
                     list.add(arrValue);
                 }
 
@@ -98,7 +98,7 @@ public class JsonPropertyReader implements IConfigurableObjectReader<JsonNode> {
                     JsonNode childNode = arrayNode.get(i);
                     AnalyzedParameterizedType analyzedChildType = parameterizedTypes.get("E");
                     Class<?> childType = analyzedChildType == null ? Object.class : analyzedChildType.getType();
-                    Object arrValue = read(childNode, childType);
+                    Object arrValue = _read(childNode, childType);
                     set.add(arrValue);
                 }
 
@@ -122,7 +122,7 @@ public class JsonPropertyReader implements IConfigurableObjectReader<JsonNode> {
                 Map<String, JsonNode> objectNodeMap = objectNode.objectChildren();
                 for(Map.Entry<String, JsonNode> entry : objectNodeMap.entrySet()) {
                     JsonNode childNode = entry.getValue();
-                    Object arrValue = read(childNode, valueType);
+                    Object arrValue = _read(childNode, valueType);
                     map.put(entry.getKey(), arrValue);
                 }
 
@@ -171,10 +171,9 @@ public class JsonPropertyReader implements IConfigurableObjectReader<JsonNode> {
     private Object readObject(JsonNode node, AnalyzedParameterizedType analyzedType) throws ObjectMapException {
         Class<?> cls = analyzedType.getType();
 
-        IObjectReader<JsonNode> reader = readers.get(cls);
-
-        if(reader != null){
-            return reader.read(node, cls);
+        if(specializedLookup != null) {
+            IObjectMapper<JsonNode, ?> reader = specializedLookup.get(JsonNode.class, cls);
+            if (reader != null) return reader._read(node, cls);
         }
 
         if(ValueUtils.isPrimitiveOrBoxed(cls)){
@@ -313,7 +312,7 @@ public class JsonPropertyReader implements IConfigurableObjectReader<JsonNode> {
         }
 
         if(con == null) throw new ObjectMapException("No empty constructor defined for class [" + cls.getName() + "]!");
-        boolean needsAccess = !Modifier.isPublic(con.getModifiers());
+        boolean needsAccess = !(Modifier.isPublic(cls.getModifiers()) && Modifier.isPublic(con.getModifiers()));
 
         try{
             if(needsAccess) con.setAccessible(true);
@@ -331,12 +330,6 @@ public class JsonPropertyReader implements IConfigurableObjectReader<JsonNode> {
         finally {
             if(needsAccess) con.setAccessible(false);
         }
-    }
-
-    @Override
-    public JsonPropertyReader registerReader(Class<?> cls, IObjectReader<JsonNode> reader){
-        readers.put(cls, reader);
-        return this;
     }
 
 }

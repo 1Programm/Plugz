@@ -7,6 +7,7 @@ import com.programm.plugz.api.*;
 import com.programm.plugz.api.instance.IAnnotatedClassSetup;
 import com.programm.plugz.api.instance.IAnnotatedFieldSetup;
 import com.programm.plugz.api.instance.IAnnotatedMethodSetup;
+import com.programm.plugz.api.instance.ISearchClassSetup;
 import com.programm.plugz.inject.PlugzUrlClassScanner;
 import lombok.RequiredArgsConstructor;
 
@@ -26,6 +27,7 @@ class SubsystemManager implements ISubsystemSetupHelper {
     private final MagicInstanceManager instanceManager;
     private final List<ISubsystem> subsystems = new ArrayList<>();
     private final Map<Class<? extends Annotation>, IAnnotatedClassSetup<?>> classFoundHandlers = new HashMap<>();
+    private final Map<Class<?>, ISearchClassSetup> searchClassFoundHandlers = new HashMap<>();
 
     public void prepare() throws MagicInstanceException {
         List<Class<?>> subsystemImplementationClasses = scanner.getImplementing(ISubsystem.class);
@@ -65,13 +67,33 @@ class SubsystemManager implements ISubsystemSetupHelper {
 
     public void setupFoundClasses() throws MagicInstanceException {
         for(Map.Entry<Class<? extends Annotation>, IAnnotatedClassSetup<?>> entry : classFoundHandlers.entrySet()){
-            Class<? extends Annotation> annotationCls = entry.getKey();
+            Class<? extends Annotation> annotationClass = entry.getKey();
             IAnnotatedClassSetup<?> setupFunction = entry.getValue();
 
-            List<Class<?>> annotatedClasses = scanner.getAnnotatedWith(annotationCls);
+            List<Class<?>> annotatedClasses = scanner.getAnnotatedWith(annotationClass);
             for(Class<?> annotatedClass : annotatedClasses){
-                Object annotationValue = annotatedClass.getAnnotation(annotationCls);
-                setupFunction._setup(annotationValue, annotatedClass, instanceManager);
+                try {
+                    Object annotationValue = annotatedClass.getAnnotation(annotationClass);
+                    setupFunction._setup(annotationValue, annotatedClass, instanceManager);
+                }
+                catch (MagicInstanceException e){
+                    throw new MagicInstanceException("Failed to set up discovered class: [" + annotatedClass.getName() + "]!", e);
+                }
+            }
+        }
+
+        for(Map.Entry<Class<?>, ISearchClassSetup> entry : searchClassFoundHandlers.entrySet()){
+            Class<?> searchClass = entry.getKey();
+            ISearchClassSetup setupFunction = entry.getValue();
+
+            List<Class<?>> implementingClasses = scanner.getImplementing(searchClass);
+            for(Class<?> implementingClass : implementingClasses){
+                try {
+                    setupFunction.setup(implementingClass, instanceManager);
+                }
+                catch (MagicInstanceException e){
+                    throw new MagicInstanceException("Failed to set up discovered class: [" + implementingClass.getName() + "]!", e);
+                }
             }
         }
     }
@@ -91,6 +113,12 @@ class SubsystemManager implements ISubsystemSetupHelper {
             log.debug("-> {}", subsystem.getClass().getName());
             subsystem.shutdown();
         }
+    }
+
+    @Override
+    public void registerSearchClass(Class<?> cls, ISearchClassSetup setup) {
+        scanner.addSearchClass(cls);
+        searchClassFoundHandlers.put(cls, setup);
     }
 
     @Override
