@@ -16,8 +16,10 @@ public @interface Get {
     /**
      * Important for the setup phase.
      * After the PreSetup phase all required fields or methods which are specified as required and could not find a provider for their annotated type will throw an exception.
-     * Will result in null or the default value for primitives if set to false and no instance could be found.
+     * Will result in null or the default value for primitives if set to {@link AutoWaitType#NOT_REQUIRED} and no instance could be found.
+     * Will wait as long as no value is set if set to {@link AutoWaitType#CAN_WAIT}.
      */
-    boolean required() default true;
+    AutoWaitType value() default AutoWaitType.REQUIRED;
+
 
 }

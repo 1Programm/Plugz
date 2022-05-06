@@ -5,10 +5,8 @@ import com.programm.ioutils.log.api.Logger;
 import com.programm.plugz.annocheck.AnnotationCheckException;
 import com.programm.plugz.annocheck.AnnotationChecker;
 import com.programm.plugz.api.*;
-import com.programm.plugz.api.auto.Get;
-import com.programm.plugz.api.auto.GetConfig;
+import com.programm.plugz.api.auto.*;
 import com.programm.plugz.api.auto.Set;
-import com.programm.plugz.api.auto.SetConfig;
 import com.programm.plugz.api.instance.*;
 import com.programm.plugz.api.lifecycle.LifecycleState;
 import com.programm.plugz.api.utils.ValueUtils;
@@ -59,7 +57,7 @@ public class MagicInstanceManager implements IInstanceManager {
 
     private interface MagicWire {
         String name();
-        boolean required();
+        AutoWaitType waitType();
         Class<?> type();
         void accept(Object o) throws MagicInstanceException;
     }
@@ -107,7 +105,7 @@ public class MagicInstanceManager implements IInstanceManager {
     private class MissingFieldWire implements MagicWire {
         private final Object instance;
         private final Field field;
-        private final boolean required;
+        private final AutoWaitType waitType;
 
         @Override
         public String name() {
@@ -115,8 +113,8 @@ public class MagicInstanceManager implements IInstanceManager {
         }
 
         @Override
-        public boolean required() {
-            return required;
+        public AutoWaitType waitType() {
+            return waitType;
         }
 
         @Override
@@ -354,13 +352,25 @@ public class MagicInstanceManager implements IInstanceManager {
     public void checkWaitMap(boolean disableWaiting) throws MagicInstanceException, MagicInstanceWaitException {
         if(!waitMap.isEmpty()){
             List<MagicWire> acceptDefaultWires = new ArrayList<>();
+            Map<Class<?>, List<MagicWire>> illegalWaitingWires = new HashMap<>();
 
             for(Class<?> cls : waitMap.keySet()){
                 List<MagicWire> waitingWires = waitMap.get(cls);
-                for(MagicWire wire : waitingWires){
-                    if(!wire.required()){
-                        acceptDefaultWires.add(wire);
+                for(int i=0;i<waitingWires.size();i++){
+                    MagicWire wire = waitingWires.get(i);
+                    AutoWaitType type = wire.waitType();
+
+                    if(type == AutoWaitType.REQUIRED) {
+                        illegalWaitingWires.computeIfAbsent(cls, c -> new ArrayList<>()).add(wire);
                     }
+                    else if(type == AutoWaitType.NOT_REQUIRED){
+                        acceptDefaultWires.add(wire);
+                        waitingWires.remove(i--);
+                    }
+                }
+
+                if(waitingWires.isEmpty()){
+                    waitMap.remove(cls);
                 }
             }
 
@@ -370,8 +380,8 @@ public class MagicInstanceManager implements IInstanceManager {
                 wire.accept(defaultVal);
             }
 
-            if(!waitMap.isEmpty()){
-                String errString = buildWaitError(waitMap);
+            if(!illegalWaitingWires.isEmpty()){
+                String errString = buildWaitError(illegalWaitingWires);
                 throw new MagicInstanceWaitException("Required open wires found:" + errString);
             }
         }
@@ -401,8 +411,8 @@ public class MagicInstanceManager implements IInstanceManager {
     }
 
     @Override
-    public void waitForField(Class<?> type, Object instance, Field field, boolean required){
-        waitFor(type, new MissingFieldWire(instance, field, required));
+    public void waitForField(Class<?> type, Object instance, Field field, AutoWaitType waitType){
+        waitFor(type, new MissingFieldWire(instance, field, waitType));
     }
 
     @Override
@@ -485,11 +495,11 @@ public class MagicInstanceManager implements IInstanceManager {
         if(value != null){
             manager.setField(field, instance, value);
         }
-        else if(manager.canWait()){
-            manager.waitForField(type, instance, field, annotation.required());
+        else if(manager.canWait() || annotation.value() == AutoWaitType.CAN_WAIT){
+            manager.waitForField(type, instance, field, annotation.value());
         }
         else {
-            if(annotation.required()) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + type + "]!");
+            if(annotation.value() == AutoWaitType.REQUIRED) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + type + "]!");
             Object defaultValue = ValueUtils.getDefaultValue(type);
             manager.setField(field, instance, defaultValue);
         }
@@ -641,7 +651,7 @@ public class MagicInstanceManager implements IInstanceManager {
             if(aType == Async.class) continue;
 
             if(aType == Get.class){
-                tryGetterMethod(instance, method, Get.class, Get::required, (type, getAnnotation) -> getInstance(type));
+                tryGetterMethod(instance, method, Get.class, Get::value, (type, getAnnotation) -> getInstance(type));
                 continue;
             }
 
@@ -651,7 +661,7 @@ public class MagicInstanceManager implements IInstanceManager {
             }
 
             if(aType == GetConfig.class){
-                tryGetterMethod(instance, method, GetConfig.class, anno -> true, this::_getConfigValueAsInstanceFunction);
+                tryGetterMethod(instance, method, GetConfig.class, anno -> AutoWaitType.REQUIRED, this::_getConfigValueAsInstanceFunction);
                 continue;
             }
 
@@ -686,7 +696,7 @@ public class MagicInstanceManager implements IInstanceManager {
         plugzConfig.registerConfiguration(key, instance);
     }
 
-    private <T extends Annotation> void tryGetterMethod(Object instance, Method method, Class<T> annotationCls, Function<T, Boolean> requiredFunction, InstanceFunction<T> instanceFunction) throws MagicInstanceException{
+    private <T extends Annotation> void tryGetterMethod(Object instance, Method method, Class<T> annotationCls, Function<T, AutoWaitType> waitTypeFunction, InstanceFunction<T> instanceFunction) throws MagicInstanceException{
         Class<?> getInstanceType = null;
         int _getInstancePos = 0;
 
@@ -699,7 +709,7 @@ public class MagicInstanceManager implements IInstanceManager {
             Class<?> parameterType = parameter.getType();
             if(parameter.isAnnotationPresent(Get.class)){
                 Get paramGetAnnotation = parameter.getAnnotation(Get.class);
-                final boolean required = paramGetAnnotation.required();
+                final AutoWaitType waitType = paramGetAnnotation.value();
                 final int pos = i;
                 Object paramInstance = getInstance(parameterType);
 
@@ -707,7 +717,7 @@ public class MagicInstanceManager implements IInstanceManager {
                     mpm.putParam(pos, paramInstance);
                 }
                 else {
-                    if(canWait) {
+                    if(canWait || waitType == AutoWaitType.CAN_WAIT) {
                         waitFor(parameterType, new MagicWire() {
                             @Override
                             public String name() {
@@ -715,8 +725,8 @@ public class MagicInstanceManager implements IInstanceManager {
                             }
 
                             @Override
-                            public boolean required() {
-                                return required;
+                            public AutoWaitType waitType() {
+                                return waitType;
                             }
 
                             @Override
@@ -731,7 +741,9 @@ public class MagicInstanceManager implements IInstanceManager {
                         });
                     }
                     else {
-                        System.out.println("TODO 1");
+                        if(waitType == AutoWaitType.REQUIRED) throw new MagicInstanceException("Parameter of magic getter method [" + method + "] is required but could not be found!");
+                        Object defaultValue = ValueUtils.getDefaultValue(parameterType);
+                        mpm.putParam(pos, defaultValue);
                     }
                 }
             }
@@ -757,11 +769,11 @@ public class MagicInstanceManager implements IInstanceManager {
             mpm.putParam(_getInstancePos, getInstance);
         }
         else {
-            final boolean required = requiredFunction.apply(getAnnotation);
+            final AutoWaitType waitType = waitTypeFunction.apply(getAnnotation);
             final int getInstancePos = _getInstancePos;
             final Class<?> finalGetInstanceType = getInstanceType;
 
-            if(canWait) {
+            if(canWait || waitType == AutoWaitType.CAN_WAIT) {
                 waitFor(getInstanceType, new MagicWire() {
                     @Override
                     public String name() {
@@ -769,8 +781,8 @@ public class MagicInstanceManager implements IInstanceManager {
                     }
 
                     @Override
-                    public boolean required() {
-                        return required;
+                    public AutoWaitType waitType() {
+                        return waitType;
                     }
 
                     @Override
@@ -785,7 +797,9 @@ public class MagicInstanceManager implements IInstanceManager {
                 });
             }
             else {
-                System.out.println("TODO 2");
+                if(waitType == AutoWaitType.REQUIRED) throw new MagicInstanceException("Parameter of magic getter method [" + method + "] is required but could not be found!");
+                Object defaultValue = ValueUtils.getDefaultValue(getInstanceType);
+                mpm.putParam(getInstancePos, defaultValue);
             }
         }
     }
@@ -804,7 +818,7 @@ public class MagicInstanceManager implements IInstanceManager {
             Class<?> parameterType = parameter.getType();
             if(parameter.isAnnotationPresent(Get.class)){
                 Get paramGetAnnotation = parameter.getAnnotation(Get.class);
-                final boolean required = paramGetAnnotation.required();
+                final AutoWaitType waitType = paramGetAnnotation.value();
                 final int pos = i;
                 Object paramInstance = getInstance(parameterType);
 
@@ -812,7 +826,7 @@ public class MagicInstanceManager implements IInstanceManager {
                     mip.putParam(i, paramInstance);
                 }
                 else {
-                    if(canWait) {
+                    if(canWait || waitType == AutoWaitType.CAN_WAIT) {
                         waitFor(parameterType, new MagicWire() {
                             @Override
                             public String name() {
@@ -820,8 +834,8 @@ public class MagicInstanceManager implements IInstanceManager {
                             }
 
                             @Override
-                            public boolean required() {
-                                return required;
+                            public AutoWaitType waitType() {
+                                return waitType;
                             }
 
                             @Override
@@ -840,7 +854,7 @@ public class MagicInstanceManager implements IInstanceManager {
                         });
                     }
                     else {
-                        if(required) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + parameterType + "]!");
+                        if(waitType == AutoWaitType.REQUIRED) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + parameterType + "]!");
                         Object defaultValue = ValueUtils.getDefaultValue(parameterType);
                         mip.putParam(i, defaultValue);
                     }
@@ -874,7 +888,7 @@ public class MagicInstanceManager implements IInstanceManager {
             Class<?> parameterType = parameter.getType();
             if(parameter.isAnnotationPresent(Get.class)){
                 Get paramGetAnnotation = parameter.getAnnotation(Get.class);
-                final boolean required = paramGetAnnotation.required();
+                final AutoWaitType waitType = paramGetAnnotation.value();
                 final int pos = i;
                 Object paramInstance = getInstance(parameterType);
 
@@ -883,16 +897,18 @@ public class MagicInstanceManager implements IInstanceManager {
                     missingParams.decrementAndGet();
                 }
                 else {
-                    if(canWait) {
+                    if(canWait || waitType == AutoWaitType.CAN_WAIT) {
+                        final String methodBeanString = getMethodString(method);
+
                         waitFor(parameterType, new MagicWire() {
                             @Override
                             public String name() {
-                                return getMethodString(method);
+                                return methodBeanString;
                             }
 
                             @Override
-                            public boolean required() {
-                                return required;
+                            public AutoWaitType waitType() {
+                                return waitType;
                             }
 
                             @Override
@@ -912,7 +928,7 @@ public class MagicInstanceManager implements IInstanceManager {
                         });
                     }
                     else {
-                        if(required) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + parameterType + "]!");
+                        if(waitType == AutoWaitType.REQUIRED) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + parameterType + "]!");
                         Object defaultValue = ValueUtils.getDefaultValue(parameterType);
                         params[pos] = defaultValue;
                         missingParams.decrementAndGet();
@@ -1053,9 +1069,10 @@ public class MagicInstanceManager implements IInstanceManager {
                 Object instance = getInstance(parameterType);
 
                 if(instance == null){
-                    if(canWait){
+                    final AutoWaitType waitType = getAnnotation.value();
+
+                    if(canWait || waitType == AutoWaitType.CAN_WAIT){
                         final int pos = i;
-                        final boolean required = getAnnotation.required();
                         waitFor(parameterType, new MagicWire() {
                             @Override
                             public String name() {
@@ -1063,8 +1080,8 @@ public class MagicInstanceManager implements IInstanceManager {
                             }
 
                             @Override
-                            public boolean required() {
-                                return required;
+                            public AutoWaitType waitType() {
+                                return waitType;
                             }
 
                             @Override
@@ -1083,7 +1100,7 @@ public class MagicInstanceManager implements IInstanceManager {
                         });
                     }
                     else {
-                        if(getAnnotation.required()) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + parameterType + "]!");
+                        if(waitType == AutoWaitType.REQUIRED) throw new MagicInstanceException("Could not get nor wait for parameter of type: [" + parameterType + "]!");
                         instance = ValueUtils.getDefaultValue(parameterType);
                     }
                 }

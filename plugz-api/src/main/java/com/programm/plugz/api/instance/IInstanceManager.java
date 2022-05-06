@@ -1,6 +1,7 @@
 package com.programm.plugz.api.instance;
 
 import com.programm.plugz.api.MagicInstanceException;
+import com.programm.plugz.api.auto.AutoWaitType;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -24,6 +25,6 @@ public interface IInstanceManager {
 
     MagicMethod buildMagicMethod(Object instance, Method method);
 
-    void waitForField(Class<?> type, Object instance, Field field, boolean required);
+    void waitForField(Class<?> type, Object instance, Field field, AutoWaitType waitType);
 
 }
