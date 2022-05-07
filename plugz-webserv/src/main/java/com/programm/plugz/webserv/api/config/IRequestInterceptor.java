@@ -4,6 +4,6 @@ import com.programm.plugz.webserv.api.request.IExecutableRequest;
 
 public interface IRequestInterceptor {
 
-    IInterceptedRequestAction onRequest(IRequestHandler requestHandler, IExecutableRequest request) throws InterceptPathException;
+    IInterceptedRequestAction onRequest(IRequestHandler handler, IExecutableRequest request) throws InterceptPathException;
 
 }

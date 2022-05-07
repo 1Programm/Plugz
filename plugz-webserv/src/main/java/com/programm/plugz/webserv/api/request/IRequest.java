@@ -1,8 +1,10 @@
 package com.programm.plugz.webserv.api.request;
 
 import com.programm.plugz.webserv.RequestType;
+import com.programm.plugz.webserv.Cookie;
 import com.programm.plugz.webserv.api.config.InterceptObjectMapException;
 
+import java.util.List;
 import java.util.Map;
 
 public interface IRequest {
@@ -19,11 +21,20 @@ public interface IRequest {
     }
 
 
-    Map<String, String> headers();
+    Map<String, List<String>> headers();
 
-    default String header(String name) {
+    default List<String> header(String name) {
         return headers().get(name);
     }
+
+
+    Map<String, Cookie> cookies();
+
+    default Cookie cookie(String name) {
+        return cookies().get(name);
+    }
+
+    IRequest setCookie(Cookie cookie);
 
 
     <T> T getRequestBody(Class<T> cls) throws InterceptObjectMapException;

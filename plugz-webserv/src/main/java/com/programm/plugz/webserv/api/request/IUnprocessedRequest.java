@@ -1,18 +1,17 @@
 package com.programm.plugz.webserv.api.request;
 
+import com.programm.plugz.webserv.Cookie;
+
 public interface IUnprocessedRequest extends IRequest {
 
     String origin();
 
-    default IUnprocessedRequest param(String name, String value){
-        params().put(name, value);
-        return this;
-    }
+    IUnprocessedRequest param(String name, String value);
 
-    default IUnprocessedRequest header(String name, String value){
-        headers().put(name, value);
-        return this;
-    }
+    IUnprocessedRequest header(String name, String value);
+
+    @Override
+    IUnprocessedRequest setCookie(Cookie cookie);
 
     IUnprocessedRequest setRequestBody(Object requestBody);
 

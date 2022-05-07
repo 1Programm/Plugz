@@ -32,7 +32,9 @@ class Webserver implements IRequestHandler {
         private final String query;
         private final Map<String, String> params;
         private final List<String> paramsList;
-        private final Map<String, String> headers;
+        private final Map<String, List<String>> headers;
+        private final Map<String, Cookie> cookies;
+        private final Map<String, Cookie> newCookies = new HashMap<>();
 
         @Override
         public RequestType type() {
@@ -50,13 +52,30 @@ class Webserver implements IRequestHandler {
         }
 
         @Override
-        public Map<String, String> headers() {
+        public Map<String, List<String>> headers() {
             return headers;
         }
 
+        public String getFirstValueOfHeader(String name){
+            List<String> values = headers.get(name);
+            if(values == null) return null;
+            return values.isEmpty() ? null : values.get(0);
+        }
+
         @Override
-        public <T> T getRequestBody(Class<T> cls) throws InterceptObjectMapException {
-            return null;
+        public Map<String, Cookie> cookies() {
+            return cookies;
+        }
+
+        @Override
+        public IExecutableRequest setCookie(Cookie cookie) {
+            newCookies.put(cookie.name, cookie);
+            return this;
+        }
+
+        @Override
+        public <T> T getRequestBody(Class<T> cls) {
+            return null; //TODO
         }
 
         @Override
@@ -66,76 +85,56 @@ class Webserver implements IRequestHandler {
 
         @Override
         public IInterceptedRequestAction doContinue() {
-            return new InterceptedDoContinueAction();
+            return new InterceptedRequestSupplierAction(null, null, newCookies, null, null, InterceptedRequest.Type.CONTINUE, null, null);
         }
 
         @Override
         public IInterceptedRequestAction doContinue(IUnprocessedRequest request) {
-            return new InterceptedDoForwardAction(request);
+            return new InterceptedRequestSupplierAction(request.origin(), request, newCookies, null, null, InterceptedRequest.Type.FORWARD, null, null);
         }
 
         @Override
-        public IInterceptedRequestAction doCancel() {
-            return new InterceptedDoCancelAction();
+        public IInterceptedRequestAction doOk() {
+            return new InterceptedRequestSupplierAction(null, null, newCookies, null, null, InterceptedRequest.Type.OK, null, null);
         }
 
         @Override
-        public IInterceptedRequestAction doRedirect(IUnprocessedRequest newRequest) {
-            return new InterceptedDoRedirectAction(newRequest);
+        public IInterceptedRequestAction doOk(String contentType, Object responseBody) {
+            return new InterceptedRequestSupplierAction(null, null, newCookies, contentType, responseBody, InterceptedRequest.Type.OK, null, null);
+        }
+
+        @Override
+        public IInterceptedRequestAction doOk(Object responseBody) {
+            return new InterceptedRequestSupplierAction(null, null, newCookies, "application/json", responseBody, InterceptedRequest.Type.OK, null, null);
+        }
+
+        @Override
+        public IInterceptedRequestAction doRedirect(IUnprocessedRequest request) {
+            return new InterceptedRequestSupplierAction(request.origin(), request, newCookies, null, null, InterceptedRequest.Type.REDIRECT, null, null);
         }
 
         @Override
         public IInterceptedRequestAction doError(int status, String message) {
-            return new InterceptedDoErrorAction(status, message);
+            return new InterceptedRequestSupplierAction(null, null, newCookies, null, null, InterceptedRequest.Type.ERROR, status, message);
         }
     }
 
     @RequiredArgsConstructor
-    private static class InterceptedDoContinueAction implements IInterceptedRequestAction {
-        @Override
-        public InterceptedRequest run() {
-            return new InterceptedRequest(null, null, InterceptedRequest.Type.CONTINUE);
-        }
-    }
-
-    @RequiredArgsConstructor
-    private static class InterceptedDoForwardAction implements IInterceptedRequestAction {
-        private final IUnprocessedRequest request;
-
-        @Override
-        public InterceptedRequest run() {
-            return new InterceptedRequest(request.origin(), request, InterceptedRequest.Type.FORWARD);
-        }
-    }
-
-    private static class InterceptedDoCancelAction implements IInterceptedRequestAction {
-        @Override
-        public InterceptedRequest run() {
-            return null;
-        }
-    }
-
-    @RequiredArgsConstructor
-    private static class InterceptedDoRedirectAction implements IInterceptedRequestAction {
-        private final IUnprocessedRequest request;
+    private static class InterceptedRequestSupplierAction implements IInterceptedRequestAction {
+        private final String origin;
+        private final IRequest request;
+        private final Map<String, Cookie> newCookies;
+        private final String contentType;
+        private final Object responseBody;
+        private final InterceptedRequest.Type type;
+        private final Integer errStatus;
+        private final String errMsg;
 
         @Override
         public InterceptedRequest run() {
-            return new InterceptedRequest(request.origin(), request, InterceptedRequest.Type.REDIRECT);
+            return new InterceptedRequest(origin, request, newCookies, contentType, responseBody, type, errStatus, errMsg);
         }
     }
-
-    @RequiredArgsConstructor
-    private static class InterceptedDoErrorAction implements IInterceptedRequestAction {
-        private final int status;
-        private final String msg;
-
-        @Override
-        public InterceptedRequest run() {
-            return new InterceptedRequest(null, null, InterceptedRequest.Type.ERROR, status, msg);
-        }
-    }
-
 
 
 
@@ -145,10 +144,12 @@ class Webserver implements IRequestHandler {
 
     private final Map<RequestType, Map<String, List<RequestMethodConfig>>> mappings = new HashMap<>();
     private final Map<String, IRequestInterceptor> pathInterceptors = new HashMap<>();
+    private IRequestInterceptor fallbackInterceptor;
 
     private int port;
     private int clientTimeout;
     private boolean logRequests;
+
     private boolean running;
 
     public void init(int port, int clientTimeout, boolean logRequests){
@@ -197,7 +198,8 @@ class Webserver implements IRequestHandler {
         String query = null;
         List<String> requestParamList = null;
         Map<String, String> requestParameters = null;
-        Map<String, String> headers = new HashMap<>();
+        Map<String, List<String>> headers = new HashMap<>();
+        Map<String, Cookie> cookies = new HashMap<>();
 
         String line;
         while (!(line = in.readLine()).isBlank()) {
@@ -215,7 +217,7 @@ class Webserver implements IRequestHandler {
                 }
 
                 //host line - don't need it yet
-                line = in.readLine();
+                in.readLine();
 
                 init = false;
             }
@@ -227,14 +229,29 @@ class Webserver implements IRequestHandler {
                 String headerName = line.substring(0, firstColon);
                 if(line.charAt(firstColon + 1) == ' ') firstColon++;
                 String value = line.substring(firstColon + 1);
-                headers.put(headerName, value);
+                headers.computeIfAbsent(headerName, h -> new ArrayList<>()).add(value);
+
+                if(headerName.equals("Cookie")){
+                    collectCookies(value, cookies);
+                }
             }
         }
 
         if(requestParamList == null) requestParamList = new ArrayList<>();
         if(requestParameters == null) requestParameters = new HashMap<>();
 
-        return new ExecutableRequestImpl(requestMethod, fullQuery, query, requestParameters, requestParamList, headers);
+        return new ExecutableRequestImpl(requestMethod, fullQuery, query, requestParameters, requestParamList, headers, cookies);
+    }
+
+    private void collectCookies(String value, Map<String, Cookie> cookieMap){
+        String[] cookies = value.split("; ");
+
+        for(String cookie : cookies){
+            String[] cookieKeyValue = cookie.split("=");
+            String cookieName = cookieKeyValue[0];
+            String cookieValue = cookieKeyValue[1];
+            cookieMap.put(cookieName, new Cookie(cookieName, cookieValue));
+        }
     }
 
     private Map<String, String> getRequestParameters(String s, List<String> asList){
@@ -253,63 +270,100 @@ class Webserver implements IRequestHandler {
         return map;
     }
 
-    private void handleRequest(BufferedReader in, PrintWriter out, ExecutableRequestImpl request) throws IOException {
-        IRequestInterceptor pathInterceptor = pathInterceptors.get(request.query);
-        if(pathInterceptor != null){
-            try {
-                IInterceptedRequestAction action = pathInterceptor.onRequest(this, request);
 
-                InterceptedRequest interceptedRequest = action.run();
 
-                if(interceptedRequest == null){
-                    replyOk(out);
-                    return;
-                }
 
-                String origin = interceptedRequest.getOrigin();
-                InterceptedRequest.Type interceptType = interceptedRequest.getType();
 
-                switch (interceptType) {
-                    case CONTINUE -> {}
-                    case FORWARD -> {
-                        try {
-                            forwardRequest(origin, interceptedRequest.getRequest(), out);
-                        }
-                        catch (MalformedURLException e){
-                            log.logException(e);
-                            replyError(out, 500, "Internal Server Error");
-                        }
-                        return;
-                    }
-                    case REDIRECT -> {
-                        String redirectUrl = interceptedRequest.getRequest().buildFullQuery();
-                        if(origin != null){
-                            redirectUrl = WebUtils.concatPathMapping(origin, redirectUrl);
-                        }
 
-                        replyRedirect(out, redirectUrl);
-                        return;
-                    }
-                    case ERROR -> {
-                        int errStatus = interceptedRequest.getErrStatus();
-                        String errMsg = interceptedRequest.getErrMsg();
-                        replyError(out, errStatus, errMsg);
-                        return;
-                    }
-                }
-            }
-            catch (InterceptPathException e){
-                log.logException(e);
-            }
+
+
+
+
+
+
+    private void handleRequest(BufferedReader in, PrintWriter out, ExecutableRequestImpl request) {
+        IRequestInterceptor interceptor = pathInterceptors.get(request.query);
+        doOrDontInterceptRequest(in, out, request, interceptor, true);
+    }
+
+    private void doOrDontInterceptRequest(BufferedReader in, PrintWriter out, ExecutableRequestImpl request, IRequestInterceptor interceptor, boolean withFallback){
+        if(interceptor == null) {
+            continueHandleRequest(in, out, request, null, withFallback);
+            return;
         }
 
+        try {
+            IInterceptedRequestAction action = interceptor.onRequest(this, request);
+            InterceptedRequest interceptedRequest = action.run();
+
+            String origin = interceptedRequest.getOrigin();
+            InterceptedRequest.Type interceptType = interceptedRequest.getType();
+            Map<String, Cookie> requestCookies = interceptedRequest.getNewCookies();
+
+            switch (interceptType) {
+                case OK ->  {
+                    String contentType = interceptedRequest.getContentType();
+                    Object responseBody = interceptedRequest.getResponseBody();
+
+                    if(responseBody == null){
+                        replyOk(out, requestCookies);
+                    }
+                    else {
+                        IContentWriter writer = contentHandler.getWriter(contentType);
+                        if (writer == null) throw new WebservException("No fitting writer for contentType [" + contentType + "] found!");
+
+                        String _responseBody;
+                        try {
+                            _responseBody = writer.write(responseBody);
+                        }
+                        catch (ObjectMapException e) {
+                            throw new WebservException("Failed to write content!", e);
+                        }
+
+                        replyOkData(out, contentType, requestCookies);
+                        out.print(_responseBody);
+                    }
+                }
+                case CONTINUE ->
+                        continueHandleRequest(in, out, request, requestCookies, withFallback);
+                case FORWARD ->
+                        forwardRequest(out, origin, interceptedRequest.getRequest(), requestCookies);
+                case REDIRECT -> {
+                    String redirectUrl = interceptedRequest.getRequest().buildFullQuery();
+                    if(origin != null){
+                        redirectUrl = WebUtils.concatPathMapping(origin, redirectUrl);
+                    }
+
+                    replyRedirect(out, redirectUrl, requestCookies);
+                }
+                case ERROR -> {
+                    int errStatus = interceptedRequest.getErrStatus();
+                    String errMsg = interceptedRequest.getErrMsg();
+                    replyError(out, errStatus, errMsg, requestCookies);
+                }
+            }
+        }
+        catch (WebservException | IOException e){
+            log.logException("Interceptor threw exception: " + e.getMessage(), e);
+            replyError(out, 500, "Internal Server Error");
+        }
+    }
+
+    private void continueHandleRequest(BufferedReader in, PrintWriter out, ExecutableRequestImpl request, Map<String, Cookie> newCookies, boolean withFallback){
         if(request.type == RequestType.OPTIONS){
-            String requestingMethod = request.headers.get("Access-Control-Request-Method");
+            String requestingMethod = request.getFirstValueOfHeader("Access-Control-Request-Method");
 
             for(RequestType type : RequestType.values()){
-                if(requestingMethod.equals(type.name())){
+                if(requestingMethod != null && requestingMethod.equals(type.name())){
                     if(invalidMapping(type, request.query)){
+                        if(fallbackInterceptor != null && withFallback){
+                            if(logRequests) log.info("[%7<({})]: {} -> Fallback interceptor.", request.type, request.fullQuery);
+                            doOrDontInterceptRequest(in, out, request, fallbackInterceptor, false);
+                            return;
+                        }
+
                         if(logRequests) log.info("[%7<({})]: {} was rejected: No request mapper found!", request.type, request.query);
+
                         replyError(out, 501, "Not Implemented");
                         return;
                     }
@@ -317,33 +371,40 @@ class Webserver implements IRequestHandler {
                 }
             }
 
-            replyOkOptions(out);
+            replyOkOptions(out, newCookies);
         }
         else {
             try {
-                doMapping(out, in, request);
-            } catch (WebservException e) {
+                handleRequest(out, in, request, newCookies, withFallback);
+            }
+            catch (WebservException | IOException e) {
                 log.logException("Failed to do mapping [" + request.fullQuery + "]", e);
                 replyError(out, 500, "Internal Server Error");
             }
         }
     }
 
-    private void doMapping(PrintWriter out, BufferedReader in, ExecutableRequestImpl request) throws WebservException, IOException {
+    private void handleRequest(PrintWriter out, BufferedReader in, ExecutableRequestImpl request, Map<String, Cookie> newCookies, boolean withFallback) throws WebservException, IOException {
         List<RequestMethodConfig> configs = getConfigs(request.type, request.query);
 
         if(configs == null){
+            if(fallbackInterceptor != null && withFallback){
+                if(logRequests) log.info("[%7<({})]: {} -> Fallback interceptor.", request.type, request.fullQuery);
+                doOrDontInterceptRequest(in, out, request, fallbackInterceptor, false);
+                return;
+            }
+
             if(logRequests) log.info("[%7<({})]: {} was rejected: No request mapper found!", request.type, request.fullQuery);
             replyError(out, 501, "Not Implemented");
             return;
         }
 
         for(RequestMethodConfig config : configs){
-            doMethodMapping(out, in, request, config);
+            handleRequestMappingForConfig(out, in, request, config, newCookies);
         }
     }
 
-    private void doMethodMapping(PrintWriter out, BufferedReader in, ExecutableRequestImpl request, RequestMethodConfig config) throws WebservException, IOException {
+    private void handleRequestMappingForConfig(PrintWriter out, BufferedReader in, ExecutableRequestImpl request, RequestMethodConfig config, Map<String, Cookie> newCookies) throws WebservException, IOException {
         List<RequestParam> requestParams = config.requestParamAnnotations;
         Object[] params = new Object[requestParams.size() + (config.requestBodyAnnotationPos == -1 ? 0 : 1)];
 
@@ -352,7 +413,8 @@ class Webserver implements IRequestHandler {
         int countRequestParams = 0;
         for(int i=0;i<params.length;i++){
             if(i == bodyPos){
-                String _cLength = request.headers.get("Content-Length");
+                String _cLength = request.getFirstValueOfHeader("Content-Length");
+                if(_cLength == null) throw new WebservException("No Content-Length header defined but request body is requested!");
                 int cLength = Integer.parseInt(_cLength);
 
                 StringBuilder contentBuilder = new StringBuilder();
@@ -367,7 +429,7 @@ class Webserver implements IRequestHandler {
                     log.error("Could not read full content length. Probably 'Umlaute' are the problem! [{}] characters less.", (cLength - contentBuilder.length()));
                 }
 
-                String contentType = request.headers.get("Content-Type");
+                String contentType = request.getFirstValueOfHeader("Content-Type");
 
                 IContentReader reader = contentHandler.getReader(contentType);
 
@@ -412,7 +474,7 @@ class Webserver implements IRequestHandler {
         }
 
         if(data == null){
-            replyOk(out);
+            replyOk(out, newCookies);
             return;
         }
 
@@ -426,7 +488,7 @@ class Webserver implements IRequestHandler {
             throw new WebservException("Failed to write content!", e);
         }
 
-        replyOkData(out, config.contentType);
+        replyOkData(out, config.contentType, newCookies);
         out.print(_data);
     }
 
@@ -455,9 +517,14 @@ class Webserver implements IRequestHandler {
         pathInterceptors.put(path, interceptor);
     }
 
+    public void registerFallbackInterceptor(IRequestInterceptor interceptor) {
+        if(fallbackInterceptor != null) throw new IllegalStateException("Multiple fallback interceptors are not allowed!");
+        this.fallbackInterceptor = interceptor;
+    }
 
 
-    private void forwardRequest(String origin, IRequest request, PrintWriter out) throws IOException {
+
+    private void forwardRequest(PrintWriter out, String origin, IRequest request, Map<String, Cookie> newCookies) throws IOException {
         String redirectUrl = request.buildFullQuery();
         if(origin != null){
             redirectUrl = WebUtils.concatPathMapping(origin, redirectUrl);
@@ -484,7 +551,7 @@ class Webserver implements IRequestHandler {
         long contentLength = connection.getContentLengthLong();
 
         if(contentLength == 0){
-            replyOk(out);
+            replyOk(out, newCookies);
             return;
         }
 
@@ -502,7 +569,7 @@ class Webserver implements IRequestHandler {
         String _data = response.toString();
 
         if(_data.isEmpty()){
-            replyOk(out);
+            replyOk(out, newCookies);
             return;
         }
 
@@ -510,7 +577,7 @@ class Webserver implements IRequestHandler {
         List<String> contentTypes = headers.get("Content-Type");
         String contentType = contentTypes == null ? null : (contentTypes.isEmpty() ? null : contentTypes.get(0));
 
-        replyOkData(out, contentType);
+        replyOkData(out, contentType, newCookies);
         out.print(_data);
     }
 
@@ -527,21 +594,36 @@ class Webserver implements IRequestHandler {
 
 
 
+    private void printSetCookieHeaders(PrintWriter out, Map<String, Cookie> newCookies) {
+        if(newCookies == null) return;
+        for(Cookie cookie : newCookies.values()){
+            out.print("Set-Cookie: " + cookie);
+        }
+    }
 
-
-    private void replyOk(PrintWriter out){
+    private void replyOk(PrintWriter out, Map<String, Cookie> newCookies){
         out.print("HTTP/1.0 200 OK\r\n");
         out.print("Server: BackendServer/1.0\r\n");
         out.print("Access-Control-Allow-Origin: *\r\n");
+        printSetCookieHeaders(out, newCookies);
         out.print("\r\n"); // End of headers
     }
 
-    private void replyOkData(PrintWriter out, String dataType){
+    private void replyOkData(PrintWriter out, String dataType, Map<String, Cookie> newCookies){
         out.print("HTTP/1.0 200 OK\r\n");
         out.print("Server: BackendServer/1.0\r\n");
         out.print("Content-Type: " + dataType + "\r\n");
         out.print("Access-Control-Allow-Origin: *\r\n");
+        printSetCookieHeaders(out, newCookies);
         out.print("\r\n"); // End of headers
+    }
+
+    private void replyError(PrintWriter out, int status, String msg, Map<String, Cookie> newCookies){
+        out.print("HTTP/1.0 " + status + " " + msg + "\r\n");
+        out.print("Server: BackendServer/1.0\r\n");
+        out.print("Access-Control-Allow-Origin: *\r\n");
+        printSetCookieHeaders(out, newCookies);
+        out.print("\r\n");
     }
 
     private void replyError(PrintWriter out, int status, String msg){
@@ -551,19 +633,21 @@ class Webserver implements IRequestHandler {
         out.print("\r\n");
     }
 
-    private void replyOkOptions(PrintWriter out){
+    private void replyOkOptions(PrintWriter out, Map<String, Cookie> newCookies){
         out.print("HTTP/1.0 200 OK\r\n");
         out.print("Server: BackendServer/1.0\r\n");
         out.print("Accept: application/json;charset=UTF-8\r\n");
         out.print("Accept-Charset: UTF-8\r\n");
         out.print("Access-Control-Allow-Origin: *\r\n");
         out.print("Access-Control-Allow-Headers: Content-Type\r\n");
+        printSetCookieHeaders(out, newCookies);
         out.print("\r\n"); // End of headers
     }
 
-    private void replyRedirect(PrintWriter out, String url){
+    private void replyRedirect(PrintWriter out, String url, Map<String, Cookie> newCookies){
         out.print("HTTP/1.0 303 See Other\r\n");
         out.print("Location: " + url + "\r\n");
+        printSetCookieHeaders(out, newCookies);
         out.print("\r\n"); // End of headers
     }
 
@@ -571,5 +655,10 @@ class Webserver implements IRequestHandler {
     @Override
     public BasicRequest buildRequest(String origin, RequestType type, String path) {
         return new BasicRequest(origin, type, path);
+    }
+
+    @Override
+    public ModifiableCookie buildCookie(String name, String value) {
+        return new ModifiableCookie(name, value);
     }
 }

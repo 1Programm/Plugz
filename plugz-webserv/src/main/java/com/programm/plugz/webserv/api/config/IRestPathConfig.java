@@ -35,6 +35,10 @@ public interface IRestPathConfig {
         onSuccess((handler, req) -> onSuccess.apply(req));
     }
 
+    default void onSuccessOk(){
+        onSuccess((Function<IExecutableRequest, IInterceptedRequestAction>) IExecutableRequest::doOk);
+    }
+
     default void onSuccessContinue(){
         onSuccess((Function<IExecutableRequest, IInterceptedRequestAction>) IExecutableRequest::doContinue);
     }

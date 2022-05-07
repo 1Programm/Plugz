@@ -8,4 +8,6 @@ public interface RestConfig {
 
     void intercept(String[] paths, IRequestInterceptor interceptor);
 
+    void fallbackInterceptor(IRequestInterceptor interceptor);
+
 }

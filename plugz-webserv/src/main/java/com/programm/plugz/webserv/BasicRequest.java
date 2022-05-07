@@ -4,7 +4,9 @@ import com.programm.plugz.webserv.api.request.IUnprocessedRequest;
 import com.programm.plugz.webserv.api.config.InterceptObjectMapException;
 import lombok.RequiredArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RequiredArgsConstructor
@@ -14,7 +16,8 @@ class BasicRequest implements IUnprocessedRequest {
     protected final RequestType type;
     protected final String query;
     protected final Map<String, String> params = new HashMap<>();
-    protected final Map<String, String> headers = new HashMap<>();
+    protected final Map<String, List<String>> headers = new HashMap<>();
+    protected final Map<String, Cookie> cookies = new HashMap<>();
 
     protected Object requestBody;
 
@@ -45,13 +48,25 @@ class BasicRequest implements IUnprocessedRequest {
     }
 
     @Override
-    public Map<String, String> headers() {
+    public Map<String, List<String>> headers() {
         return headers;
     }
 
     @Override
     public BasicRequest header(String name, String value){
-        headers.put(name, value);
+        headers.computeIfAbsent(name, n -> new ArrayList<>()).add(value);
+        return this;
+    }
+
+    @Override
+    public Map<String, Cookie> cookies() {
+        return cookies;
+    }
+
+    @Override
+    public BasicRequest setCookie(Cookie cookie) {
+        header("Set-Cookie", cookie.toString());
+        cookies.put(cookie.name, cookie);
         return this;
     }
 
@@ -83,4 +98,5 @@ class BasicRequest implements IUnprocessedRequest {
 
         return query + sb;
     }
+
 }

@@ -1,5 +1,6 @@
 package com.programm.plugz.webserv.api.config;
 
+import com.programm.plugz.webserv.ModifiableCookie;
 import com.programm.plugz.webserv.RequestType;
 import com.programm.plugz.webserv.api.request.IUnprocessedRequest;
 
@@ -18,5 +19,7 @@ public interface IRequestHandler {
     default IUnprocessedRequest buildRequest(String path) {
         return buildRequest(null, RequestType.GET, path);
     }
+
+    ModifiableCookie buildCookie(String name, String value);
 
 }

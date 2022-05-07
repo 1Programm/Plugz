@@ -53,7 +53,7 @@ class RestConfigImpl implements RestConfig {
         @Override
         public void onSuccess(IRequestInterceptor onSuccess) {
             if(onUnauthorizedAccess == null){
-                onUnauthorizedAccess = (handler, req) -> req.doCancel();
+                onUnauthorizedAccess = (handler, req) -> req.doOk();
             }
 
             IRequestInterceptor interceptor = new RestPathConfigurableInterceptor(validators, onUnauthorizedAccess, onSuccess);
@@ -81,5 +81,10 @@ class RestConfigImpl implements RestConfig {
         for(String path : paths) {
             webserver.registerInterceptor(path, interceptor);
         }
+    }
+
+    @Override
+    public void fallbackInterceptor(IRequestInterceptor interceptor) {
+        webserver.registerFallbackInterceptor(interceptor);
     }
 }
