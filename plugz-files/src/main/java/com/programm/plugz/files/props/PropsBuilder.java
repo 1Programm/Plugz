@@ -50,8 +50,9 @@ public class PropsBuilder {
                 last = i + 1;
             }
             else if(s.charAt(i) == '\n'){
-                if(key == null) throw new PropsParseException("End of line before value declaration!");
+                if(key == null) continue;
                 String value = s.substring(last, i).trim();
+                if(value.isBlank()) throw new PropsParseException("No key value pair defined!");
                 nodes.add(new PropsKeyValNode(key, value));
                 key = null;
                 last = i + 1;

@@ -1,9 +1,11 @@
 package com.programm.plugz.test;
 
+import com.programm.ioutils.log.api.ILogger;
 import com.programm.plugz.api.Config;
 import com.programm.plugz.api.auto.Get;
-import com.programm.plugz.api.lifecycle.PreSetup;
+import com.programm.plugz.api.lifecycle.PostSetup;
 import com.programm.plugz.magic.MagicEnvironment;
+import com.programm.plugz.webserv.api.config.RestConfig;
 
 @Config
 public class Main {
@@ -12,10 +14,14 @@ public class Main {
         MagicEnvironment.Start(args);
     }
 
+    @Get private ILogger log;
 
-    @Get
-    public void setup(String s){
-        System.out.println("HI");
+    @PostSetup
+    public void configureRestConfig(@Get RestConfig config){
+        config.forPath("/test")
+                .with(new TestRequestValidator(false))
+                .onUnauthorizedAccessRedirect("/error/unauthorized")
+                .onSuccessContinue();
     }
 
 }

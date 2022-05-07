@@ -10,6 +10,7 @@ import com.programm.plugz.api.instance.MagicMethod;
 import com.programm.plugz.object.mapper.IObjectMapper;
 import com.programm.plugz.object.mapper.ObjectMapException;
 import com.programm.plugz.webserv.api.*;
+import com.programm.plugz.webserv.api.config.RestConfig;
 import com.programm.plugz.webserv.content.ContentHandler;
 import com.programm.plugz.webserv.ex.WebservSetupException;
 
@@ -41,6 +42,7 @@ public class WebservSubsystem implements ISubsystem {
     private final IAsyncManager asyncManager;
     private final ContentHandler contentHandler;
     private final Webserver webserver;
+    private final RestConfigImpl restConfig;
 
     private boolean logRegisterMappings;
 
@@ -49,7 +51,8 @@ public class WebservSubsystem implements ISubsystem {
         this.config = config;
         this.asyncManager = asyncManager;
         this.contentHandler = new ContentHandler();
-        webserver = new Webserver(log, contentHandler);
+        this.webserver = new Webserver(log, contentHandler);
+        this.restConfig = new RestConfigImpl(webserver);
     }
 
     @Override
@@ -59,6 +62,7 @@ public class WebservSubsystem implements ISubsystem {
         this.logRegisterMappings = config.getBoolOrRegisterDefault(CONF_SERVER_LOG_REGISTER_MAPPING_NAME, CONF_SERVER_LOG_REGISTER_MAPPING_DEFAULT);
         config.registerDefaultConfiguration(CONF_SERVER_LOG_REQUESTS_NAME, CONF_SERVER_LOG_REQUESTS_DEFAULT);
 
+        setupHelper.registerInstance(RestConfig.class, restConfig);
 
         setupHelper.registerSearchClass(IObjectMapper.class, this::registerImplementingObjectReaderClass);
         setupHelper.registerClassAnnotation(RestController.class, this::registerRestControllerClass);
@@ -164,7 +168,8 @@ public class WebservSubsystem implements ISubsystem {
 
     private void registerMappingMethod(Object instance, Method method, IInstanceManager manager, RequestType type, String value, String contentType) throws MagicInstanceException {
         RestController restControllerAnnotation = instance.getClass().getAnnotation(RestController.class);
-        String path = concatPathMapping(restControllerAnnotation.value(), value);
+        String path = WebUtils.concatPathMapping(restControllerAnnotation.value(), value);
+        if(path.charAt(0) != '/') path = "/" + path;
 
         if(logRegisterMappings) log.info("Register mapping: %30<([{}]) for {}.", path, type);
 
@@ -202,28 +207,5 @@ public class WebservSubsystem implements ISubsystem {
         }
 
         webserver.registerMapping(type, path, new RequestMethodConfig(mm, contentType, requestParams, requestBodyPos, requestBodyTyp));
-    }
-
-    private String concatPathMapping(String a, String b){
-        String path;
-
-        if(a.isEmpty()) {
-            path = b.isEmpty() ? "/" : b;
-        }
-        else if(b.isEmpty()) {
-            path = a;
-        }
-        else if(a.endsWith("/") && b.startsWith("/")){
-            path = a + b.substring(1);
-        }
-        else if(a.endsWith("/") || b.startsWith("/")){
-            path = a + b;
-        }
-        else {
-            path = a + "/" + b;
-        }
-
-        if(path.charAt(0) != '/') path = "/" + path;
-        return path;
     }
 }

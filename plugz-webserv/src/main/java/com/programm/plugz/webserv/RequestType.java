@@ -1,6 +1,6 @@
 package com.programm.plugz.webserv;
 
-enum RequestType {
+public enum RequestType {
 
     GET,
     PUT,
