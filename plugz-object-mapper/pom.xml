@@ -10,7 +10,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>plugz-object-mapper</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
 
     <properties>
         <maven.compiler.source>16</maven.compiler.source>
@@ -21,12 +21,12 @@
         <dependency>
             <groupId>com.programm.plugz</groupId>
             <artifactId>plugz-files</artifactId>
-            <version>1.1.0</version>
+            <version>1.1.1</version>
         </dependency>
         <dependency>
             <groupId>com.programm.plugz</groupId>
             <artifactId>plugz-cls-analyzer</artifactId>
-            <version>1.0.0</version>
+            <version>1.0.1</version>
         </dependency>
     </dependencies>
 
