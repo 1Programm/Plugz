@@ -20,12 +20,12 @@
         <dependency>
             <groupId>com.programm.plugz</groupId>
             <artifactId>plugz-magic</artifactId>
-            <version>1.2-SNAPSHOT</version>
+            <version>1.2.1</version>
         </dependency>
         <dependency>
             <groupId>com.programm.plugz</groupId>
             <artifactId>plugz-webserv</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>1.0.1</version>
         </dependency>
         <dependency>
             <groupId>com.programm.ioutils</groupId>
