@@ -197,8 +197,7 @@ public class PlugzUrlClassScanner {
             cls = Class.forName(clsName);
         }
         catch (ClassNotFoundException e){
-            log.error("# Something went wrong: Class [{}] could not be found!", clsName);
-            e.printStackTrace();
+            log.logException("# Something went wrong: Class [" + clsName + "] could not be found!", e);
             return;
         }
         catch (NoClassDefFoundError e){
