@@ -37,6 +37,9 @@ public class WebservSubsystem implements ISubsystem {
     private static final String CONF_SERVER_LOG_REQUESTS_NAME = "webserv.log.requests";
     private static final boolean CONF_SERVER_LOG_REQUESTS_DEFAULT = false;
 
+    private static final String CONF_SERVER_LOG_FALLBACK_NAME = "webserv.log.request.fallback";
+    private static final boolean CONF_SERVER_LOG_FALLBACK_DEFAULT = false;
+
 
     private final ILogger log;
     private final PlugzConfig config;
@@ -62,6 +65,7 @@ public class WebservSubsystem implements ISubsystem {
         config.registerDefaultConfiguration(CONF_SERVER_CLIENT_TIMEOUT_NAME, CONF_SERVER_CLIENT_TIMEOUT_DEFAULT);
         this.logRegisterMappings = config.getBoolOrRegisterDefault(CONF_SERVER_LOG_REGISTER_MAPPING_NAME, CONF_SERVER_LOG_REGISTER_MAPPING_DEFAULT);
         config.registerDefaultConfiguration(CONF_SERVER_LOG_REQUESTS_NAME, CONF_SERVER_LOG_REQUESTS_DEFAULT);
+        config.registerDefaultConfiguration(CONF_SERVER_LOG_FALLBACK_NAME, CONF_SERVER_LOG_FALLBACK_DEFAULT);
 
         setupHelper.registerInstance(RestConfig.class, restConfig);
 
@@ -89,9 +93,10 @@ public class WebservSubsystem implements ISubsystem {
         int port = config.getIntOrError(CONF_SERVER_PORT_NAME, WebservSetupException::new);
         int clientTimeout = config.getIntOrError(CONF_SERVER_CLIENT_TIMEOUT_NAME, WebservSetupException::new);
         boolean logRequests = config.getBoolOrError(CONF_SERVER_LOG_REQUESTS_NAME, WebservSetupException::new);
+        boolean logFallback = config.getBoolOrError(CONF_SERVER_LOG_FALLBACK_NAME, WebservSetupException::new);
 
         log.info("Starting Server on port [{}]...", port);
-        webserver.init(port, clientTimeout, logRequests);
+        webserver.init(port, clientTimeout, logRequests, logFallback);
         asyncManager.runAsyncTask(webserver::start, null, 0, true, false);
     }
 

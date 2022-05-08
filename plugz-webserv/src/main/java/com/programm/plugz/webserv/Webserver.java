@@ -149,13 +149,15 @@ class Webserver implements IRequestHandler {
     private int port;
     private int clientTimeout;
     private boolean logRequests;
+    private boolean logFallback;
 
     private boolean running;
 
-    public void init(int port, int clientTimeout, boolean logRequests){
+    public void init(int port, int clientTimeout, boolean logRequests, boolean logFallback){
         this.port = port;
         this.clientTimeout = clientTimeout;
         this.logRequests = logRequests;
+        this.logFallback = logFallback;
     }
 
     public void start(){
@@ -357,7 +359,7 @@ class Webserver implements IRequestHandler {
                 if(requestingMethod != null && requestingMethod.equals(type.name())){
                     if(invalidMapping(type, request.query)){
                         if(fallbackInterceptor != null && withFallback){
-                            if(logRequests) log.info("[%7<({})]: {} -> Fallback interceptor.", request.type, request.fullQuery);
+                            if(logFallback) log.info("[%7<({})]: {} -> Fallback interceptor.", request.type, request.fullQuery);
                             doOrDontInterceptRequest(in, out, request, fallbackInterceptor, false);
                             return;
                         }
@@ -389,7 +391,7 @@ class Webserver implements IRequestHandler {
 
         if(configs == null){
             if(fallbackInterceptor != null && withFallback){
-                if(logRequests) log.info("[%7<({})]: {} -> Fallback interceptor.", request.type, request.fullQuery);
+                if(logFallback) log.info("[%7<({})]: {} -> Fallback interceptor.", request.type, request.fullQuery);
                 doOrDontInterceptRequest(in, out, request, fallbackInterceptor, false);
                 return;
             }

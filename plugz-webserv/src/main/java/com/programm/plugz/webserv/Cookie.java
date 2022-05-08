@@ -19,15 +19,15 @@ public class Cookie {
         this.value = value;
     }
 
-    String name(){
+    public String name(){
         return name;
     }
 
-    String value(){
+    public String value(){
         return value;
     }
 
-    Date expires(){
+    public Date expires(){
         return expires;
     }
 

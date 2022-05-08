@@ -84,3 +84,5 @@ webserv.client.timeout = 1000
 webserv.log.mappings.register = false
 
 webserv.log.requests = false
+
+webserv.log.request.fallback = false
