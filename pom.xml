@@ -27,6 +27,22 @@
         <maven.compiler.target>16</maven.compiler.target>
     </properties>
 
+    <profiles>
+        <profile>
+            <id>skip-tests</id>
+            <properties>
+                <maven.test.skip>true</maven.test.skip>
+            </properties>
+        </profile>
+        <profile>
+            <id>snapshot</id>
+            <properties>
+                <maven.source.skip>true</maven.source.skip>
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+            </properties>
+        </profile>
+    </profiles>
+
     <build>
         <pluginManagement>
             <plugins>
