@@ -2,7 +2,6 @@ package com.programm.plugz.webserv.api.config;
 
 import com.programm.plugz.webserv.api.IRequestValidator;
 import com.programm.plugz.webserv.api.request.IExecutableRequest;
-import com.programm.plugz.webserv.api.request.IRequest;
 import com.programm.plugz.webserv.api.request.IUnprocessedRequest;
 
 import java.util.function.Function;

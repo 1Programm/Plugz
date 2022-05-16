@@ -8,37 +8,37 @@ public class ModifiableCookie extends Cookie {
         super(name, value);
     }
 
-    public ModifiableCookie setExpires(Date expires){
+    public ModifiableCookie expires(Date expires){
         this.expires = expires;
         return this;
     }
 
-    public ModifiableCookie setMaxAge(Integer maxAge){
+    public ModifiableCookie maxAge(Integer maxAge){
         this.maxAge = maxAge;
         return this;
     }
 
-    public ModifiableCookie setDomain(String domain){
+    public ModifiableCookie domain(String domain) {
         this.domain = domain;
         return this;
     }
 
-    public ModifiableCookie setPath(String path){
+    public ModifiableCookie path(String path){
         this.path = path;
         return this;
     }
 
-    public ModifiableCookie enableSecure(){
-        this.secure = true;
+    public ModifiableCookie secure(boolean secure){
+        this.secure = secure;
         return this;
     }
 
-    public ModifiableCookie enableHttpOnly(){
-        this.httpOnly = true;
+    public ModifiableCookie httpOnly(boolean httpOnly){
+        this.httpOnly = httpOnly;
         return this;
     }
 
-    public ModifiableCookie setSameSite(String sameSite){
+    public ModifiableCookie sameSite(String sameSite){
         this.sameSite = sameSite;
         return this;
     }

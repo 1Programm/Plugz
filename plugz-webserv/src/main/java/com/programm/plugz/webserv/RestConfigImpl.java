@@ -3,6 +3,7 @@ package com.programm.plugz.webserv;
 import com.programm.plugz.webserv.api.IRequestValidator;
 import com.programm.plugz.webserv.api.config.*;
 import com.programm.plugz.webserv.api.request.IExecutableRequest;
+import com.programm.plugz.webserv.api.request.RequestException;
 import lombok.RequiredArgsConstructor;
 
 import java.util.ArrayList;
@@ -18,7 +19,7 @@ class RestConfigImpl implements RestConfig {
         private final IRequestInterceptor onSuccess;
 
         @Override
-        public IInterceptedRequestAction onRequest(IRequestHandler requestHandler, IExecutableRequest request) throws InterceptPathException {
+        public IInterceptedRequestAction onRequest(IRequestHandler requestHandler, IExecutableRequest request) throws RequestException {
             for(IRequestValidator validator : validators){
                 if(!validator.validate(request)){
                     return onUnauthorizedAccess.onRequest(requestHandler, request);

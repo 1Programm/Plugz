@@ -6,10 +6,14 @@ import com.programm.plugz.api.MagicInstanceException;
 import com.programm.plugz.api.MagicRuntimeException;
 import com.programm.plugz.object.mapper.ObjectMapException;
 import com.programm.plugz.webserv.api.RequestParam;
-import com.programm.plugz.webserv.api.config.*;
+import com.programm.plugz.webserv.api.config.IInterceptedRequestAction;
+import com.programm.plugz.webserv.api.config.IRequestHandler;
+import com.programm.plugz.webserv.api.config.IRequestInterceptor;
+import com.programm.plugz.webserv.api.config.InterceptedRequest;
 import com.programm.plugz.webserv.api.request.IExecutableRequest;
 import com.programm.plugz.webserv.api.request.IRequest;
 import com.programm.plugz.webserv.api.request.IUnprocessedRequest;
+import com.programm.plugz.webserv.api.request.InvalidRequestException;
 import com.programm.plugz.webserv.content.ContentHandler;
 import com.programm.plugz.webserv.content.IContentReader;
 import com.programm.plugz.webserv.content.IContentWriter;
@@ -19,7 +23,10 @@ import lombok.RequiredArgsConstructor;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @RequiredArgsConstructor
 @Logger("Webserv")
@@ -89,8 +96,11 @@ class Webserver implements IRequestHandler {
         }
 
         @Override
-        public IInterceptedRequestAction doContinue(IUnprocessedRequest request) {
-            return new InterceptedRequestSupplierAction(request.origin(), request, newCookies, null, null, InterceptedRequest.Type.FORWARD, null, null);
+        public IInterceptedRequestAction doContinue(IUnprocessedRequest request) throws InvalidRequestException {
+            String origin = request.origin();
+            if(origin == null) throw new InvalidRequestException("Origin of request must be set for request-forwarding!");
+
+            return new InterceptedRequestSupplierAction(origin, request, newCookies, null, null, InterceptedRequest.Type.FORWARD, null, null);
         }
 
         @Override
@@ -109,8 +119,11 @@ class Webserver implements IRequestHandler {
         }
 
         @Override
-        public IInterceptedRequestAction doRedirect(IUnprocessedRequest request) {
-            return new InterceptedRequestSupplierAction(request.origin(), request, newCookies, null, null, InterceptedRequest.Type.REDIRECT, null, null);
+        public IInterceptedRequestAction doRedirect(IUnprocessedRequest request) throws InvalidRequestException {
+            String origin = request.origin();
+            if(origin == null) throw new InvalidRequestException("Origin of request must be set for request-redirecting!");
+
+            return new InterceptedRequestSupplierAction(origin, request, newCookies, null, null, InterceptedRequest.Type.REDIRECT, null, null);
         }
 
         @Override
@@ -164,18 +177,23 @@ class Webserver implements IRequestHandler {
         running = true;
 
         try(ServerSocket serverSocket = new ServerSocket(port)) {
-            while(running) {
-                try(Socket client = serverSocket.accept()){
-                    client.setSoTimeout(clientTimeout);
-                    handleClient(client);
-                }
-                catch (IOException e){
-                    log.logException("IOException when handling the client: " + e.getMessage(), e);
-                }
-            }
+            Thread extraThread = new Thread(() -> waitForClient(serverSocket), "Extra Thread");
+            extraThread.start();
+            waitForClient(serverSocket);
         }
         catch (IOException e){
             throw new MagicRuntimeException("Failed to start the server on port [" + port + "].", e);
+        }
+    }
+
+    private void waitForClient(ServerSocket serverSocket){
+        while(running) {
+            try (Socket client = serverSocket.accept()) {
+                client.setSoTimeout(clientTimeout);
+                handleClient(client);
+            } catch (IOException e) {
+                log.logException("IOException when handling the client: " + e.getMessage(), e);
+            }
         }
     }
 
@@ -526,17 +544,30 @@ class Webserver implements IRequestHandler {
 
 
 
-    private void forwardRequest(PrintWriter out, String origin, IRequest request, Map<String, Cookie> newCookies) throws IOException {
-        String redirectUrl = request.buildFullQuery();
-        if(origin != null){
-            redirectUrl = WebUtils.concatPathMapping(origin, redirectUrl);
+    private void forwardRequest(PrintWriter out, String origin, IRequest request, Map<String, Cookie> newCookies) throws IOException, WebservException {
+        if(origin == null){
+            origin = "";
         }
 
-        URL url = new URL(redirectUrl);
+        String redirectUrl = request.buildFullQuery();
+        redirectUrl = WebUtils.concatPathMapping(origin, redirectUrl);
+
+        URL url;
+        try {
+            url = new URL(redirectUrl);
+        }
+        catch (MalformedURLException e){
+            throw new WebservException("Invalid url for redirection: [" + redirectUrl + "]!", e);
+        }
+
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setDoOutput(true);
+        connection.setDoInput(true);
+        connection.setConnectTimeout(clientTimeout);
 
         String requestMethod = request.type().name();
         connection.setRequestMethod(requestMethod);
+        Map<String, List<String>> headers1 = connection.getHeaderFields();
 //        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 //        connection.setRequestProperty("Content-Length", Integer.toString(urlParameters.getBytes().length));
 //        connection.setRequestProperty("Content-Language", "en-US");
@@ -550,12 +581,12 @@ class Webserver implements IRequestHandler {
 //        wr.writeBytes(urlParameters);
 //        wr.close();
 
-        long contentLength = connection.getContentLengthLong();
-
-        if(contentLength == 0){
-            replyOk(out, newCookies);
-            return;
-        }
+//        long contentLength = connection.getContentLengthLong();
+//
+//        if(contentLength == 0){
+//            replyOk(out, newCookies);
+//            return;
+//        }
 
         //Get Response
         InputStream is = connection.getInputStream();
@@ -659,8 +690,4 @@ class Webserver implements IRequestHandler {
         return new BasicRequest(origin, type, path);
     }
 
-    @Override
-    public ModifiableCookie buildCookie(String name, String value) {
-        return new ModifiableCookie(name, value);
-    }
 }

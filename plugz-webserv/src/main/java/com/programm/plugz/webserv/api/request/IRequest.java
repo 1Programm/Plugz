@@ -1,5 +1,6 @@
 package com.programm.plugz.webserv.api.request;
 
+import com.programm.plugz.webserv.ModifiableCookie;
 import com.programm.plugz.webserv.RequestType;
 import com.programm.plugz.webserv.Cookie;
 import com.programm.plugz.webserv.api.config.InterceptObjectMapException;

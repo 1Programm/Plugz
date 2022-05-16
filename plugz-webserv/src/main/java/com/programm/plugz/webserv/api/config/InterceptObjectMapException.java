@@ -1,6 +1,8 @@
 package com.programm.plugz.webserv.api.config;
 
-public class InterceptObjectMapException extends InterceptPathException {
+import com.programm.plugz.webserv.ex.WebservException;
+
+public class InterceptObjectMapException extends WebservException {
 
     public InterceptObjectMapException(String message) {
         super(message);

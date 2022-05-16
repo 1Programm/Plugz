@@ -16,9 +16,9 @@ public interface IExecutableRequest extends IRequest {
 
     IInterceptedRequestAction doContinue();
 
-    IInterceptedRequestAction doContinue(IUnprocessedRequest newRequest);
+    IInterceptedRequestAction doContinue(IUnprocessedRequest newRequest) throws InvalidRequestException;
 
-    IInterceptedRequestAction doRedirect(IUnprocessedRequest newRequest);
+    IInterceptedRequestAction doRedirect(IUnprocessedRequest newRequest) throws InvalidRequestException;
 
     IInterceptedRequestAction doError(int status, String message);
 
