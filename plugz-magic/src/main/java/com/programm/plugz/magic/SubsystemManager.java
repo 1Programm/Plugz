@@ -120,7 +120,7 @@ class SubsystemManager implements ISubsystemSetupHelper {
     @Override
     public void registerSearchClass(Class<?> cls, ISearchClassSetup setup) {
         List<Class<?>> foundClasses = new ArrayList<>();
-        scanner.withCriteria(ScanCriteria.createOnSuccessCollect(foundClasses).classImplements(cls));
+        scanner.withCriteria(ScanCriteria.createOnSuccessCollect("Implementing " + cls.getName(), foundClasses).classImplements(cls));
 
         foundClassImplementationHandlers.put(cls, setup);
         foundClassImplementations.compute(cls, (c, l) -> {
@@ -137,7 +137,7 @@ class SubsystemManager implements ISubsystemSetupHelper {
     @Override
     public <T extends Annotation> void registerClassAnnotation(Class<T> cls, IAnnotatedClassSetup<T> setup) {
         List<Class<?>> foundClasses = new ArrayList<>();
-        scanner.withCriteria(ScanCriteria.createOnSuccessCollect(foundClasses).classAnnotatedWith(cls));
+        scanner.withCriteria(ScanCriteria.createOnSuccessCollect("Annotated with " + cls.getName(), foundClasses).classAnnotatedWith(cls));
 
         foundAnnotatedClassHandlers.put(cls, setup);
         foundAnnotatedClasses.compute(cls, (c, l) -> {

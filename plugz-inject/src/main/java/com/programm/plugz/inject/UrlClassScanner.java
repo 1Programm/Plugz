@@ -151,6 +151,7 @@ public class UrlClassScanner {
             ScanCriteria criteria = criteriaList.get(i);
             if(criteria.testClass(url, cls)){
                 if(criteriaNameTestResult.get(i)){
+                    log.trace("###       {} matched the criteria [" + criteria.name + "]!", cls);
                     criteria.onSuccess(cls);
                 }
             }

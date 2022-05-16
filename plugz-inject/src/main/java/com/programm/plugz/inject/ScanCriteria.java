@@ -122,29 +122,33 @@ public class ScanCriteria {
 
     /**
      * Creates the {@link ScanCriteria} with a callback which will be called when a class passed all the underlying criteria.
+     * @param name the debug name of the criteria.
      * @param onSuccessCallback the callback.
      * @return an instance of the {@link ScanCriteria} class for more method chaining.
      */
-    public static ScanCriteria create(Consumer<Class<?>> onSuccessCallback){
-        return new ScanCriteria(onSuccessCallback);
+    public static ScanCriteria create(String name, Consumer<Class<?>> onSuccessCallback){
+        return new ScanCriteria(name, onSuccessCallback);
     }
 
     /**
      * Creates the {@link ScanCriteria} which will fill the provided collection when a class passed all the underlying criteria.
+     * @param name the debug name of the criteria.
      * @param collection the collection to fill.
      * @return an instance of the {@link ScanCriteria} class for more method chaining.
      */
-    public static ScanCriteria createOnSuccessCollect(Collection<Class<?>> collection){
-        return create(collection::add);
+    public static ScanCriteria createOnSuccessCollect(String name, Collection<Class<?>> collection){
+        return create(name, collection::add);
     }
 
 
 
+    final String name;
     private final Consumer<Class<?>> onSuccessCallback;
     private final List<INameCriteria> nameCriteriaList = new ArrayList<>();
     private final List<IClassCriteria> classCriteriaList = new ArrayList<>();
 
-    private ScanCriteria(Consumer<Class<?>> onSuccessCallback) {
+    private ScanCriteria(String name, Consumer<Class<?>> onSuccessCallback) {
+        this.name = name;
         this.onSuccessCallback = onSuccessCallback;
     }
 

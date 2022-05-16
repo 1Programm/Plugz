@@ -126,6 +126,11 @@ public class MagicInstanceManager implements IInstanceManager {
         public void accept(Object o) {
             setField(field, instance, o);
         }
+
+        @Override
+        public String toString() {
+            return "MissingField(" + field.getDeclaringClass().getName() + "#" + field.getName() + ")";
+        }
     }
 
     private class MissingParamsConstructor {
@@ -350,7 +355,11 @@ public class MagicInstanceManager implements IInstanceManager {
     }
 
     public void checkWaitMap(boolean disableWaiting) throws MagicInstanceException, MagicInstanceWaitException {
+        log.debug("Checking for waiting dependencies...");
         if(!waitMap.isEmpty()){
+            log.trace("Wait map is not empty: [{}] types are waited on.", waitMap.size());
+            log.trace("Checking for illegal wires...");
+
             List<MagicWire> acceptDefaultWires = new ArrayList<>();
             Map<Class<?>, List<MagicWire>> illegalWaitingWires = new HashMap<>();
 
@@ -361,11 +370,16 @@ public class MagicInstanceManager implements IInstanceManager {
                     AutoWaitType type = wire.waitType();
 
                     if(type == AutoWaitType.REQUIRED) {
+                        log.trace("Found illegal required wire: {}.", wire);
                         illegalWaitingWires.computeIfAbsent(cls, c -> new ArrayList<>()).add(wire);
                     }
                     else if(type == AutoWaitType.NOT_REQUIRED){
+                        log.trace("Found non required wire {}. Will be given default value.", wire);
                         acceptDefaultWires.add(wire);
                         waitingWires.remove(i--);
+                    }
+                    else {
+                        log.trace("Found allowed waiting wire {}.", wire);
                     }
                 }
 
@@ -738,6 +752,11 @@ public class MagicInstanceManager implements IInstanceManager {
                             public void accept(Object o) throws MagicInstanceException {
                                 mpm.putParam(pos, o);
                             }
+
+                            @Override
+                            public String toString() {
+                                return "WaitingGetterMethod(" + method.getDeclaringClass().getName() + "#" + method.getName() + ")";
+                            }
                         });
                     }
                     else {
@@ -793,6 +812,11 @@ public class MagicInstanceManager implements IInstanceManager {
                     @Override
                     public void accept(Object o) throws MagicInstanceException {
                         mpm.putParam(getInstancePos, o);
+                    }
+
+                    @Override
+                    public String toString() {
+                        return "WaitingGetterMethod(" + method.getDeclaringClass().getName() + "#" + method.getName() + ")";
                     }
                 });
             }
@@ -850,6 +874,11 @@ public class MagicInstanceManager implements IInstanceManager {
                                     mip.registered = true;
                                     registerFunction.register(providedType, setAnnotation, mip);
                                 }
+                            }
+
+                            @Override
+                            public String toString() {
+                                return "WaitingSetterMethod(" + method.getDeclaringClass().getName() + "#" + method.getName() + ")";
                             }
                         });
                     }
@@ -924,6 +953,11 @@ public class MagicInstanceManager implements IInstanceManager {
                                 if (missingParams.get() == 0) {
                                     /*Object result = */invokeMethod(instance, method, params);
                                 }
+                            }
+
+                            @Override
+                            public String toString() {
+                                return "WaitingMethod(" + method.getDeclaringClass().getName() + "#" + method.getName() + ")";
                             }
                         });
                     }
@@ -1096,6 +1130,11 @@ public class MagicInstanceManager implements IInstanceManager {
                                     mpc.registered = true;
                                     mpc.invoke();
                                 }
+                            }
+
+                            @Override
+                            public String toString() {
+                                return "WaitingConstructor(" + con.getDeclaringClass().getName() + "#" + con.getName() + ")";
                             }
                         });
                     }

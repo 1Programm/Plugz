@@ -153,11 +153,11 @@ public class MagicEnvironment {
             log.debug("Scanning through {} collected urls ...", collectedUrls.size());
 
             scanner.forUrls(collectedUrls)
-                    .withCriteria(ScanCriteria.createOnSuccessCollect(subsystemsClasses).classImplements(ISubsystem.class))
-                    .withCriteria(ScanCriteria.createOnSuccessCollect(loggerImplementations)
+                    .withCriteria(ScanCriteria.createOnSuccessCollect("Subsystem", subsystemsClasses).classImplements(ISubsystem.class))
+                    .withCriteria(ScanCriteria.createOnSuccessCollect("Logger implementation", loggerImplementations)
                             .blacklistPackage("com.programm.ioutils.log.api")
                             .classImplements(ILogger.class))
-                    .withCriteria(ScanCriteria.createOnSuccessCollect(configAnnotatedClasses).classAnnotatedWith(Config.class))
+                    .withCriteria(ScanCriteria.createOnSuccessCollect("Config class", configAnnotatedClasses).classAnnotatedWith(Config.class))
                     .scan();
 
             scanner.clearConfig();
@@ -209,7 +209,7 @@ public class MagicEnvironment {
             log.debug("Scanning through {} collected urls ...", collectedUrls.size());
 
             scanner.forUrls(collectedUrls)
-                    .withCriteria(ScanCriteria.createOnSuccessCollect(serviceClasses).classAnnotatedWith(Service.class))
+                    .withCriteria(ScanCriteria.createOnSuccessCollect("Service class", serviceClasses).classAnnotatedWith(Service.class))
                     .scan();
         }
         catch (ScanException e){

@@ -34,7 +34,7 @@ class UrlClassScannerTest {
         assertDoesNotThrow(() -> {
             List<Class<?>> classesImplementingA = new ArrayList<>();
 
-            ScanCriteria criteria = ScanCriteria.createOnSuccessCollect(classesImplementingA)
+            ScanCriteria criteria = ScanCriteria.createOnSuccessCollect("Implementing A.class", classesImplementingA)
                     .classImplements(A.class);
 
             scanner.forUrls(url)
@@ -70,7 +70,7 @@ class UrlClassScannerTest {
             List<Class<?>> classesAnnotatedWithA = new ArrayList<>();
 
             scanner.forUrls(url)
-                    .withCriteria(ScanCriteria.createOnSuccessCollect(classesAnnotatedWithA)
+                    .withCriteria(ScanCriteria.createOnSuccessCollect("Annotated with AnnotationA.class", classesAnnotatedWithA)
                             .classAnnotatedWith(AnnotationA.class))
                     .scan();
 
