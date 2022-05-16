@@ -6,7 +6,6 @@ import com.programm.ioutils.log.api.NullLogger;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.annotation.Annotation;
 import java.net.URL;
 import java.util.*;
 import java.util.zip.ZipEntry;
@@ -16,14 +15,14 @@ import java.util.zip.ZipInputStream;
 public class UrlClassScanner {
 
     private ILogger log = new NullLogger();
-    private boolean resetConfigAfterScan = true;
+    private boolean autoResetConfig;
     private final Set<URL> searchUrls = new HashSet<>();
     private final List<ScanCriteria> criteriaList = new ArrayList<>();
 
     /**
      * Starts the actual scan.
      * Will use the specified criteria to find classes in the urls.
-     * After the scan is finished the configs will be reset if {@link UrlClassScanner#keepConfig()} has not been invoked.
+     * After the scan is finished the configs will be reset if {@link UrlClassScanner#autoResetConfig()} has been called.
      * @throws ScanException when some IOException or other exception is thrown while scanning.
      */
     public void scan() throws ScanException {
@@ -55,8 +54,8 @@ public class UrlClassScanner {
             }
         }
         finally {
-            if(resetConfigAfterScan){
-                resetConfig();
+            if(autoResetConfig){
+                clearConfig();
             }
         }
     }
@@ -124,7 +123,6 @@ public class UrlClassScanner {
             if(criteria.testName(url, clsName)){
                 criteriaNameTestResult.add(true);
                 success = true;
-                break;
             }
             else {
                 criteriaNameTestResult.add(false);
@@ -152,14 +150,14 @@ public class UrlClassScanner {
         for(int i=0;i<criteriaList.size();i++){
             ScanCriteria criteria = criteriaList.get(i);
             if(criteria.testClass(url, cls)){
-                if(i >= criteriaNameTestResult.size() || criteriaNameTestResult.get(i)){
+                if(criteriaNameTestResult.get(i)){
                     criteria.onSuccess(cls);
                 }
             }
         }
     }
 
-    public UrlClassScanner resetConfig(){
+    public UrlClassScanner clearConfig(){
         this.searchUrls.clear();
         this.criteriaList.clear();
         return this;
@@ -189,8 +187,8 @@ public class UrlClassScanner {
         return this;
     }
 
-    public UrlClassScanner keepConfig(){
-        this.resetConfigAfterScan = false;
+    public UrlClassScanner autoResetConfig(){
+        this.autoResetConfig = true;
         return this;
     }
 

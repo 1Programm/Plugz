@@ -8,7 +8,8 @@ import com.programm.plugz.api.instance.IAnnotatedClassSetup;
 import com.programm.plugz.api.instance.IAnnotatedFieldSetup;
 import com.programm.plugz.api.instance.IAnnotatedMethodSetup;
 import com.programm.plugz.api.instance.ISearchClassSetup;
-import com.programm.plugz.inject.PlugzUrlClassScanner;
+import com.programm.plugz.inject.ScanCriteria;
+import com.programm.plugz.inject.UrlClassScanner;
 import lombok.RequiredArgsConstructor;
 
 import java.lang.annotation.Annotation;
@@ -22,15 +23,16 @@ import java.util.Map;
 class SubsystemManager implements ISubsystemSetupHelper {
 
     private final ILogger log;
-    private final PlugzUrlClassScanner scanner;
+    private final UrlClassScanner scanner;
     private final AnnotationChecker annocheck;
     private final MagicInstanceManager instanceManager;
     private final List<ISubsystem> subsystems = new ArrayList<>();
-    private final Map<Class<? extends Annotation>, IAnnotatedClassSetup<?>> classFoundHandlers = new HashMap<>();
-    private final Map<Class<?>, ISearchClassSetup> searchClassFoundHandlers = new HashMap<>();
+    private final Map<Class<? extends Annotation>, IAnnotatedClassSetup<?>> foundAnnotatedClassHandlers = new HashMap<>();
+    private final Map<Class<? extends Annotation>, List<Class<?>>> foundAnnotatedClasses = new HashMap<>();
+    private final Map<Class<?>, ISearchClassSetup> foundClassImplementationHandlers = new HashMap<>();
+    private final Map<Class<?>, List<Class<?>>> foundClassImplementations = new HashMap<>();
 
-    public void prepare() throws MagicInstanceException {
-        List<Class<?>> subsystemImplementationClasses = scanner.getImplementing(ISubsystem.class);
+    public void prepare(List<Class<?>> subsystemImplementationClasses) throws MagicInstanceException {
         logSubsystemsFound(subsystemImplementationClasses);
 
         for(Class<?> subsystemCls : subsystemImplementationClasses) {
@@ -66,11 +68,11 @@ class SubsystemManager implements ISubsystemSetupHelper {
     }
 
     public void setupFoundClasses() throws MagicInstanceException {
-        for(Map.Entry<Class<? extends Annotation>, IAnnotatedClassSetup<?>> entry : classFoundHandlers.entrySet()){
+        for(Map.Entry<Class<? extends Annotation>, IAnnotatedClassSetup<?>> entry : foundAnnotatedClassHandlers.entrySet()){
             Class<? extends Annotation> annotationClass = entry.getKey();
             IAnnotatedClassSetup<?> setupFunction = entry.getValue();
 
-            List<Class<?>> annotatedClasses = scanner.getAnnotatedWith(annotationClass);
+            List<Class<?>> annotatedClasses = foundAnnotatedClasses.get(annotationClass);
             for(Class<?> annotatedClass : annotatedClasses){
                 try {
                     Object annotationValue = annotatedClass.getAnnotation(annotationClass);
@@ -82,11 +84,11 @@ class SubsystemManager implements ISubsystemSetupHelper {
             }
         }
 
-        for(Map.Entry<Class<?>, ISearchClassSetup> entry : searchClassFoundHandlers.entrySet()){
+        for(Map.Entry<Class<?>, ISearchClassSetup> entry : foundClassImplementationHandlers.entrySet()){
             Class<?> searchClass = entry.getKey();
             ISearchClassSetup setupFunction = entry.getValue();
 
-            List<Class<?>> implementingClasses = scanner.getImplementing(searchClass);
+            List<Class<?>> implementingClasses = foundClassImplementations.get(searchClass);
             for(Class<?> implementingClass : implementingClasses){
                 try {
                     setupFunction.setup(implementingClass, instanceManager);
@@ -117,14 +119,36 @@ class SubsystemManager implements ISubsystemSetupHelper {
 
     @Override
     public void registerSearchClass(Class<?> cls, ISearchClassSetup setup) {
-        scanner.addSearchClass(cls);
-        searchClassFoundHandlers.put(cls, setup);
+        List<Class<?>> foundClasses = new ArrayList<>();
+        scanner.withCriteria(ScanCriteria.createOnSuccessCollect(foundClasses).classImplements(cls));
+
+        foundClassImplementationHandlers.put(cls, setup);
+        foundClassImplementations.compute(cls, (c, l) -> {
+            if(l == null) {
+                return foundClasses;
+            }
+            else {
+                l.addAll(foundClasses);
+                return l;
+            }
+        });
     }
 
     @Override
     public <T extends Annotation> void registerClassAnnotation(Class<T> cls, IAnnotatedClassSetup<T> setup) {
-        scanner.addSearchAnnotation(cls);
-        classFoundHandlers.put(cls, setup);
+        List<Class<?>> foundClasses = new ArrayList<>();
+        scanner.withCriteria(ScanCriteria.createOnSuccessCollect(foundClasses).classAnnotatedWith(cls));
+
+        foundAnnotatedClassHandlers.put(cls, setup);
+        foundAnnotatedClasses.compute(cls, (c, l) -> {
+            if(l == null) {
+                return foundClasses;
+            }
+            else {
+                l.addAll(foundClasses);
+                return l;
+            }
+        });
     }
 
     @Override

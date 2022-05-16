@@ -11,8 +11,9 @@ import com.programm.plugz.api.auto.Get;
 import com.programm.plugz.api.auto.GetConfig;
 import com.programm.plugz.api.auto.SetConfig;
 import com.programm.plugz.api.lifecycle.LifecycleState;
-import com.programm.plugz.inject.PlugzUrlClassScanner;
+import com.programm.plugz.inject.ScanCriteria;
 import com.programm.plugz.inject.ScanException;
+import com.programm.plugz.inject.UrlClassScanner;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -52,10 +53,8 @@ public class MagicEnvironment {
     }
 
 
-    private final String basePackage;
-
     private final LoggerProxy log;
-    private final PlugzUrlClassScanner scanner;
+    private final UrlClassScanner scanner;
     private final ConfigurationManager configurations;
     private final ThreadPoolManager asyncManager;
     private final AnnotationChecker annocheck;
@@ -65,14 +64,8 @@ public class MagicEnvironment {
     private long setupBeginTime;
 
     public MagicEnvironment(String... args){
-        this("", args);
-    }
-
-    public MagicEnvironment(String basePackage, String... args){
-        this.basePackage = basePackage;
-
         this.log = new LoggerProxy();
-        this.scanner = new PlugzUrlClassScanner();
+        this.scanner = new UrlClassScanner();
         this.scanner.setLogger(log);
         this.configurations = new ConfigurationManager(log, args);
 
@@ -151,25 +144,30 @@ public class MagicEnvironment {
         }
 
         logLifecycleState(LifecycleState.PRE_SETUP);
+        List<Class<?>> subsystemsClasses = new ArrayList<>();
+        List<Class<?>> loggerImplementations = new ArrayList<>();
+        List<Class<?>> configAnnotatedClasses = new ArrayList<>();
 
         try {
             log.debug("Starting config scan");
+            log.debug("Scanning through {} collected urls ...", collectedUrls.size());
 
-            scanner.addSearchClass(ISubsystem.class);
-            scanner.addSearchClass(ILogger.class);
-            scanner.addSearchAnnotation(Config.class);
-            scanner.blacklistPackage("com.programm.ioutils.log.api");
+            scanner.forUrls(collectedUrls)
+                    .withCriteria(ScanCriteria.createOnSuccessCollect(subsystemsClasses).classImplements(ISubsystem.class))
+                    .withCriteria(ScanCriteria.createOnSuccessCollect(loggerImplementations)
+                            .blacklistPackage("com.programm.ioutils.log.api")
+                            .classImplements(ILogger.class))
+                    .withCriteria(ScanCriteria.createOnSuccessCollect(configAnnotatedClasses).classAnnotatedWith(Config.class))
+                    .scan();
 
-            log.debug("Scanning through {} collected urls with a base package of [{}]...", collectedUrls.size(), basePackage);
-            scanner.scan(collectedUrls, basePackage);
+            scanner.clearConfig();
         }
         catch (ScanException e){
-            throw new MagicSetupException("Config scan failed with a base package of [" + basePackage + "]!", e);
+            throw new MagicSetupException("Config scan failed!", e);
         }
 
-        List<Class<?>> configClasses = scanner.getAnnotatedWith(Config.class);
-        log.debug("Registering [{}] configuration classes", configClasses.size());
-        for(Class<?> cls : configClasses){
+        log.debug("Registering [{}] configuration classes", configAnnotatedClasses.size());
+        for(Class<?> cls : configAnnotatedClasses){
             try {
                 if(instanceManager.checkConfigNeeded(cls)) {
                     instanceManager.instantiate(cls);
@@ -191,7 +189,7 @@ public class MagicEnvironment {
         }
 
         log.debug("Searching for logger implementation...");
-        findLoggerImplementation(scanner.getImplementing(ILogger.class));
+        findLoggerImplementation(loggerImplementations);
         log.passStoredLogs();
 
         log.debug("Setting up [Async-Manager].");
@@ -199,24 +197,26 @@ public class MagicEnvironment {
 
 
         try {
-            scanner.addSearchAnnotation(Service.class);
-            subsystems.prepare();
+            subsystems.prepare(subsystemsClasses);
         }
         catch (MagicInstanceException e){
             throw new MagicSetupException("Failed to prepare subsystems!", e);
         }
 
+        List<Class<?>> serviceClasses = new ArrayList<>();
         try {
             log.debug("Starting main scan");
-            log.debug("Scanning through {} collected urls with a base package of [{}]...", collectedUrls.size(), basePackage);
-            scanner.scan(collectedUrls, basePackage);
+            log.debug("Scanning through {} collected urls ...", collectedUrls.size());
+
+            scanner.forUrls(collectedUrls)
+                    .withCriteria(ScanCriteria.createOnSuccessCollect(serviceClasses).classAnnotatedWith(Service.class))
+                    .scan();
         }
         catch (ScanException e){
-            throw new MagicSetupException("Main scan failed with a base package of [" + basePackage + "]!", e);
+            throw new MagicSetupException("Main scan failed!", e);
         }
 
 
-        List<Class<?>> serviceClasses = scanner.getAnnotatedWith(Service.class);
         log.debug("Registering [{}] service classes", serviceClasses.size());
         for(Class<?> cls : serviceClasses){
             try {
