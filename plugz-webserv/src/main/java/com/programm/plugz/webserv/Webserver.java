@@ -121,8 +121,6 @@ class Webserver implements IRequestHandler {
         @Override
         public IInterceptedRequestAction doRedirect(IUnprocessedRequest request) throws InvalidRequestException {
             String origin = request.origin();
-            if(origin == null) throw new InvalidRequestException("Origin of request must be set for request-redirecting!");
-
             return new InterceptedRequestSupplierAction(origin, request, newCookies, null, null, InterceptedRequest.Type.REDIRECT, null, null);
         }
 
@@ -347,7 +345,7 @@ class Webserver implements IRequestHandler {
                 case CONTINUE ->
                         continueHandleRequest(in, out, request, requestCookies, withFallback);
                 case FORWARD ->
-                        forwardRequest(out, origin, interceptedRequest.getRequest(), requestCookies);
+                        forwardRequest(out, origin, interceptedRequest.getRequest(), request.headers, requestCookies);
                 case REDIRECT -> {
                     String redirectUrl = interceptedRequest.getRequest().buildFullQuery();
                     if(origin != null){
@@ -544,30 +542,37 @@ class Webserver implements IRequestHandler {
 
 
 
-    private void forwardRequest(PrintWriter out, String origin, IRequest request, Map<String, Cookie> newCookies) throws IOException, WebservException {
-        if(origin == null){
-            origin = "";
-        }
-
-        String redirectUrl = request.buildFullQuery();
-        redirectUrl = WebUtils.concatPathMapping(origin, redirectUrl);
-
+    private void forwardRequest(PrintWriter out, String origin, IRequest request, Map<String, List<String>> oldHeaders, Map<String, Cookie> newCookies) throws IOException, WebservException {
         URL url;
         try {
-            url = new URL(redirectUrl);
+            url = new URL("http://localhost:8081/test");
         }
         catch (MalformedURLException e){
-            throw new WebservException("Invalid url for redirection: [" + redirectUrl + "]!", e);
+            throw new WebservException("Invalid url for forwarding: [" + origin + "]!", e);
         }
 
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setDoOutput(true);
-        connection.setDoInput(true);
-        connection.setConnectTimeout(clientTimeout);
 
-        String requestMethod = request.type().name();
-        connection.setRequestMethod(requestMethod);
-        Map<String, List<String>> headers1 = connection.getHeaderFields();
+
+
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setRequestMethod(request.type().name());
+        //connection.setRequestProperty("Host", "localhost:4200");
+        connection.setRequestProperty("Access-Control-Allow-Origin", "*");
+        for(Map.Entry<String, List<String>> entry : oldHeaders.entrySet()){
+            String key = entry.getKey();
+            for(String val : entry.getValue()){
+                connection.setRequestProperty(key, val);
+            }
+        }
+
+
+
+        //connection.setRequestProperty("Accept-Charset", "UTF-8");
+
+//        connection.setDoOutput(true);
+
+        //String requestMethod = request.type().name();
+        //connection.setRequestMethod(requestMethod);
 //        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 //        connection.setRequestProperty("Content-Length", Integer.toString(urlParameters.getBytes().length));
 //        connection.setRequestProperty("Content-Language", "en-US");
@@ -588,8 +593,25 @@ class Webserver implements IRequestHandler {
 //            return;
 //        }
 
+//        OutputStream os = connection.getOutputStream();
+//        PrintWriter writer = new PrintWriter(os);
+//
+//        writer.print("HTTP/1.0 " + request.type() + " " + request.buildFullQuery());
+//        writer.print("Accept: application/json;charset=UTF-8\r\n");
+//        writer.print("Accept-Charset: UTF-8\r\n");
+//        writer.print("Access-Control-Allow-Origin: *\r\n");
+//        writer.print("Access-Control-Allow-Headers: Content-Type\r\n");
+//        writer.print("\r\n");
+
+
         //Get Response
-        InputStream is = connection.getInputStream();
+        InputStream is;
+        try {
+            is = connection.getInputStream();
+        }
+        catch (IOException e){
+            throw e;
+        }
         BufferedReader br = new BufferedReader(new InputStreamReader(is));
         StringBuilder response = new StringBuilder(); // or StringBuffer if Java version 5+
         String line;

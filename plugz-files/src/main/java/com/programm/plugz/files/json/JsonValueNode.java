@@ -27,6 +27,6 @@ public class JsonValueNode implements JsonNode {
 
     @Override
     public String toString() {
-        return Objects.toString(value);
+        return JsonBuilder.toString(this);
     }
 }

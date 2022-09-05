@@ -378,8 +378,12 @@ public class MagicInstanceManager implements IInstanceManager {
                         acceptDefaultWires.add(wire);
                         waitingWires.remove(i--);
                     }
-                    else {
+                    else if(canWait && !disableWaiting){
                         log.trace("Found allowed waiting wire {}.", wire);
+                    }
+                    else {
+                        log.trace("Found illegal wire which cannot be waited for: {}.", wire);
+                        illegalWaitingWires.computeIfAbsent(cls, c -> new ArrayList<>()).add(wire);
                     }
                 }
 
