@@ -307,8 +307,8 @@ public class MagicInstanceManager implements IInstanceManager {
         Config configAnnotation = cls.getAnnotation(Config.class);
         String specificProfile = configAnnotation.value();
         if(!specificProfile.isEmpty()){
-            if((specificProfile.equals("main") && plugzConfig.profile() != null)
-                    || (!plugzConfig.profile().equals(specificProfile))) {
+            //if((specificProfile.equals("main") && plugzConfig.profile() != null) || (!plugzConfig.profile().equals(specificProfile))) {
+            if(plugzConfig.profile() == null || !plugzConfig.profile().equals(specificProfile)) {
                 log.debug("Config class [{}] will be ignored as it does not match the active profile. [" + specificProfile + "] != [" + plugzConfig.profile() + "]", cls);
                 return false;
             }

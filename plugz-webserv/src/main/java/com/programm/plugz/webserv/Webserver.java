@@ -4,6 +4,7 @@ import com.programm.ioutils.log.api.ILogger;
 import com.programm.ioutils.log.api.Logger;
 import com.programm.plugz.api.MagicInstanceException;
 import com.programm.plugz.api.MagicRuntimeException;
+import com.programm.plugz.files.StringUtils;
 import com.programm.plugz.object.mapper.ObjectMapException;
 import com.programm.plugz.webserv.api.RequestParam;
 import com.programm.plugz.webserv.api.config.IInterceptedRequestAction;
@@ -545,42 +546,40 @@ class Webserver implements IRequestHandler {
     private void forwardRequest(PrintWriter out, String origin, IRequest request, Map<String, List<String>> oldHeaders, Map<String, Cookie> newCookies) throws IOException, WebservException {
         URL url;
         try {
-            url = new URL("http://localhost:8081/test");
+            String _requestPath = WebUtils.concatPathMapping(origin, request.query());
+            url = new URL(_requestPath);
         }
         catch (MalformedURLException e){
             throw new WebservException("Invalid url for forwarding: [" + origin + "]!", e);
         }
 
-
-
-
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setRequestMethod(request.type().name());
-        //connection.setRequestProperty("Host", "localhost:4200");
-        connection.setRequestProperty("Access-Control-Allow-Origin", "*");
-        for(Map.Entry<String, List<String>> entry : oldHeaders.entrySet()){
-            String key = entry.getKey();
-            for(String val : entry.getValue()){
-                connection.setRequestProperty(key, val);
+        try {
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod(request.type().name());
+            //connection.setRequestProperty("Host", "localhost:4200");
+            connection.setRequestProperty("Access-Control-Allow-Origin", "*");
+            for (Map.Entry<String, List<String>> entry : oldHeaders.entrySet()) {
+                String key = entry.getKey();
+                for (String val : entry.getValue()) {
+                    connection.setRequestProperty(key, val);
+                }
             }
-        }
 
 
-
-        //connection.setRequestProperty("Accept-Charset", "UTF-8");
+            //connection.setRequestProperty("Accept-Charset", "UTF-8");
 
 //        connection.setDoOutput(true);
 
-        //String requestMethod = request.type().name();
-        //connection.setRequestMethod(requestMethod);
+            //String requestMethod = request.type().name();
+            //connection.setRequestMethod(requestMethod);
 //        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 //        connection.setRequestProperty("Content-Length", Integer.toString(urlParameters.getBytes().length));
 //        connection.setRequestProperty("Content-Language", "en-US");
 
-        //connection.setUseCaches(false);
-        //connection.setDoOutput(true);
+            //connection.setUseCaches(false);
+            //connection.setDoOutput(true);
 
-        //Send request
+            //Send request
 //        DataOutputStream wr = new DataOutputStream (
 //                connection.getOutputStream());
 //        wr.writeBytes(urlParameters);
@@ -604,36 +603,39 @@ class Webserver implements IRequestHandler {
 //        writer.print("\r\n");
 
 
-        //Get Response
-        InputStream is;
-        try {
-            is = connection.getInputStream();
+            //Get Response
+            InputStream is;
+            try {
+                is = connection.getInputStream();
+            } catch (IOException e) {
+                throw e;
+            }
+            BufferedReader br = new BufferedReader(new InputStreamReader(is));
+            StringBuilder response = new StringBuilder(); // or StringBuffer if Java version 5+
+            String line;
+            while ((line = br.readLine()) != null) {
+                response.append(line);
+                response.append('\r');
+            }
+            br.close();
+
+            String _data = response.toString();
+
+            if (_data.isEmpty()) {
+                replyOk(out, newCookies);
+                return;
+            }
+
+            Map<String, List<String>> headers = connection.getHeaderFields();
+            List<String> contentTypes = headers.get("Content-Type");
+            String contentType = contentTypes == null ? null : (contentTypes.isEmpty() ? null : contentTypes.get(0));
+
+            replyOkData(out, contentType, newCookies);
+            out.print(_data);
         }
         catch (IOException e){
-            throw e;
+            throw new WebservException("IOException for url-connection: [" + url + "]:", e);
         }
-        BufferedReader br = new BufferedReader(new InputStreamReader(is));
-        StringBuilder response = new StringBuilder(); // or StringBuffer if Java version 5+
-        String line;
-        while ((line = br.readLine()) != null) {
-            response.append(line);
-            response.append('\r');
-        }
-        br.close();
-
-        String _data = response.toString();
-
-        if(_data.isEmpty()){
-            replyOk(out, newCookies);
-            return;
-        }
-
-        Map<String, List<String>> headers = connection.getHeaderFields();
-        List<String> contentTypes = headers.get("Content-Type");
-        String contentType = contentTypes == null ? null : (contentTypes.isEmpty() ? null : contentTypes.get(0));
-
-        replyOkData(out, contentType, newCookies);
-        out.print(_data);
     }
 
 
