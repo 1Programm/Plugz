@@ -35,6 +35,24 @@ public class ScanCriteria {
         }
     }
 
+
+    private static class ClassBlacklistCriteria implements IClassCriteria {
+        private final Class<?>[] classes;
+
+        public ClassBlacklistCriteria(Class<?>... classes) {
+            this.classes = classes;
+        }
+
+        @Override
+        public boolean test(URL url, Class<?> cls) {
+            for(Class<?> c : classes){
+                if(cls == c) return false;
+            }
+
+            return true;
+        }
+    }
+
     private static class ClassImplementsCriteria implements IClassCriteria {
         private final Class<?> toImplement;
         private final int generations;
@@ -194,6 +212,26 @@ public class ScanCriteria {
      */
     public ScanCriteria blacklistPackage(String packageName){
         nameCriteriaList.add(new PackageCriteria(packageName, true));
+        return this;
+    }
+
+    /**
+     * Creates a criteria which blacklists a specific class.
+     * @param cls the class to be blacklisted.
+     * @return this instance for method chaining.
+     */
+    public ScanCriteria blacklistClass(Class<?> cls){
+        classCriteriaList.add(new ClassBlacklistCriteria(cls));
+        return this;
+    }
+
+    /**
+     * Creates a criteria which blacklists an array of classes.
+     * @param classes the classes to be blacklisted.
+     * @return this instance for method chaining.
+     */
+    public ScanCriteria blacklistClasses(Class<?>... classes){
+        classCriteriaList.add(new ClassBlacklistCriteria(classes));
         return this;
     }
 
