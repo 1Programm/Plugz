@@ -40,7 +40,7 @@ public class UrlClassScanner {
                 init = true;
 
                 if (urlFile.endsWith(".jar")) {
-                    log.debug("# Scanning url as jar: [{}]...", url);
+                    log.debug("# Scanning url as jar         : [{}]...", url);
                     searchInJar(url);
                 }
                 else if (url.getProtocol().equals("file")) {

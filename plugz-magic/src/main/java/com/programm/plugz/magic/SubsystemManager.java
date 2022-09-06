@@ -4,6 +4,7 @@ import com.programm.ioutils.log.api.ILogger;
 import com.programm.ioutils.log.api.Logger;
 import com.programm.plugz.annocheck.AnnotationChecker;
 import com.programm.plugz.api.*;
+import com.programm.plugz.api.condition.IConditionTester;
 import com.programm.plugz.api.instance.IAnnotatedClassSetup;
 import com.programm.plugz.api.instance.IAnnotatedFieldSetup;
 import com.programm.plugz.api.instance.IAnnotatedMethodSetup;
@@ -24,6 +25,7 @@ class SubsystemManager implements ISubsystemSetupHelper {
 
     private final ILogger log;
     private final UrlClassScanner scanner;
+    private final ConditionTesterProxy conditionTesterProxy;
     private final AnnotationChecker annocheck;
     private final MagicInstanceManager instanceManager;
     private final List<ISubsystem> subsystems = new ArrayList<>();
@@ -41,6 +43,8 @@ class SubsystemManager implements ISubsystemSetupHelper {
             try {
                 instanceManager.instantiate(subsystemCls, subsystemInstance -> {
                     if(subsystemInstance instanceof ISubsystem subsystem) {
+                        if(subsystemInstance instanceof IConditionTester) conditionTesterProxy.tester = (IConditionTester) subsystemInstance;
+
                         subsystems.add(subsystem);
                         try {
                             subsystem.registerSetup(this, annocheck);

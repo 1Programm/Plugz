@@ -7,6 +7,10 @@ import com.programm.plugz.annocheck.AnnotationChecker;
 import com.programm.plugz.api.*;
 import com.programm.plugz.api.auto.*;
 import com.programm.plugz.api.auto.Set;
+import com.programm.plugz.api.condition.ConditionFailedException;
+import com.programm.plugz.api.condition.Conditional;
+import com.programm.plugz.api.condition.Conditionals;
+import com.programm.plugz.api.condition.InvalidConditionException;
 import com.programm.plugz.api.instance.*;
 import com.programm.plugz.api.lifecycle.LifecycleState;
 import com.programm.plugz.api.utils.ValueUtils;
@@ -46,7 +50,6 @@ public class MagicInstanceManager implements IInstanceManager {
 
     @RequiredArgsConstructor
     private static class ConstantInstance implements InstanceProvider {
-
         private final Object instance;
 
         @Override
@@ -261,11 +264,11 @@ public class MagicInstanceManager implements IInstanceManager {
 
 
 
-
     private final ILogger log;
     private final ConfigurationManager plugzConfig;
     private final ThreadPoolManager asyncManager;
     private final AnnotationChecker annocheck;
+    private final MagicContext context;
 
     private final Map<Class<? extends Annotation>, IAnnotatedFieldSetup<?>> annotatedFieldSetupMap = new HashMap<>();
     {
@@ -317,6 +320,10 @@ public class MagicInstanceManager implements IInstanceManager {
         return true;
     }
 
+    public boolean hasInstanceOfType(Class<?> type) {
+        return instanceMap.containsKey(type);
+    }
+
     @Override
     public void instantiate(Class<?> cls) throws MagicInstanceException {
         instantiate(cls, null);
@@ -324,11 +331,18 @@ public class MagicInstanceManager implements IInstanceManager {
 
     @Override
     public void instantiate(Class<?> cls, MagicConsumer<Object> callback) throws MagicInstanceException {
+        log.debug("Instantiating class [{}]", cls.getName());
+
         try {
             annocheck.checkAllDeclared(cls);
         }
         catch (AnnotationCheckException e){
             throw new MagicInstanceException("Annotation checks failed!", e);
+        }
+
+        if(possibleConditionsFailed(cls)) {
+            log.debug("Not instantiating class [{}] as a condition failed!", cls.getName());
+            return;
         }
 
         try {
@@ -649,6 +663,10 @@ public class MagicInstanceManager implements IInstanceManager {
     private void tryMagicMethods(Class<?> cls, Object instance) throws MagicInstanceException {
         Method[] methods = cls.getDeclaredMethods();
         for(Method method : methods){
+            if(possibleConditionsFailed(method)){
+                log.debug("Not registering method [{}] as a condition failed!", method);
+                continue;
+            }
             tryMagicMethod(instance, method);
         }
     }
@@ -669,21 +687,24 @@ public class MagicInstanceManager implements IInstanceManager {
             if(aType == Async.class) continue;
 
             if(aType == Get.class){
+                log.trace("Registering a @Get Method [{}].", method);
                 tryGetterMethod(instance, method, Get.class, Get::value, (type, getAnnotation) -> getInstance(type));
                 continue;
             }
-
-            if(aType == Set.class){
+            else if(aType == Set.class){
+                log.trace("Registering a @Set Method [{}].", method);
                 trySetterMethod(instance, method, Set.class, Set::persist, (type, setAnnotation, provider) -> this._registerInstance(type, provider));
                 continue;
             }
 
             if(aType == GetConfig.class){
+                log.trace("Registering a @Get Method [{}].", method);
                 tryGetterMethod(instance, method, GetConfig.class, anno -> AutoWaitType.REQUIRED, this::_getConfigValueAsInstanceFunction);
                 continue;
             }
 
             if(aType == SetConfig.class){
+                log.trace("Registering a @SetConfig Method [{}].", method);
                 trySetterMethod(instance, method, SetConfig.class, anno -> false, this::_setConfigAsRegisterFunction);
                 continue;
             }
@@ -691,6 +712,7 @@ public class MagicInstanceManager implements IInstanceManager {
             for(LifecycleState state : LifecycleState.values()){
                 Class<? extends Annotation> methodAnnotation = state.methodAnnotation;
                 if(aType == methodAnnotation){
+                    log.trace("Registering a @{} Method [{}].", methodAnnotation.getSimpleName(), method);
                     if(state == LifecycleState.PRE_SETUP){
                         tryInvokeMethod(instance, method, canWait, (Object) null);
                     }
@@ -1057,8 +1079,54 @@ public class MagicInstanceManager implements IInstanceManager {
 
 
 
+    private boolean possibleConditionsFailed(AnnotatedElement el) throws MagicInstanceException {
+        Conditional conditionalAnnotation = el.getAnnotation(Conditional.class);
+        Conditionals conditionalsAnnotation = el.getAnnotation(Conditionals.class);
 
+        int num = 0;
+        if(conditionalAnnotation != null){
+            num = 1;
+        }
+        if(conditionalsAnnotation != null){
+            num += conditionalsAnnotation.value().length;
+        }
 
+        if(num == 0) return false;
+
+        Conditional[] conditions = new Conditional[num];
+        int pos = 0;
+        if(conditionalAnnotation != null){
+            conditions[0] = conditionalAnnotation;
+        }
+        if(conditionalsAnnotation != null){
+            System.arraycopy(conditionalsAnnotation.value(), pos, conditions, pos, num - pos);
+        }
+
+        return testConditionsFailed(conditions);
+    }
+
+    private boolean testConditionsFailed(Conditional[] conditions) throws MagicInstanceException{
+        try {
+            for(Conditional condition : conditions){
+                String conditionString = condition.value();
+                context.testCondition(conditionString);
+                log.trace("# Passed condition [{}]", conditionString);
+            }
+        }
+        catch (InvalidConditionException e){
+            throw new MagicInstanceException(e);
+        }
+        catch (MagicSetupException e) {
+            log.error("[{}]", e.getMessage());
+            return true;
+        }
+        catch (ConditionFailedException e){
+            log.debug("* Failed Condition: \"{}\": {}", e.condition(), e.reason());
+            return true;
+        }
+
+        return false;
+    }
 
     private void createInstanceFromConstructor(Class<?> cls, SetupFunction setupFunction, Object... params) throws MagicInstanceException {
         Constructor<?> preferredConstructor = null;

@@ -26,29 +26,30 @@ import java.util.Map;
 class ConfigurationManager implements PlugzConfig {
 
     private final ILogger log;
+    private final String[] args;
 
     public final Map<String, Object> configValues = new HashMap<>();
     public String configProfile;
 
     public ConfigurationManager(ILogger log, String... args) {
         this.log = log;
-        collectConfigArgs(args);
+        this.args = args;
     }
 
-    public void init() throws MagicSetupException {
+    public void initProfileConfig() throws MagicSetupException {
         readProfile();
     }
 
     @Override
     public void registerDefaultConfiguration(String key, Object value){
         if(configValues.containsKey(key)) return;
-        log.trace("Default Config: %20<({}) -> {}", key, value);
+        log.trace("Default Config: %30<({}) -> {}", key, value);
         configValues.put(key, value);
     }
 
     @Override
     public void registerConfiguration(String key, Object value){
-        log.trace("Config: %20<({}) -> {}", key, value);
+        log.trace("Config: %30<({}) -> {}", key, value);
         configValues.put(key, value);
     }
 
@@ -65,7 +66,7 @@ class ConfigurationManager implements PlugzConfig {
         return ValueUtils.parsePrimitive(val, cls);
     }
 
-    private void collectConfigArgs(String... args) {
+    public void initArgs() {
         log.trace("Reading configs from program args...");
         int numConfigs = 0;
         for(int i=0;i<args.length;i++){
@@ -88,7 +89,7 @@ class ConfigurationManager implements PlugzConfig {
                     value = ValueUtils.getPrimitiveValue(args[i + 1]);
                 }
 
-                log.trace("# %20<({}) -> {}", key, value);
+                log.trace("# %30<({}) -> {}", key, value);
                 configValues.put(key, value);
                 numConfigs++;
             }
@@ -201,7 +202,7 @@ class ConfigurationManager implements PlugzConfig {
 
         if(_value != null){
             Object value = ValueUtils.getPrimitiveValue(_value);
-            log.trace("# %20<({}) -> {}", nPath, value);
+            log.trace("# %30<({}) -> {}", nPath, value);
             configValues.put(nPath, value);
             return;
         }

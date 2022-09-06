@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A proxy wrapper so this proxy can be used for auto - setting without the need to actually use a logger.
+ * hallo.A proxy wrapper so this proxy can be used for auto - setting without the need to actually use a logger.
  * All Methods must be synchronized as the ThreadPoolManager and the async workers will log stuff and could end up overlapping logs.
  */
 class LoggerProxy implements ILogger {
@@ -19,23 +19,35 @@ class LoggerProxy implements ILogger {
         private final Class<?> logInfoCallingCls;
         private final String logInfoCallingMethodName;
 
-        public LogInfo(int level, String s, Object[] args, Class<?> logInfoCallingCls, String logInfoCallingMethodName) {
+        private final String throwableMessage;
+        private final Throwable throwable;
+
+        public LogInfo(int level, String s, Object[] args, Class<?> logInfoCallingCls, String logInfoCallingMethodName, String throwableMessage, Throwable throwable) {
             this.level = level;
             this.s = s;
             this.args = args;
             this.logInfoCallingCls = logInfoCallingCls;
             this.logInfoCallingMethodName = logInfoCallingMethodName;
+            this.throwableMessage = throwableMessage;
+            this.throwable = throwable;
         }
     }
 
     public ILogger logger;
+    private boolean storeLogs = true;
     private final List<LogInfo> storedLogs = new ArrayList<>();
 
     public void passStoredLogs(){
         if(logger == null) return;
+        storeLogs = false;
 
         boolean isConfigLogger = logger instanceof IConfigurableLogger;
         for(LogInfo info : storedLogs){
+            if(info.throwable != null){
+                logException(info.throwableMessage, info.throwable);
+                continue;
+            }
+
             if (isConfigLogger && info.logInfoCallingCls != null) {
                 ((IConfigurableLogger)logger).setNextLogInfo(info.logInfoCallingCls, info.logInfoCallingMethodName);
             }
@@ -72,8 +84,8 @@ class LoggerProxy implements ILogger {
 
     @Override
     public void logException(String s, Throwable throwable) {
-        if(logger == null){
-            //TODO
+        if(storeLogs){
+            storedLogs.add(new LogInfo(LEVEL_NONE, null, null, null, null, s, throwable));
         }
         else {
             logger.logException(s, throwable);
@@ -81,7 +93,7 @@ class LoggerProxy implements ILogger {
     }
 
     private void doLog(int level, String s, Object... args){
-        if(logger == null) {
+        if(storeLogs) {
             storedLogs.add(getInfo(level, s, args));
         }
         else {
@@ -130,6 +142,6 @@ class LoggerProxy implements ILogger {
             throw new IllegalStateException("Could not find caller method of logger!");
         }
 
-        return new LogInfo(level, s, args, callingClass, callingMethodName);
+        return new LogInfo(level, s, args, callingClass, callingMethodName, null, null);
     }
 }

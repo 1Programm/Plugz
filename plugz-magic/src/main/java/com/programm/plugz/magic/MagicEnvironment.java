@@ -10,6 +10,7 @@ import com.programm.plugz.api.*;
 import com.programm.plugz.api.auto.Get;
 import com.programm.plugz.api.auto.GetConfig;
 import com.programm.plugz.api.auto.SetConfig;
+import com.programm.plugz.api.condition.IConditionTester;
 import com.programm.plugz.api.lifecycle.LifecycleState;
 import com.programm.plugz.inject.ScanCriteria;
 import com.programm.plugz.inject.ScanException;
@@ -56,8 +57,11 @@ public class MagicEnvironment {
     private final LoggerProxy log;
     private final UrlClassScanner scanner;
     private final ConfigurationManager configurations;
+    private final MagicContext context;
+
     private final ThreadPoolManager asyncManager;
     private final AnnotationChecker annocheck;
+    private final ConditionTesterProxy conditionTester;
     private final MagicInstanceManager instanceManager;
     private final SubsystemManager subsystems;
 
@@ -68,13 +72,19 @@ public class MagicEnvironment {
         this.scanner = new UrlClassScanner();
         this.scanner.setLogger(log);
         this.configurations = new ConfigurationManager(log, args);
+        this.context = new MagicContext(configurations);
+
+        logBanner();
 
         initDefaultConfigs();
 
         this.asyncManager = new ThreadPoolManager(log);
         this.annocheck = new AnnotationChecker();
-        this.instanceManager = new MagicInstanceManager(log, configurations, asyncManager, annocheck);
-        this.subsystems = new SubsystemManager(log, scanner, annocheck, instanceManager);
+        this.conditionTester = new ConditionTesterProxy();
+        context.conditionTester = conditionTester;
+        this.instanceManager = new MagicInstanceManager(log, configurations, asyncManager, annocheck, context);
+        context.instanceManager = this.instanceManager;
+        this.subsystems = new SubsystemManager(log, scanner, conditionTester, annocheck, instanceManager);
 
         setupAnnocheck();
 
@@ -86,6 +96,10 @@ public class MagicEnvironment {
         catch (MagicInstanceException e){
             throw new IllegalStateException("INVALID STATE: There should be no class waiting yet!", e);
         }
+    }
+
+    private void logBanner(){
+        log.info("<==========> Plugz Version 2 <==========>");
     }
 
     private void initDefaultConfigs(){
@@ -127,8 +141,8 @@ public class MagicEnvironment {
         log.info("Setting up the environment with profile: [{}]", configurations.profile());
 
         try {
-            log.debug("Initializing configurations from args and profile-resource...");
-            configurations.init();
+            log.debug("Initializing configurations from profile-resource...");
+            configurations.initProfileConfig();
         }
         catch (MagicSetupException e){
             throw new MagicSetupException("Failed to initialize configuration manager.", e);
@@ -138,6 +152,7 @@ public class MagicEnvironment {
         try {
             log.debug("Collecting context urls...");
             collectedUrls = collectScanUrls();
+            context.scanUrls = new ArrayList<>(collectedUrls);
         }
         catch (IOException e){
             throw new MagicSetupException("Failed to collect scan urls.", e);
@@ -147,24 +162,52 @@ public class MagicEnvironment {
         List<Class<?>> subsystemsClasses = new ArrayList<>();
         List<Class<?>> loggerImplementations = new ArrayList<>();
         List<Class<?>> configAnnotatedClasses = new ArrayList<>();
+        List<Class<?>> conditionTesterClasses = new ArrayList<>();
 
         try {
             log.debug("Starting config scan");
             log.debug("Scanning through {} collected urls ...", collectedUrls.size());
 
             scanner.forUrls(collectedUrls)
-                    .withCriteria(ScanCriteria.createOnSuccessCollect("Subsystem", subsystemsClasses).classImplements(ISubsystem.class))
+                    .withCriteria(ScanCriteria.createOnSuccessCollect("Subsystem", subsystemsClasses)
+                            .classImplements(ISubsystem.class))
                     .withCriteria(ScanCriteria.createOnSuccessCollect("Logger implementation", loggerImplementations)
                             .blacklistPackage("com.programm.ioutils.log.api")
+                            .blacklistClasses(LoggerFallback.class, LoggerProxy.class)
                             .classImplements(ILogger.class))
-                    .withCriteria(ScanCriteria.createOnSuccessCollect("Config class", configAnnotatedClasses).classAnnotatedWith(Config.class))
+                    .withCriteria(ScanCriteria.createOnSuccessCollect("Config class", configAnnotatedClasses)
+                            .classAnnotatedWith(Config.class))
+                    .withCriteria(ScanCriteria.createOnSuccessCollect("Condition Tester", conditionTesterClasses)
+                            .blacklistClasses(ConditionTesterProxy.class, SimpleConditionTester.class)
+                            .classImplements(IConditionTester.class))
                     .scan();
 
             scanner.clearConfig();
+            context.subsystems = new ArrayList<>(subsystemsClasses);
         }
         catch (ScanException e){
             throw new MagicSetupException("Config scan failed!", e);
         }
+
+        log.debug("Setting up condition tester...");
+        if(conditionTesterClasses.size() >= 1){
+            Class<?> conditionTesterClass = conditionTesterClasses.get(0);
+            if(conditionTesterClasses.size() > 1) log.warn("Multiple implementations found for [{}]! Using [{}].", IConditionTester.class, conditionTesterClass);
+
+            try {
+                instanceManager.instantiate(conditionTesterClass, instance -> {
+                    conditionTester.tester = (IConditionTester) instance;
+                });
+            }
+            catch (MagicInstanceException e){
+                throw new MagicSetupException("Failed to instantiate condition tester [" + conditionTesterClass + "]", e);
+            }
+        }
+        else {
+            log.debug("No condition tester implementation found. Using default implementation.");
+            conditionTester.tester = new SimpleConditionTester();
+        }
+        log.info("Using Condition Tester [{}].", conditionTester.tester.getClass().getName());
 
         log.debug("Registering [{}] configuration classes", configAnnotatedClasses.size());
         for(Class<?> cls : configAnnotatedClasses){
@@ -188,8 +231,15 @@ public class MagicEnvironment {
             throw new MagicSetupException(e.getMessage());
         }
 
+
+        log.debug("Initializing configurations from args...");
+        configurations.initArgs();
+
+
         log.debug("Searching for logger implementation...");
         findLoggerImplementation(loggerImplementations);
+
+        log.trace("Passing stored logs to logger implementation as now all configurations are set.");
         log.passStoredLogs();
 
         log.debug("Setting up [Async-Manager].");
@@ -257,7 +307,6 @@ public class MagicEnvironment {
         catch (MagicInstanceWaitException e){
             throw new MagicRuntimeException(e.getMessage());
         }
-
 
         if(configurations.getBoolOrError(CONF_ADD_SHUTDOWN_HOOK_NAME, MagicRuntimeException::new)){
             log.debug("Adding shutdown-hook...");
@@ -368,7 +417,7 @@ public class MagicEnvironment {
         else {
             loggerImplementationClass = null;
             for(Class<?> loggerImplCls : loggerImplementations) {
-                if(loggerImplCls == LoggerFallback.class || loggerImplCls == LoggerProxy.class) continue;
+//                if(loggerImplCls == LoggerFallback.class || loggerImplCls == LoggerProxy.class) continue;
                 loggerImplementationClass = loggerImplCls;
                 break;
             }
@@ -505,6 +554,10 @@ public class MagicEnvironment {
 
     public void setLogger(ILogger log){
         this.log.setLogger(log);
+    }
+
+    public void setConditionTester(IConditionTester conditionTester){
+        this.conditionTester.tester = conditionTester;
     }
 
     public void setInstance(Class<?> cls, Object instance){

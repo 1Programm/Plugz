@@ -10,7 +10,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>plugz-magic</artifactId>
-    <version>1.2.2</version>
+    <version>1.3.0</version>
 
     <properties>
         <maven.compiler.source>16</maven.compiler.source>
@@ -27,12 +27,12 @@
         <dependency>
             <groupId>com.programm.plugz</groupId>
             <artifactId>plugz-api</artifactId>
-            <version>1.2.1</version>
+            <version>1.2.2</version>
         </dependency>
         <dependency>
             <groupId>com.programm.plugz</groupId>
             <artifactId>plugz-inject</artifactId>
-            <version>1.2.0</version>
+            <version>1.2.1</version>
         </dependency>
         <dependency>
             <groupId>com.programm.plugz</groupId>
