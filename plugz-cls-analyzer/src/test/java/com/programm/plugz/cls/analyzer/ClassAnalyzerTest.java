@@ -29,8 +29,7 @@ public class ClassAnalyzerTest {
     @Test
     @DisplayName("Type Analyze [Simple]")
     void analyzeParameterizedTypeSimple() {
-        ClassAnalyzer analyzer = new ClassAnalyzer(false, true);
-        analyzer.doDeepAnalyze();
+        ClassAnalyzer analyzer = new ClassAnalyzer(false, true, true, false);
 
         assertDoesNotThrow(() -> {
             AnalyzedParameterizedType intType = analyzer.analyzeParameterizedCls(Integer.class);
@@ -57,7 +56,7 @@ public class ClassAnalyzerTest {
     @Test
     @DisplayName("Analyze Classes [Simple]")
     void analyzePropertySimple() {
-        ClassAnalyzer analyzer = new ClassAnalyzer(false, true);
+        ClassAnalyzer analyzer = new ClassAnalyzer(false, true, false, false);
 
         class SimpleClass {}
 
@@ -65,7 +64,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(SimpleClass.class);
 
             assertEquals(SimpleClass.class, analyzedClass.getType());
-            assertEquals(0, analyzedClass.getClassModifiers());
             assertEquals(0, analyzedClass.getFieldEntryMap().size());
             assertEquals(0, analyzedClass.getParameterizedTypeMap().size());
         });
@@ -77,7 +75,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(SimpleFinalClass.class);
 
             assertEquals(SimpleFinalClass.class, analyzedClass.getType());
-            assertEquals(Modifier.FINAL, analyzedClass.getClassModifiers());
             assertEquals(0, analyzedClass.getFieldEntryMap().size());
             assertEquals(0, analyzedClass.getParameterizedTypeMap().size());
         });
@@ -97,7 +94,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(SimplePropertyClass.class);
 
             assertEquals(SimplePropertyClass.class, analyzedClass.getType());
-            assertEquals(0, analyzedClass.getClassModifiers());
             assertEquals(3, analyzedClass.getFieldEntryMap().size());
             assertEquals(0, analyzedClass.getParameterizedTypeMap().size());
 
@@ -141,7 +137,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(SimpleGetterSetterClass.class);
 
             assertEquals(SimpleGetterSetterClass.class, analyzedClass.getType());
-            assertEquals(0, analyzedClass.getClassModifiers());
             assertEquals(2, analyzedClass.getFieldEntryMap().size());
             assertEquals(0, analyzedClass.getParameterizedTypeMap().size());
 
@@ -162,7 +157,7 @@ public class ClassAnalyzerTest {
     @Test
     @DisplayName("Analyze Classes [with caching]")
     void analyzePropertyWithCaching(){
-        ClassAnalyzer analyzer = new ClassAnalyzer(true, true);
+        ClassAnalyzer analyzer = new ClassAnalyzer(true, true, false, false);
 
         class SimpleClass {}
 
@@ -213,7 +208,7 @@ public class ClassAnalyzerTest {
     @Test
     @DisplayName("Analyze Classes [with ignoring]")
     void analyzePropertyWithIgnoring() {
-        ClassAnalyzer analyzer = new ClassAnalyzer(false, true);
+        ClassAnalyzer analyzer = new ClassAnalyzer(false, true, false, false);
         analyzer.ignorePropertyField(field -> field.getName().startsWith("ignore"));
         analyzer.ignorePropertyMethod(method -> method.getReturnType() == String.class);
 
@@ -227,7 +222,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(SimpleClass.class);
 
             assertEquals(SimpleClass.class, analyzedClass.getType());
-            assertEquals(0, analyzedClass.getClassModifiers());
             assertEquals(1, analyzedClass.getFieldEntryMap().size());
             assertEquals(0, analyzedClass.getParameterizedTypeMap().size());
         });
@@ -249,7 +243,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(MethodClass.class);
 
             assertEquals(MethodClass.class, analyzedClass.getType());
-            assertEquals(0, analyzedClass.getClassModifiers());
             assertEquals(2, analyzedClass.getFieldEntryMap().size());
             assertEquals(0, analyzedClass.getParameterizedTypeMap().size());
 
@@ -270,8 +263,7 @@ public class ClassAnalyzerTest {
     @Test
     @DisplayName("Analyze Classes [Advanced Generics]")
     void analyzePropertyAdvanced() {
-        ClassAnalyzer analyzer = new ClassAnalyzer(false, true);
-        analyzer.doDeepAnalyze();
+        ClassAnalyzer analyzer = new ClassAnalyzer(false, true, true, false);
 
 
         class SimpleGenericClass <T> {}
@@ -281,7 +273,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(SimpleGenericClass.class);
 
             assertEquals(SimpleGenericClass.class, analyzedClass.getType());
-            assertEquals(0, analyzedClass.getClassModifiers());
             assertEquals(0, analyzedClass.getFieldEntryMap().size());
             assertEquals(1, analyzedClass.getParameterizedTypeMap().size());
             assertEquals(Object.class, unwrapParameterizedType(analyzedClass, "T"));
@@ -293,7 +284,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(SimpleGenericClass.class, Map.of("T", booleanType));
 
             assertEquals(SimpleGenericClass.class, analyzedClass.getType());
-            assertEquals(0, analyzedClass.getClassModifiers());
             assertEquals(0, analyzedClass.getFieldEntryMap().size());
             assertEquals(1, analyzedClass.getParameterizedTypeMap().size());
             assertEquals(Boolean.class, unwrapParameterizedType(analyzedClass, "T"));
@@ -310,7 +300,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(SimpleGenericClassWithData.class, Map.of("Data", strType));
 
             assertEquals(SimpleGenericClassWithData.class, analyzedClass.getType());
-            assertEquals(0, analyzedClass.getClassModifiers());
             assertEquals(1, analyzedClass.getFieldEntryMap().size());
             assertEquals(1, analyzedClass.getParameterizedTypeMap().size());
             assertEquals(String.class, unwrapParameterizedType(analyzedClass, "Data"));
@@ -335,7 +324,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(MultiGenericClassWithData.class, Map.of("A", strType, "B", charType, "C", floatType));
 
             assertEquals(MultiGenericClassWithData.class, analyzedClass.getType());
-            assertEquals(0, analyzedClass.getClassModifiers());
             assertEquals(3, analyzedClass.getFieldEntryMap().size());
             assertEquals(3, analyzedClass.getParameterizedTypeMap().size());
             assertEquals(String.class, unwrapParameterizedType(analyzedClass, "A"));
@@ -366,7 +354,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(SimplePassedGenericsClass.class, Map.of("T", longType));
 
             assertEquals(SimplePassedGenericsClass.class, analyzedClass.getType());
-            assertEquals(0, analyzedClass.getClassModifiers());
             assertEquals(1, analyzedClass.getFieldEntryMap().size());
             assertEquals(1, analyzedClass.getParameterizedTypeMap().size());
             assertEquals(Long.class, unwrapParameterizedType(analyzedClass, "T"));
@@ -389,7 +376,6 @@ public class ClassAnalyzerTest {
             AnalyzedPropertyClass analyzedClass = analyzer.analyzeProperty(DeepPassedGenericsClass.class, Map.of("T", strType));
 
             assertEquals(DeepPassedGenericsClass.class, analyzedClass.getType());
-            assertEquals(0, analyzedClass.getClassModifiers());
             assertEquals(1, analyzedClass.getFieldEntryMap().size());
             assertEquals(1, analyzedClass.getParameterizedTypeMap().size());
             assertEquals(String.class, unwrapParameterizedType(analyzedClass, "T"));

@@ -8,7 +8,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class PropertyEntry {
 
-    private final AnalyzedParameterizedType type;
+    private final AnalyzedPropertyClass type;
     private final Field field;
     IClassPropertyGetter getter;
     IClassPropertySetter setter;
@@ -17,7 +17,7 @@ public class PropertyEntry {
         return type.getType();
     }
 
-    public AnalyzedParameterizedType getParameterizedType() {
+    public AnalyzedPropertyClass getPropertyType() {
         return type;
     }
 

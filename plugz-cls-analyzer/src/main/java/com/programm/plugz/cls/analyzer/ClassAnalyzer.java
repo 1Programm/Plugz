@@ -204,17 +204,22 @@ public class ClassAnalyzer {
 
     private final boolean doCaching;
     private final boolean generalizeFieldNames;
+    private final boolean deepAnalyze;
+    private final boolean deepProperties;
+
     private final Map<String, AnalyzedPropertyClass> cachedClasses;
     private final Map<String, AnalyzedParameterizedType> cachedAnalyzedParameterizedTypeMap = new HashMap<>();
 
     private final List<Predicate<Field>> ignorePropertyFields = new ArrayList<>();
     private final List<Predicate<Method>> ignorePropertyMethods = new ArrayList<>();
 
-    private boolean deepAnalyze;
 
-    public ClassAnalyzer(boolean doCaching, boolean generalizeFieldNames) {
+    public ClassAnalyzer(boolean doCaching, boolean generalizeFieldNames, boolean deepAnalyze, boolean deepProperties) {
         this.doCaching = doCaching;
         this.generalizeFieldNames = generalizeFieldNames;
+        this.deepAnalyze = deepAnalyze;
+        this.deepProperties = deepProperties;
+
         cachedClasses = doCaching ? new HashMap<>() : null;
     }
 
@@ -228,18 +233,22 @@ public class ClassAnalyzer {
         return this;
     }
 
-    public ClassAnalyzer doDeepAnalyze(){
-        this.deepAnalyze = true;
-        return this;
-    }
-
-
     public AnalyzedPropertyClass analyzeProperty(Class<?> cls) throws ClassAnalyzeException {
         return analyzeProperty(cls, Collections.emptyMap());
     }
 
+    private AnalyzedPropertyClass analyzeProperty(Class<?> cls, Type genericType, Map<String, AnalyzedParameterizedType> genericTypes) throws ClassAnalyzeException {
+        AnalyzedParameterizedType analyzedClassType = analyzeParameterizedType(cls, genericType, genericTypes);
+        return analyzeProperty(analyzedClassType, cls);
+    }
+
     public AnalyzedPropertyClass analyzeProperty(Class<?> cls, Map<String, AnalyzedParameterizedType> genericTypes) throws ClassAnalyzeException {
-        String beanString = getBeanStringForAnalyzedClass(cls, genericTypes);
+        AnalyzedParameterizedType analyzedClassType = analyzeParameterizedCls(cls, genericTypes);
+        return analyzeProperty(analyzedClassType, cls);
+    }
+
+    public AnalyzedPropertyClass analyzeProperty(AnalyzedParameterizedType analyzedClassType, Class<?> cls) throws ClassAnalyzeException {
+        String beanString = analyzedClassType.toString();
 
         if(doCaching){
             AnalyzedPropertyClass analyzedClass = cachedClasses.get(beanString);
@@ -268,7 +277,15 @@ public class ClassAnalyzer {
 
             Class<?> classType = field.getType();
             Type genericType = field.getGenericType();
-            AnalyzedParameterizedType analyzedParameterizedType = analyzeParameterizedType(genericType, classType, genericTypes);
+            AnalyzedPropertyClass analyzedParameterizedPropertyClass;
+            if(deepProperties){
+                analyzedParameterizedPropertyClass = analyzeProperty(classType, genericType, analyzedClassType.getParameterizedTypeMap());
+            }
+            else {
+                AnalyzedParameterizedType analyzedParameterizedType = analyzeParameterizedType(classType, genericType, analyzedClassType.getParameterizedTypeMap());
+                analyzedParameterizedPropertyClass = new AnalyzedPropertyClass(analyzedParameterizedType, Collections.emptyMap());
+            }
+
 
             int mods = field.getModifiers();
 
@@ -276,11 +293,11 @@ public class ClassAnalyzer {
                 boolean accessible = Modifier.isPublic(clsModifiers) && Modifier.isPublic(mods);
 
                 if (!Modifier.isFinal(mods)) {
-                    entries.computeIfAbsent(stdName, n -> new PropertyEntry(getTypeOrObject(analyzedParameterizedType), field)).setter = new FieldPropertySetter(field, accessible);
+                    entries.computeIfAbsent(stdName, n -> new PropertyEntry(analyzedParameterizedPropertyClass, field)).setter = new FieldPropertySetter(field, accessible);
                 }
 
-                nameTypeMap.put(stdName, getTypeOrObject(analyzedParameterizedType).getType());
-                entries.computeIfAbsent(stdName, n -> new PropertyEntry(getTypeOrObject(analyzedParameterizedType), field)).getter = new FieldPropertyGetter(field, accessible);
+                nameTypeMap.put(stdName, analyzedParameterizedPropertyClass.getType());
+                entries.computeIfAbsent(stdName, n -> new PropertyEntry(analyzedParameterizedPropertyClass, field)).getter = new FieldPropertyGetter(field, accessible);
             }
         }
 
@@ -312,10 +329,17 @@ public class ClassAnalyzer {
                 if(oldType != null && isNotSameClass(classType, oldType)) throw new ClassAnalyzeException("Getter Method for property [" + stdName + "] and previously found type do not match! (" + classType + " <-> " + oldType + ")");
 
                 Type genericType = method.getGenericReturnType();
-                AnalyzedParameterizedType analyzedParameterizedType = analyzeParameterizedType(genericType, classType, genericTypes);
+                AnalyzedPropertyClass analyzedParameterizedPropertyClass;
+                if(deepProperties){
+                    analyzedParameterizedPropertyClass = analyzeProperty(classType, genericType, analyzedClassType.getParameterizedTypeMap());
+                }
+                else {
+                    AnalyzedParameterizedType analyzedParameterizedType = analyzeParameterizedType(classType, genericType, analyzedClassType.getParameterizedTypeMap()/*genericTypes*/);
+                    analyzedParameterizedPropertyClass = new AnalyzedPropertyClass(analyzedParameterizedType, Collections.emptyMap());
+                }
 
-                nameTypeMap.put(stdName, getTypeOrObject(analyzedParameterizedType).getType());
-                entries.computeIfAbsent(stdName, n -> new PropertyEntry(getTypeOrObject(analyzedParameterizedType), null)).getter = new MethodPropertyGetter(method, accessible);
+                nameTypeMap.put(stdName, analyzedParameterizedPropertyClass.getType());
+                entries.computeIfAbsent(stdName, n -> new PropertyEntry(analyzedParameterizedPropertyClass, null)).getter = new MethodPropertyGetter(method, accessible);
             }
             else if(stdName.startsWith("set_")){
                 stdName = stdName.substring("set_".length());
@@ -330,16 +354,22 @@ public class ClassAnalyzer {
                 if(oldType != null && isNotSameClass(classType, oldType)) throw new ClassAnalyzeException("Setter Method for property [" + stdName + "] and previously found type do not match! (" + classType + " <-> " + oldType + ")");
 
                 Type genericType = method.getGenericParameterTypes()[0];
-                AnalyzedParameterizedType analyzedParameterizedType = analyzeParameterizedType(genericType, classType, genericTypes);
+                AnalyzedPropertyClass analyzedParameterizedPropertyClass;
+                if(deepProperties){
+                    analyzedParameterizedPropertyClass = analyzeProperty(classType, genericType, analyzedClassType.getParameterizedTypeMap());
+                }
+                else {
+                    AnalyzedParameterizedType analyzedParameterizedType = analyzeParameterizedType(classType, genericType, analyzedClassType.getParameterizedTypeMap()/*genericTypes*/);
+                    analyzedParameterizedPropertyClass = new AnalyzedPropertyClass(analyzedParameterizedType, Collections.emptyMap());
+                }
 
-                nameTypeMap.put(stdName, getTypeOrObject(analyzedParameterizedType).getType());
-                entries.computeIfAbsent(stdName, n -> new PropertyEntry(getTypeOrObject(analyzedParameterizedType), null)).setter = new MethodPropertySetter(method, accessible);
+                nameTypeMap.put(stdName, analyzedParameterizedPropertyClass.getType());
+                entries.computeIfAbsent(stdName, n -> new PropertyEntry(analyzedParameterizedPropertyClass, null)).setter = new MethodPropertySetter(method, accessible);
             }
         }
 
 
-        AnalyzedParameterizedType analyzedClassType = analyzeParameterizedCls(cls, genericTypes);
-        AnalyzedPropertyClass analyzedClass = new AnalyzedPropertyClass(analyzedClassType, entries, clsModifiers);
+        AnalyzedPropertyClass analyzedClass = new AnalyzedPropertyClass(analyzedClassType, entries);
 
         if(doCaching){
             cachedClasses.put(beanString, analyzedClass);
@@ -377,17 +407,17 @@ public class ClassAnalyzer {
         Type genericParentCls = cls.getGenericSuperclass();
 
         AnalyzedParameterizedType analyzedParent = null;
-        if(deepAnalyze) analyzedParent = analyzeParameterizedType(genericParentCls, parentCls, genericTypesMap);
+        if(deepAnalyze) analyzedParent = analyzeParameterizedType(parentCls, genericParentCls, genericTypesMap);
         return newTypeAndAddToCache(beanString, cls, analyzedParent, genericTypesMap);
     }
 
-    public AnalyzedParameterizedType analyzeParameterizedType(Type type, Class<?> typeClass, Map<String, AnalyzedParameterizedType> genericTypes) throws ClassAnalyzeException {
-        if(type instanceof ParameterizedType parameterizedType){
+    public AnalyzedParameterizedType analyzeParameterizedType(Class<?> typeClass, Type genericType, Map<String, AnalyzedParameterizedType> genericTypes) throws ClassAnalyzeException {
+        if(genericType instanceof ParameterizedType parameterizedType){
             Class<?> theType = (Class<?>) parameterizedType.getRawType();
             Map<String, AnalyzedParameterizedType> genericParentTypes = createParameterizedTypeMap(theType, parameterizedType, genericTypes);
             return analyzeParameterizedCls(theType, genericParentTypes);
         }
-        else if(type instanceof TypeVariable typeVariable){
+        else if(genericType instanceof TypeVariable typeVariable){
             String typeVariableName = typeVariable.getName();
             if(genericTypes == null) throw new ClassAnalyzeException("No generic info [" + typeVariableName + "] provided for class [" + typeClass + "]!");
 
@@ -410,7 +440,7 @@ public class ClassAnalyzer {
             Type genericParentCls = typeClass.getGenericSuperclass();
 
             AnalyzedParameterizedType analyzedParent = null;
-            if(deepAnalyze) analyzedParent = analyzeParameterizedType(genericParentCls, parentCls, Collections.emptyMap());
+            if(deepAnalyze) analyzedParent = analyzeParameterizedType(parentCls, genericParentCls, Collections.emptyMap());
             return newTypeAndAddToCache(beanString, typeClass, analyzedParent, Collections.emptyMap());
         }
     }
@@ -442,7 +472,7 @@ public class ClassAnalyzer {
             }
             else {
                 Class<?> parentSubTypeClass = (Class<?>) parentType;
-                AnalyzedParameterizedType analyzedParentType = analyzeParameterizedType(parentType, parentSubTypeClass, genericTypes);
+                AnalyzedParameterizedType analyzedParentType = analyzeParameterizedType(parentSubTypeClass, parentType, genericTypes);
                 genericParentTypes.put(parentTypeName, analyzedParentType);
             }
         }
