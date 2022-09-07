@@ -22,7 +22,7 @@ public class JsonNodePropertyObjectMapper implements IObjectMapper<JsonNode, Obj
     private final ISpecializedObjectMapperLookup specializedLookup;
 
     public JsonNodePropertyObjectMapper(ISpecializedObjectMapperLookup specializedLookup) {
-        this(new ClassAnalyzer(true, false), specializedLookup);
+        this(new ClassAnalyzer(true, false, true, true), specializedLookup);
     }
 
     public JsonNodePropertyObjectMapper(ClassAnalyzer analyzer, ISpecializedObjectMapperLookup specializedLookup) {
@@ -147,7 +147,7 @@ public class JsonNodePropertyObjectMapper implements IObjectMapper<JsonNode, Obj
                 JsonNode fieldNode = getNodeForAnalyzedFieldName(fieldName, objectNode);
                 if(fieldNode != null){
                     PropertyEntry fieldEntry = entry.getValue();
-                    Object fieldValue = readObject(fieldNode, fieldEntry.getParameterizedType());
+                    Object fieldValue = readObject(fieldNode, fieldEntry.getPropertyType().getParameterizedType());
                     IClassPropertySetter setter = fieldEntry.getSetter();
 
                     if(setter != null){
@@ -276,7 +276,7 @@ public class JsonNodePropertyObjectMapper implements IObjectMapper<JsonNode, Obj
                 JsonNode fieldNode = getNodeForAnalyzedFieldName(fieldName, objectNode);
                 if(fieldNode != null){
                     PropertyEntry fieldEntry = entry.getValue();
-                    Object fieldValue = readObject(fieldNode, fieldEntry.getParameterizedType());
+                    Object fieldValue = readObject(fieldNode, fieldEntry.getPropertyType().getParameterizedType());
                     IClassPropertySetter setter = fieldEntry.getSetter();
 
                     if(setter != null){
