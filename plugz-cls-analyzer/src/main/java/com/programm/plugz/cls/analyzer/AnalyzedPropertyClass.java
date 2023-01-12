@@ -9,6 +9,7 @@ public class AnalyzedPropertyClass {
 
     private final AnalyzedParameterizedType type;
     private final Map<String, PropertyEntry> fieldEntryMap;
+    private final IClassPropertyBuilder builder;
 
     public Class<?> getType() {
         return type.getType();
@@ -30,4 +31,7 @@ public class AnalyzedPropertyClass {
         return fieldEntryMap;
     }
 
+    public IClassPropertyBuilder getBuilder() {
+        return builder;
+    }
 }

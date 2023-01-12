@@ -15,6 +15,23 @@ public class ClassAnalyzer {
     }
 
     @RequiredArgsConstructor
+    private static class ConstructorBuilder implements IClassPropertyBuilder {
+
+        private final Constructor<?> constructor;
+
+        @Override
+        public Object build() throws InvocationTargetException {
+            try {
+                return constructor.newInstance();
+            } catch (InstantiationException e) {
+                throw new IllegalStateException("INVALID STATE: Should have been checked for abstract class or interface!", e);
+            } catch (IllegalAccessException e) {
+                throw new IllegalStateException("INVALID STATE: Should have been set to accessible!", e);
+            }
+        }
+    }
+
+    @RequiredArgsConstructor
     private static class FieldPropertyGetter implements IClassPropertyGetter {
 
         private final Field field;
@@ -210,6 +227,8 @@ public class ClassAnalyzer {
     private final Map<String, AnalyzedPropertyClass> cachedClasses;
     private final Map<String, AnalyzedParameterizedType> cachedAnalyzedParameterizedTypeMap = new HashMap<>();
 
+    private final List<IClassBuilderProvider> builderProviders = new ArrayList<>();
+
     private final List<Predicate<Field>> ignorePropertyFields = new ArrayList<>();
     private final List<Predicate<Method>> ignorePropertyMethods = new ArrayList<>();
 
@@ -237,7 +256,7 @@ public class ClassAnalyzer {
         return analyzeProperty(cls, Collections.emptyMap());
     }
 
-    private AnalyzedPropertyClass analyzeProperty(Class<?> cls, Type genericType, Map<String, AnalyzedParameterizedType> genericTypes) throws ClassAnalyzeException {
+    public AnalyzedPropertyClass analyzeProperty(Class<?> cls, Type genericType, Map<String, AnalyzedParameterizedType> genericTypes) throws ClassAnalyzeException {
         AnalyzedParameterizedType analyzedClassType = analyzeParameterizedType(cls, genericType, genericTypes);
         return analyzeProperty(analyzedClassType, cls);
     }
@@ -257,6 +276,26 @@ public class ClassAnalyzer {
 
         int clsModifiers = cls.getModifiers();
         if(Modifier.isPrivate(clsModifiers)) throw new ClassAnalyzeException("Class is private and cannot be analyzed!");
+
+        IClassPropertyBuilder builder = null;
+
+        Constructor<?>[] constructors = cls.getDeclaredConstructors();
+        for(Constructor<?> constructor : constructors){
+            if(constructor.getParameterCount() == 0){
+                int mods = constructor.getModifiers();
+                if(Modifier.isPrivate(mods) || Modifier.isAbstract(mods)) continue;
+                builder = new ConstructorBuilder(constructor);
+                break;
+            }
+        }
+
+        if(builder == null){
+            for (IClassBuilderProvider builderProvider : builderProviders) {
+                builder = builderProvider.get(analyzedClassType);
+                if (builder != null) break;
+            }
+        }
+
 
         Map<String, PropertyEntry> entries = new HashMap<>();
 
@@ -283,7 +322,7 @@ public class ClassAnalyzer {
             }
             else {
                 AnalyzedParameterizedType analyzedParameterizedType = analyzeParameterizedType(classType, genericType, analyzedClassType.getParameterizedTypeMap());
-                analyzedParameterizedPropertyClass = new AnalyzedPropertyClass(analyzedParameterizedType, Collections.emptyMap());
+                analyzedParameterizedPropertyClass = new AnalyzedPropertyClass(analyzedParameterizedType, Collections.emptyMap(), null);
             }
 
 
@@ -335,7 +374,7 @@ public class ClassAnalyzer {
                 }
                 else {
                     AnalyzedParameterizedType analyzedParameterizedType = analyzeParameterizedType(classType, genericType, analyzedClassType.getParameterizedTypeMap()/*genericTypes*/);
-                    analyzedParameterizedPropertyClass = new AnalyzedPropertyClass(analyzedParameterizedType, Collections.emptyMap());
+                    analyzedParameterizedPropertyClass = new AnalyzedPropertyClass(analyzedParameterizedType, Collections.emptyMap(), null);
                 }
 
                 nameTypeMap.put(stdName, analyzedParameterizedPropertyClass.getType());
@@ -360,7 +399,7 @@ public class ClassAnalyzer {
                 }
                 else {
                     AnalyzedParameterizedType analyzedParameterizedType = analyzeParameterizedType(classType, genericType, analyzedClassType.getParameterizedTypeMap()/*genericTypes*/);
-                    analyzedParameterizedPropertyClass = new AnalyzedPropertyClass(analyzedParameterizedType, Collections.emptyMap());
+                    analyzedParameterizedPropertyClass = new AnalyzedPropertyClass(analyzedParameterizedType, Collections.emptyMap(), null);
                 }
 
                 nameTypeMap.put(stdName, analyzedParameterizedPropertyClass.getType());
@@ -369,7 +408,7 @@ public class ClassAnalyzer {
         }
 
 
-        AnalyzedPropertyClass analyzedClass = new AnalyzedPropertyClass(analyzedClassType, entries);
+        AnalyzedPropertyClass analyzedClass = new AnalyzedPropertyClass(analyzedClassType, entries, builder);
 
         if(doCaching){
             cachedClasses.put(beanString, analyzedClass);
@@ -485,6 +524,10 @@ public class ClassAnalyzer {
         AnalyzedParameterizedType newType = new AnalyzedParameterizedType(cls, parent, genericTypes);
         cachedAnalyzedParameterizedTypeMap.put(beanString, newType);
         return newType;
+    }
+
+    public void registerBuilderProvider(IClassBuilderProvider builderProvider){
+        this.builderProviders.add(builderProvider);
     }
 
 }
