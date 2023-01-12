@@ -20,6 +20,9 @@
         <module>plugz-debugger</module>
         <module>plugz-test</module>
         <module>plugz-object-mapper</module>
+        <module>plugz-persist</module>
+        <module>plugz-persist-aqua</module>
+        <module>plugz-persist-imbedded</module>
     </modules>
 
     <properties>
