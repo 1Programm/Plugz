@@ -11,6 +11,7 @@ import com.programm.plugz.api.auto.Get;
 import com.programm.plugz.api.auto.GetConfig;
 import com.programm.plugz.api.auto.SetConfig;
 import com.programm.plugz.api.condition.IConditionTester;
+import com.programm.plugz.api.instance.IInstanceManager;
 import com.programm.plugz.api.lifecycle.LifecycleState;
 import com.programm.plugz.inject.ScanCriteria;
 import com.programm.plugz.inject.ScanException;
@@ -89,6 +90,7 @@ public class MagicEnvironment {
         setupAnnocheck();
 
         try {
+            this.instanceManager.registerInstance(IInstanceManager.class, instanceManager);
             this.instanceManager.registerInstance(ILogger.class, log);
             this.instanceManager.registerInstance(PlugzConfig.class, configurations);
             this.instanceManager.registerInstance(IAsyncManager.class, asyncManager);

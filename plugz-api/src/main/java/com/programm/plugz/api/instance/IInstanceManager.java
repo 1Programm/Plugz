@@ -17,6 +17,7 @@ public interface IInstanceManager {
 
     <T> T getInstance(Class<T> cls) throws MagicInstanceException;
 
+    void registerInstance(Class<?> cls, Object instance) throws MagicInstanceException;
 
     Object getField(Field field, Object instance);
 
