@@ -122,7 +122,7 @@ public class XmlBuilder {
             int attribsStart = StringUtils.trimIndexForward(s, nextOpen + 1, nextClose);
             int attribsEnd = StringUtils.trimIndexBackward(s, nextOpen + 1, nextClose);
             String[] attribSplit = StringUtils.splitOutsideComment(s, attribsStart, attribsEnd, " ", "\"", "\"", false);
-            String nodeName = attribSplit[0];
+            String nodeName = attribSplit[0].trim();
 
             List<XmlNode> children = new ArrayList<>();
             XmlNode node = new XmlGroupNode(nodeName, parseAttribs(attribSplit), children);
@@ -143,6 +143,7 @@ public class XmlBuilder {
 
         for(int i=1;i<attribs.length;i++){
             String attrib = attribs[i].trim();
+            if(attrib.isEmpty()) continue;
             int nextEqual = attrib.indexOf('=');
 
             String key, value;
@@ -171,14 +172,14 @@ public class XmlBuilder {
     }
 
     private static void buildString(XmlNode node, StringBuilder sb, int tabs){
+        String _tabs = "\t".repeat(tabs);
         if(node instanceof XmlTextNode){
-            sb.append(node.value());
+            sb.append(_tabs).append(node.value());
             return;
         }
 
         XmlGroupNode groupNode = (XmlGroupNode) node;
 
-        String _tabs = "\t".repeat(tabs);
         sb.append(_tabs).append("<").append(groupNode.name());
         addAttribs(sb, groupNode.attribs());
         sb.append(">");
@@ -186,7 +187,7 @@ public class XmlBuilder {
         if(groupNode.children.size() == 1 && groupNode.children.get(0) instanceof XmlTextNode){
             sb.append(groupNode.children.get(0).value());
         }
-        else {
+        else if(groupNode.children.size() != 0){
             for (XmlNode child : groupNode.children()) {
                 sb.append("\n");
                 buildString(child, sb, tabs + 1);

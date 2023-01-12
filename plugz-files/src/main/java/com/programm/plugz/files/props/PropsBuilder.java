@@ -52,7 +52,8 @@ public class PropsBuilder {
             else if(s.charAt(i) == '\n'){
                 if(key == null) continue;
                 String value = s.substring(last, i).trim();
-                if(value.isBlank()) throw new PropsParseException("No key value pair defined!");
+                //TODO: Check for changes this implies
+                //if(value.isBlank()) throw new PropsParseException("No key value pair defined!");
                 nodes.add(new PropsKeyValNode(key, value));
                 key = null;
                 last = i + 1;
