@@ -48,7 +48,27 @@ public class MagicEnvironment {
     }
 
     public static MagicEnvironment Start(String... args) throws MagicSetupException {
+        StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+        String _className = stack[stack.length - 1].getClassName();
+        Class<?> executingClass;
+        try {
+            executingClass = Class.forName(_className);
+        }
+        catch (ClassNotFoundException e){
+            throw new MagicSetupException("Failed to get executing class [" + _className + "]!", e);
+        }
+
+        URL executingClassUrl = executingClass.getResource("/");
+
+
         MagicEnvironment env = new MagicEnvironment(args);
+        env.setExecutingUrl(executingClassUrl);
+
+        MagicRuntime runtimeSettings = executingClass.getAnnotation(MagicRuntime.class);
+        if(runtimeSettings != null){
+            env.componentScanPath(runtimeSettings.scanPath());
+        }
+
         env.setup();
         env.startup();
         return env;
@@ -66,7 +86,11 @@ public class MagicEnvironment {
     private final MagicInstanceManager instanceManager;
     private final SubsystemManager subsystems;
 
+
     private long setupBeginTime;
+    private URL executingClassUrl;
+    private boolean enableComponentScan = true;
+    private String componentScanPath = null;
 
     public MagicEnvironment(String... args){
         this.log = new LoggerProxy();
@@ -98,6 +122,10 @@ public class MagicEnvironment {
         catch (MagicInstanceException e){
             throw new IllegalStateException("INVALID STATE: There should be no class waiting yet!", e);
         }
+    }
+
+    private void findExecutingUrl(){
+
     }
 
     private void logBanner(){
@@ -170,11 +198,13 @@ public class MagicEnvironment {
             log.debug("Starting config scan");
             log.debug("Scanning through {} collected urls ...", collectedUrls.size());
 
+            if(componentScanPath != null) scanner.entryPoint(executingClassUrl, componentScanPath);
+
             scanner.forUrls(collectedUrls)
                     .withCriteria(ScanCriteria.createOnSuccessCollect("Subsystem", subsystemsClasses)
                             .classImplements(ISubsystem.class))
                     .withCriteria(ScanCriteria.createOnSuccessCollect("Logger implementation", loggerImplementations)
-                            .blacklistPackage("com.programm.ioutils.log.api")
+                            .blacklistPackages("com.programm.ioutils.log.api")
                             .blacklistClasses(LoggerFallback.class, LoggerProxy.class)
                             .classImplements(ILogger.class))
                     .withCriteria(ScanCriteria.createOnSuccessCollect("Config class", configAnnotatedClasses)
@@ -256,13 +286,18 @@ public class MagicEnvironment {
         }
 
         List<Class<?>> serviceClasses = new ArrayList<>();
+
         try {
             log.debug("Starting main scan");
             log.debug("Scanning through {} collected urls ...", collectedUrls.size());
 
+            if(componentScanPath != null) scanner.entryPoint(executingClassUrl, componentScanPath);
+
             scanner.forUrls(collectedUrls)
                     .withCriteria(ScanCriteria.createOnSuccessCollect("Service class", serviceClasses).classAnnotatedWith(Service.class))
                     .scan();
+
+            scanner.clearConfig();
         }
         catch (ScanException e){
             throw new MagicSetupException("Main scan failed!", e);
@@ -551,8 +586,13 @@ public class MagicEnvironment {
 
 
 
+    public void setExecutingUrl(URL executingURL){
+        this.executingClassUrl = executingURL;
+    }
 
-
+    public void componentScanPath(String path) {
+        this.componentScanPath = path;
+    }
 
     public void setLogger(ILogger log){
         this.log.setLogger(log);
