@@ -13,22 +13,59 @@ import java.util.function.Consumer;
 public class ScanCriteria {
 
     private static class PackageCriteria implements INameCriteria {
-        private final String packageName;
+        private final URL forURL;
+        private final String[] packageNames;
         private final boolean blacklisted;
 
-        public PackageCriteria(String packageName, boolean blacklisted) {
-            this.packageName = packageName;
+        public PackageCriteria(URL forURL, String[] packageNames, boolean blacklisted) {
+            this.forURL = forURL;
+            this.packageNames = packageNames;
             this.blacklisted = blacklisted;
         }
 
         @Override
         public boolean test(URL url, String fullClassName) {
+            if(forURL != null && forURL != url) return true;
+
             int lastDot = fullClassName.lastIndexOf('.');
             if(lastDot == -1) lastDot = 0;
 
             String packagePart = fullClassName.substring(0, lastDot);
-            if(packagePart.startsWith(packageName)){
-                return !blacklisted;
+
+            for(String pkg : packageNames){
+                if(packagePart.startsWith(pkg) == blacklisted) return false;
+            }
+
+            return true;
+//            if(blacklisted){
+//                for(String pkg : packageNames){
+//                    if(packagePart.startsWith(pkg)) return false;
+//                }
+//
+//                return true;
+//            }
+//            else {
+//                for(String pkg : packageNames){
+//                    if(!packagePart.startsWith(pkg)) return false;
+//                }
+//                return true;
+//            }
+        }
+    }
+
+    private static class URLCriteria implements INameCriteria {
+        private final URL[] urls;
+        private final boolean blacklisted;
+
+        public URLCriteria(URL[] urls, boolean blacklisted) {
+            this.urls = urls;
+            this.blacklisted = blacklisted;
+        }
+
+        @Override
+        public boolean test(URL url, String fullClassName) {
+            for(URL testUrl : urls){
+                if(testUrl.sameFile(url)) return !blacklisted;
             }
 
             return blacklisted;
@@ -36,105 +73,68 @@ public class ScanCriteria {
     }
 
 
-    private static class ClassBlacklistCriteria implements IClassCriteria {
+    private static class ClassCriteria implements IClassCriteria {
+        private final URL forURL;
         private final Class<?>[] classes;
+        private final boolean blacklisted;
 
-        public ClassBlacklistCriteria(Class<?>... classes) {
+        public ClassCriteria(URL forURL, Class<?>[] classes, boolean blacklisted) {
+            this.forURL = forURL;
             this.classes = classes;
+            this.blacklisted = blacklisted;
         }
 
         @Override
         public boolean test(URL url, Class<?> cls) {
+            if(forURL != null && forURL != url) return true;
+
             for(Class<?> c : classes){
-                if(cls == c) return false;
+                if(cls == c) return !blacklisted;
             }
 
-            return true;
+            return blacklisted;
         }
     }
 
     private static class ClassImplementsCriteria implements IClassCriteria {
+        private final URL forURL;
         private final Class<?> toImplement;
         private final int generations;
 
-        public ClassImplementsCriteria(Class<?> toImplement, int generations) {
+        public ClassImplementsCriteria(URL forURL, Class<?> toImplement, int generations) {
+            this.forURL = forURL;
             this.toImplement = toImplement;
             this.generations = generations;
         }
 
         @Override
         public boolean test(URL url, Class<?> cls) {
-            return test(cls, generations);
-        }
-
-        private boolean test(Class<?> cls, int generations){
-            if(cls == null || cls == Object.class) return false;
-
-            Class<?>[] interfaces = cls.getInterfaces();
-            for(Class<?> i : interfaces){
-                if(i == toImplement){
-                    return true;
-                }
-
-                if(generations != 0){
-                    if(test(i, generations - 1)){
-                        return true;
-                    }
-                }
-            }
-
-            Class<?> superCls = cls.getSuperclass();
-            if(superCls == toImplement){
-                return true;
-            }
-
-            if(generations != 0){
-                return test(superCls, generations - 1);
-            }
-
-            return false;
+            if(forURL != null && forURL != url) return true;
+            return ClassScanUtils.implementsClass(cls, toImplement, generations);
         }
     }
 
     private static class AnnotatedClassCriteria implements IClassCriteria {
+        private final URL forURL;
         private final Class<? extends Annotation> annotatedBy;
         private final boolean searchInInterfaces;
         private final boolean searchInSuperclass;
         private final int generations;
+        private final boolean blacklisted;
 
-        public AnnotatedClassCriteria(Class<? extends Annotation> annotatedBy, boolean searchInInterfaces, boolean searchInSuperclass, int generations) {
+        public AnnotatedClassCriteria(URL forURL, Class<? extends Annotation> annotatedBy, boolean searchInInterfaces, boolean searchInSuperclass, int generations, boolean blacklisted) {
+            this.forURL = forURL;
             this.annotatedBy = annotatedBy;
             this.searchInInterfaces = searchInInterfaces;
             this.searchInSuperclass = searchInSuperclass;
             this.generations = generations;
+            this.blacklisted = blacklisted;
         }
 
         @Override
         public boolean test(URL url, Class<?> cls) {
-            return test(cls, generations);
-        }
-
-        private boolean test(Class<?> cls, int generations){
-            if(cls == null || cls == Object.class) return false;
-
-            if(cls.isAnnotationPresent(annotatedBy)) return true;
-            if(generations == 0) return false;
-
-            if(searchInInterfaces) {
-                Class<?>[] interfaces = cls.getInterfaces();
-                for(Class<?> i : interfaces){
-                    if(test(i, generations - 1)){
-                        return true;
-                    }
-                }
-            }
-
-            if(searchInSuperclass) {
-                Class<?> superCls = cls.getSuperclass();
-                return test(superCls, generations - 1);
-            }
-
-            return false;
+            if(forURL != null && forURL != url) return true;
+            return ClassScanUtils.annotatedWith(cls, annotatedBy, searchInInterfaces, searchInSuperclass, generations) != blacklisted;
         }
     }
 
@@ -194,44 +194,75 @@ public class ScanCriteria {
         this.onSuccessCallback.accept(cls);
     }
 
-
     /**
-     * Creates a criteria which permits only classes in that specific package.
-     * @param packageName the package.
+     * Creates a criteria which permits only the specific urls.
+     * @param urls the urls.
      * @return this instance for method chaining.
      */
-    public ScanCriteria whitelistPackage(String packageName){
-        nameCriteriaList.add(new PackageCriteria(packageName, false));
+    public ScanCriteria whitelistURLs(URL... urls){
+        nameCriteriaList.add(new URLCriteria(urls, false));
         return this;
     }
 
     /**
-     * Creates a criteria which permits no classes in a specific package.
-     * @param packageName the package.
+     * Creates a criteria which permits no urls that are specified.
+     * @param urls the urls.
      * @return this instance for method chaining.
      */
-    public ScanCriteria blacklistPackage(String packageName){
-        nameCriteriaList.add(new PackageCriteria(packageName, true));
+    public ScanCriteria blacklistURLs(URL... urls){
+        nameCriteriaList.add(new URLCriteria(urls, true));
         return this;
     }
 
     /**
-     * Creates a criteria which blacklists a specific class.
-     * @param cls the class to be blacklisted.
+     * Creates a criteria which permits only classes in the specific packages.
+     * @param packageNames the packages.
      * @return this instance for method chaining.
      */
-    public ScanCriteria blacklistClass(Class<?> cls){
-        classCriteriaList.add(new ClassBlacklistCriteria(cls));
+    public ScanCriteria whitelistPackages(String... packageNames){
+        nameCriteriaList.add(new PackageCriteria(null, packageNames, false));
         return this;
     }
 
     /**
-     * Creates a criteria which blacklists an array of classes.
-     * @param classes the classes to be blacklisted.
+     * Creates a criteria which permits no classes in the specific packages.
+     * @param packageNames the packages.
+     * @return this instance for method chaining.
+     */
+    public ScanCriteria blacklistPackages(String... packageNames){
+        nameCriteriaList.add(new PackageCriteria(null, packageNames, true));
+        return this;
+    }
+
+    /**
+     * Creates a criteria which only permits specific classes for some URL.
+     * @param url the url in which the classes are found.
+     * @param classes the class to be blacklisted.
+     * @return this instance for method chaining.
+     */
+    public ScanCriteria whitelistClassesForURL(URL url, Class<?>... classes){
+        classCriteriaList.add(new ClassCriteria(url, classes, false));
+        return this;
+    }
+
+    /**
+     * Creates a criteria which blacklists specific classes for some URL.
+     * @param url the url in which the classes are found.
+     * @param classes the class to be blacklisted.
+     * @return this instance for method chaining.
+     */
+    public ScanCriteria blacklistClassesForURL(URL url, Class<?>... classes){
+        classCriteriaList.add(new ClassCriteria(url, classes, true));
+        return this;
+    }
+
+    /**
+     * Creates a criteria which blacklists specific classes.
+     * @param classes the class to be blacklisted.
      * @return this instance for method chaining.
      */
     public ScanCriteria blacklistClasses(Class<?>... classes){
-        classCriteriaList.add(new ClassBlacklistCriteria(classes));
+        classCriteriaList.add(new ClassCriteria(null, classes, true));
         return this;
     }
 
@@ -246,7 +277,7 @@ public class ScanCriteria {
      * @return this instance for method chaining.
      */
     public ScanCriteria classImplements(Class<?> cls, int generations){
-        classCriteriaList.add(new ClassImplementsCriteria(cls, generations));
+        classCriteriaList.add(new ClassImplementsCriteria(null, cls, generations));
         return this;
     }
 
@@ -270,6 +301,42 @@ public class ScanCriteria {
         return classImplements(cls, 0);
     }
 
+
+    /**
+     * Creates a criteria which permits only classes that are NOT annotated with the given annotation.
+     * The param generations specifies how far parents should be scanned.
+     * 0 means that a class must be annotated with the given annotation itself.
+     * 1-n means that a class must be annotated with the given annotation itself or its 1-n th parent.
+     * -1 means that the all parents should be checked. (-1 -> infinity)
+     * @param cls the annotation that should be present.
+     * @param generations the number of generations to check through.
+     * @return this instance for method chaining.
+     */
+    public ScanCriteria classNotAnnotatedWith(Class<? extends Annotation> cls, int generations) {
+        classCriteriaList.add(new AnnotatedClassCriteria(null, cls, true, true, generations, true));
+        return this;
+    }
+
+    /**
+     * Creates a criteria which permits only classes that are NOT annotated with the given annotation.
+     * Flat check: The class must be annotated with the given annotation itself to be valid.
+     * @param cls the annotation that should be present.
+     * @return this instance for method chaining.
+     */
+    public ScanCriteria classNotAnnotatedWith(Class<? extends Annotation> cls) {
+        return classNotAnnotatedWith(cls, 0);
+    }
+
+    /**
+     * Creates a criteria which permits only classes that are NOT annotated with the given annotation.
+     * Deep check.
+     * @param cls the annotation that should be present.
+     * @return this instance for method chaining.
+     */
+    public ScanCriteria classNotDeepAnnotatedWith(Class<? extends Annotation> cls){
+        return classNotAnnotatedWith(cls, -1);
+    }
+
     /**
      * Creates a criteria which permits only classes that are annotated with the given annotation.
      * The param generations specifies how far parents should be scanned.
@@ -281,7 +348,7 @@ public class ScanCriteria {
      * @return this instance for method chaining.
      */
     public ScanCriteria classAnnotatedWith(Class<? extends Annotation> cls, int generations) {
-        classCriteriaList.add(new AnnotatedClassCriteria(cls, true, true, generations));
+        classCriteriaList.add(new AnnotatedClassCriteria(null, cls, true, true, generations, false));
         return this;
     }
 

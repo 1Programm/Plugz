@@ -17,7 +17,9 @@ public class UrlClassScanner {
     private ILogger log = new NullLogger();
     private boolean autoResetConfig;
     private final Set<URL> searchUrls = new HashSet<>();
+    private final Set<Class<?>> searchClasses = new HashSet<>();
     private final List<ScanCriteria> criteriaList = new ArrayList<>();
+    private final Map<URL, String> entryPointMap = new HashMap<>();
 
     /**
      * Starts the actual scan.
@@ -27,8 +29,8 @@ public class UrlClassScanner {
      */
     public void scan() throws ScanException {
         try {
-            if (searchUrls.isEmpty()) {
-                log.warn("# No urls to search through!");
+            if (searchUrls.isEmpty() && searchClasses.isEmpty()) {
+                log.warn("# No urls or classes to search through!");
                 return;
             }
 
@@ -52,32 +54,42 @@ public class UrlClassScanner {
                     throw new ScanException("Could not scan url: [" + url + "]: Invalid url type!");
                 }
             }
+
+            init = false;
+            for(Class<?> cls : searchClasses){
+                URL classOrigin = cls.getResource("/");
+
+                if(init && log.level() == ILogger.LEVEL_TRACE) log.trace("");
+                init = true;
+
+                loadAndScanClassFromName(classOrigin, cls.getName(), cls);
+            }
         }
         finally {
-            if(autoResetConfig){
-                clearConfig();
-            }
+            if(autoResetConfig) clearConfig();
         }
     }
 
 
 
 
-
-
-
     private void searchInJar(URL url) throws ScanException {
+        String pathRegix = entryPointMap.get(url);
+
         try (ZipInputStream zip = new ZipInputStream(url.openStream())) {
             for (ZipEntry entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry()) {
                 if (!entry.isDirectory()) {
                     String name = entry.getName();
+                    if(pathRegix != null && !name.startsWith(pathRegix)){
+                        continue;
+                    }
 
                     if(!name.endsWith(".class")) continue;
 
                     name = name.substring(0, name.length() - ".class".length());
                     name = name.replaceAll("/", ".");
 
-                    loadAndScanClassFromName(url, name);
+                    loadAndScanClassFromName(url, name, null);
                 }
             }
         }
@@ -87,8 +99,9 @@ public class UrlClassScanner {
     }
 
     private void searchInFolder(URL url, File file) throws ScanException {
-        String rootFolderPath = file.getAbsolutePath();
+        String pathRegix = entryPointMap.get(url);
 
+        String rootFolderPath = file.getAbsolutePath();
         Queue<File> toBeScanned = new ArrayDeque<>();
         toBeScanned.add(file);
 
@@ -103,7 +116,8 @@ public class UrlClassScanner {
                 String name = curFile.getName();
                 if(name.endsWith(".class")){
                     String fullName = getFullNameFromAbsolutePath(curFile.getAbsolutePath(), rootFolderPath);
-                    loadAndScanClassFromName(url, fullName);
+                    if(pathRegix != null && !fullName.startsWith(pathRegix)) continue;
+                    loadAndScanClassFromName(url, fullName, null);
                 }
             }
         }
@@ -115,7 +129,7 @@ public class UrlClassScanner {
         return path.replaceAll("/", ".");
     }
 
-    private void loadAndScanClassFromName(URL url, String clsName) {
+    private void loadAndScanClassFromName(URL url, String clsName, Class<?> cls){
         List<Boolean> criteriaNameTestResult = new ArrayList<>();
 
         boolean success = criteriaList.isEmpty();
@@ -131,18 +145,17 @@ public class UrlClassScanner {
 
         if(!success) return;
 
-
-        Class<?> cls;
-
-        try {
-            cls = Class.forName(clsName);
-        }
-        catch (ClassNotFoundException e){
-            log.logException("# Something went wrong: Class [" + clsName + "] could not be found!", e);
-            return;
-        }
-        catch (NoClassDefFoundError e){
-            return;
+        if(cls == null){
+            try {
+                cls = Class.forName(clsName);
+            }
+            catch (ClassNotFoundException e){
+                log.logException("# Something went wrong: Class [" + clsName + "] could not be found!", e);
+                return;
+            }
+            catch (NoClassDefFoundError e){
+                return;
+            }
         }
 
         log.trace("### Found class: [{}]", cls);
@@ -158,15 +171,30 @@ public class UrlClassScanner {
         }
     }
 
-    public UrlClassScanner clearConfig(){
-        this.searchUrls.clear();
+    public UrlClassScanner clearCriterias(){
         this.criteriaList.clear();
         return this;
     }
 
-    public UrlClassScanner forUrls(Set<URL> urls){
-        this.searchUrls.addAll(urls);
+    public UrlClassScanner clearConfig(){
+        this.searchUrls.clear();
+        this.searchClasses.clear();
+        this.criteriaList.clear();
+        this.entryPointMap.clear();
         return this;
+    }
+
+    public UrlClassScanner forClasses(Collection<Class<?>> classes){
+        this.searchClasses.addAll(classes);
+        return this;
+    }
+
+    public UrlClassScanner forClasses(Set<Class<?>> classes){
+        return forClasses((Collection<Class<?>>) classes);
+    }
+
+    public UrlClassScanner forClasses(Class<?>... classes){
+        return forClasses(Set.of(classes));
     }
 
     public UrlClassScanner forUrls(Collection<URL> urls){
@@ -174,8 +202,17 @@ public class UrlClassScanner {
         return this;
     }
 
+    public UrlClassScanner forUrls(Set<URL> urls){
+        return forUrls((Collection<URL>) urls);
+    }
+
     public UrlClassScanner forUrls(URL... urls){
         return forUrls(Set.of(urls));
+    }
+
+    public UrlClassScanner entryPoint(URL url, String entryPoint){
+        entryPointMap.put(url, entryPoint);
+        return this;
     }
 
     public UrlClassScanner withCriteria(ScanCriteria criteria){
