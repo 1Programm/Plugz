@@ -23,21 +23,26 @@
             <version>1.3.0</version>
         </dependency>
         <dependency>
+            <groupId>com.programm.ioutils</groupId>
+            <artifactId>ioutils-log-jlogger</artifactId>
+            <version>1.0.6</version>
+        </dependency>
+        <dependency>
             <groupId>com.programm.plugz</groupId>
             <artifactId>plugz-persist-imbedded</artifactId>
             <version>1.0.0</version>
         </dependency>
         <dependency>
-            <groupId>com.programm.ioutils</groupId>
-            <artifactId>ioutils-log-jlogger</artifactId>
-            <version>1.0.5</version>
+            <groupId>com.programm.plugz</groupId>
+            <artifactId>plugz-webserv</artifactId>
+            <version>1.0.1</version>
         </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>1.18.24</version>
         </dependency>
-
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>

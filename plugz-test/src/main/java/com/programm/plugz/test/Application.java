@@ -1,49 +1,20 @@
 package com.programm.plugz.test;
 
-import com.programm.ioutils.log.api.ILogger;
-import com.programm.plugz.api.Service;
-import com.programm.plugz.api.auto.Get;
-import com.programm.plugz.api.lifecycle.PostStartup;
 import com.programm.plugz.magic.MagicEnvironment;
+import com.programm.plugz.webserv.api.PostMapping;
+import com.programm.plugz.webserv.api.RequestBody;
+import com.programm.plugz.webserv.api.RestController;
 
-import java.sql.Connection;
-import java.util.List;
-
-@Service
+@RestController
 public class Application {
 
     public static void main(String[] args) throws Exception {
         MagicEnvironment.Start(args);
     }
 
-
-    @Get private ILogger log;
-
-    @PostStartup
-    public void onStart(@Get PersonRepo repo) throws Exception {
-//        Person person = repo.getById(1);
-//        log.info("{}", person);
-
-        Person p1 = repo.getById(1);
-        p1.setName("Test Name");
-
-        repo.update(p1);
-
-//        List<Person> allPeople = repo.getAll();
-//        System.out.println(allPeople);
-
-//        Person p = new Person();
-//        p.setName("Julian");
-//        p.setAge(23);
-//
-//        repo.
-
-//        Person p = repoHandler.createQuery("person.find(*, id = 0)", Person.class).execute();
-//        log.info("{}", p);
+    @PostMapping("/person/new")
+    public void createPerson(@RequestBody Person person){
+        System.out.println("P");
     }
 
-    @PostStartup
-    public void onConnectionEstablished(@Get Connection connection){
-        log.info("Connection Established! {}", connection);
-    }
 }
