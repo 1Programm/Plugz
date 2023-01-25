@@ -13,7 +13,7 @@ public class ContentHandler {
     private final Map<Class<?>, Map<Class<?>, IObjectMapper<?, ?>>> specializedMappersMap = new HashMap<>();
 
     public ContentHandler(){
-        ClassAnalyzer analyzer = new ClassAnalyzer(true, false);
+        ClassAnalyzer analyzer = new ClassAnalyzer(true, false, false, false);
         ISpecializedObjectMapperLookup mapperLookup = this::getSpecializedMapper;
 
         readers.put("application/x-www-form-urlencoded", new PlainTextContentReader());
