@@ -37,6 +37,7 @@ class ConfigurationManager implements PlugzConfig {
     }
 
     public void initProfileConfig() throws MagicSetupException {
+        readProfileNameFromArgs();
         readProfile();
     }
 
@@ -73,13 +74,13 @@ class ConfigurationManager implements PlugzConfig {
             if(args[i].startsWith("-")){
                 String key = args[i].substring(1);
 
-                if(key.equals("config.profile")){
-                    if(i + 1 < args.length) {
-                        configProfile = args[i + 1];
-                        numConfigs++;
-                    }
-                    continue;
-                }
+//                if(key.equals("config.profile")){
+//                    if(i + 1 < args.length) {
+//                        configProfile = args[i + 1];
+//                        numConfigs++;
+//                    }
+//                    continue;
+//                }
 
                 Object value;
                 if(i + 1 == args.length){
@@ -96,6 +97,17 @@ class ConfigurationManager implements PlugzConfig {
         }
 
         log.trace("Registered [{}] configs from program args.", numConfigs);
+    }
+
+    private void readProfileNameFromArgs() throws MagicSetupException{
+        for(int i=0;i<args.length;i++){
+            if(args[i].equals("-config.profile")){
+                if(i + 1 == args.length) throw new MagicSetupException("No value provided for profile name inside arguments!");
+                configProfile = args[i+1];
+                log.debug("Found profile name: [{}] from arguments.", configProfile);
+                return;
+            }
+        }
     }
 
     private void readProfile() throws MagicSetupException {

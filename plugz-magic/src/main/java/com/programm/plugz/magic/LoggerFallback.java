@@ -44,7 +44,10 @@ class LoggerFallback extends LevelLogger implements IConfigurableLogger {
 
     @Override
     public LoggerFallback config(String s, Object... objects) {
-        if(s.equals("output")){
+        if(s.equals("level")){
+            level((int) objects[0]);
+        }
+        else if(s.equals("output")){
             this.out = (IOutput) objects[0];
         }
         else if(s.equals("printStacktraceForExceptions")){
