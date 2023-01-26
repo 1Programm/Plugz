@@ -23,17 +23,7 @@ import java.sql.*;
 import java.util.*;
 
 @Logger("Persist [Embedded]")
-public class EmbeddedRepoHandler implements IRepoHandler {
-
-    private static final AnalyzedParameterizedType TYPE_SET = new AnalyzedParameterizedType(Set.class, null, Collections.emptyMap());
-    private static final AnalyzedParameterizedType TYPE_LIST = new AnalyzedParameterizedType(List.class, null, Collections.emptyMap());
-    private static final AnalyzedParameterizedType TYPE_MAP = new AnalyzedParameterizedType(Map.class, null, Collections.emptyMap());
-    private static final AnalyzedParameterizedType TYPE_ARRAY = new AnalyzedParameterizedType(Object[].class, null, Collections.emptyMap());
-
-    private static final AnalyzedPropertyClass PROPERTY_SET = new AnalyzedPropertyClass(TYPE_SET, Collections.emptyMap(), HashSet::new);
-    private static final AnalyzedPropertyClass PROPERTY_LIST = new AnalyzedPropertyClass(TYPE_LIST, Collections.emptyMap(), ArrayList::new);
-    private static final AnalyzedPropertyClass PROPERTY_MAP = new AnalyzedPropertyClass(TYPE_MAP, Collections.emptyMap(), HashMap::new);
-    private static final AnalyzedPropertyClass PROPERTY_ARRAY = new AnalyzedPropertyClass(TYPE_ARRAY, Collections.emptyMap(), null);
+class EmbeddedRepoHandler implements IRepoHandler {
 
     private static String getUniqueMethodName(Method method){
         return method.toGenericString();
@@ -51,7 +41,7 @@ public class EmbeddedRepoHandler implements IRepoHandler {
 
     @RequiredArgsConstructor
     private class EmbeddedInvocationHandler implements InvocationHandler {
-        private final Map<String, MethodQueryInfo> methodQueryMap;
+        private final Map<String, MethodQueryInfoSupplier> methodQueryMap;
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -68,10 +58,10 @@ public class EmbeddedRepoHandler implements IRepoHandler {
                     return method.invoke(proxy, args);
             }
 
-            MethodQueryInfo info = methodQueryMap.get(mName);
-            if(info == null) throw new PersistQueryExecuteException("INVALID STATE: No query defined for method [" + mName + "]!");
+            MethodQueryInfoSupplier infoSupplier = methodQueryMap.get(mName);
+            if(infoSupplier == null) throw new PersistQueryExecuteException("INVALID STATE: No query defined for method [" + mName + "]!");
 
-            return executeQuery(info.query, info.returnType, info.parameterTypes, args);
+            return executeQuery(infoSupplier, args);
         }
     }
 
@@ -96,6 +86,9 @@ public class EmbeddedRepoHandler implements IRepoHandler {
     private static final String CONF_PERSITS_DB_TABLE_CREATE_MODE_NAME = "persist.db.table_create_mode";
     private static final String CONF_PERSITS_DB_TABLE_CREATE_MODE_DEFAULT = TABLE_CREATE_MODE_FAIL;
 
+    private static final String CONF_PERSITS_DB_LOG_STATEMENTS_NAME = "persist.db.log.statements";
+    private static final boolean CONF_PERSITS_DB_LOG_STATEMENTS_DEFAULT = false;
+
 
 
 
@@ -107,6 +100,8 @@ public class EmbeddedRepoHandler implements IRepoHandler {
     private final String databaseUsername;
     private final String databasePassword;
     private final String tableCreateMode;
+
+    private final boolean logStatements;
 
     private final Map<AnalyzedPropertyClass, DBEntityInfo> entityInfos = new HashMap<>();
 
@@ -121,6 +116,8 @@ public class EmbeddedRepoHandler implements IRepoHandler {
         this.databaseUsername = config.getOrDefault(CONF_PERSITS_DB_USER_NAME, CONF_PERSITS_DB_USER_DEFAULT);
         this.databasePassword = config.getOrDefault(CONF_PERSITS_DB_PASSWORD_NAME, CONF_PERSITS_DB_PASSWORD_DEFAULT);
         this.tableCreateMode = config.getOrDefault(CONF_PERSITS_DB_TABLE_CREATE_MODE_NAME, CONF_PERSITS_DB_TABLE_CREATE_MODE_DEFAULT);
+
+        this.logStatements = config.getBoolOrDefault(CONF_PERSITS_DB_LOG_STATEMENTS_NAME, CONF_PERSITS_DB_LOG_STATEMENTS_DEFAULT);
     }
 
     private IClassPropertyBuilder provideBuilders(AnalyzedParameterizedType analyzedType){
@@ -143,7 +140,7 @@ public class EmbeddedRepoHandler implements IRepoHandler {
     @Override
     public void startup(ClassAnalyzer analyzer) throws PersistStartupException {
         this.analyzer = analyzer;
-//        this.analyzer.registerBuilderProvider(this::provideBuilders);
+        analyzer.registerBuilderProvider(this::provideBuilders);
 
         log.info("Starting up persist-connection.");
         log.debug("With arguments [url: '{}', user: '{}', pwd: '{}']", databaseUrl, databaseUsername, databasePassword);
@@ -194,14 +191,20 @@ public class EmbeddedRepoHandler implements IRepoHandler {
         }
 
 
-        Map<String, MethodQueryInfo> methodQueryMap = new HashMap<>();
+        Map<String, MethodQueryInfoSupplier> methodQueryMap = new HashMap<>();
         Method[] declaredMethods = cls.getDeclaredMethods();
         for(Method method : declaredMethods){
             AnalyzedPropertyClass methodReturnType = analyzeMethodReturnType(method, analyzedEntityClass.getParameterizedTypeMap());
 
             String mName = getUniqueMethodName(method);
-            MethodQueryInfo info = MethodQueryParser.parse(tableName, analyzedEntityClass, entityInfo, method, methodReturnType);
-            methodQueryMap.put(mName, info);
+
+            try {
+                MethodQueryInfoSupplier infoSupplier = MethodQueryParser.parse(tableName, analyzedEntityClass, entityInfo, method, methodReturnType);
+                methodQueryMap.put(mName, infoSupplier);
+            }
+            catch (PersistQueryBuildException e){
+                throw new PersistQueryBuildException("Failed to analyze and parse method [" + method + "] into a sql statement!", e);
+            }
         }
 
         EmbeddedInvocationHandler invocationHandler = new EmbeddedInvocationHandler(methodQueryMap);
@@ -243,52 +246,56 @@ public class EmbeddedRepoHandler implements IRepoHandler {
             }
         }
         else {
-            log.error("Unknown table_create_mode [" + tableCreateMode + "]!");
+            throw new PersistQueryBuildException("Unknown table_create_mode [" + tableCreateMode + "]!");
         }
     }
 
     @Override
     public IQuery createQuery(String query) throws PersistQueryBuildException {
+        //TODO: Check if needed - otherwise remove
         return null;
     }
 
     @Override
     public <T> IParameterizedQuery<T> createQuery(String query, Class<T> cls) throws PersistQueryBuildException {
+        //TODO: Check if needed - otherwise remove
         return null;
     }
 
-    private Object executeQuery(String query, AnalyzedPropertyClass returnType, Class<?>[] parameterTypes, Object[] parameters){
-        log.info("Executing [{}]", query);
+    private Object executeQuery(MethodQueryInfoSupplier infoSupplier, Object[] origParameters){
+        MethodQueryInfo info = infoSupplier.queryInfo(origParameters);
+        Object[] parameters = info.statementArguments;
 
-//        DBEntityInfo entityInfo = entityInfos.get(returnType);
-//        try {
-//            DBHelper.updateEntity(databaseConnection, "PERSON", returnType, entityInfo, returnType.getBuilder().build());
-//        }
-//        catch (PersistException | SQLException | InvocationTargetException e){
-//            e.printStackTrace();
-//        }
+        if(logStatements) log.info("Executing [{}] with parameters: {}", info.query, Arrays.toString(parameters));
 
-//        DBHelper.test(databaseConnection);
 
+
+        //Prepare Statement
+        PreparedStatement statement;
         try {
-            PreparedStatement statement = databaseConnection.prepareStatement(query);
-            for(int i=0;i<parameterTypes.length;i++){
-                DBHelper.prepareStatement(statement, i + 1, parameterTypes[i], parameters[i]);
+            statement = databaseConnection.prepareStatement(info.query);
+            for (int i = 0; i < info.parameterTypes.size(); i++) {
+                DBHelper.prepareStatement(statement, i + 1, info.parameterTypes.get(i), parameters[i]);
             }
-
-            //1. Is collection
-            //2. Is array
-            //3. Is Object-Properties - Map
-            //4. Is Object
-            boolean _set = false, _list = false, _array = false, _objPropMap = false, _obj = false;
+        }
+        catch (SQLException e){
+            throw new PersistQueryExecuteException("Failed to prepare statement for query [" + info.query + "]!", e);
+        }
 
 
-            AnalyzedPropertyClass returnValueType;
 
+
+
+        //Check what return type
+        AnalyzedPropertyClass retType = info.returnType;
+        AnalyzedPropertyClass returnValueType = null;
+        QueryResultType resultType = null;
+
+        if(retType != null){
             //1. COLLECTION (Set)
-            if (Set.class.isAssignableFrom(returnType.getType())) {
-                _set = true;
-                AnalyzedParameterizedType parameterizedType = returnType.getParameterizedTypeMap().get("E");
+            if (Set.class.isAssignableFrom(retType.getType())) {
+                resultType = QueryResultType.SET;
+                AnalyzedParameterizedType parameterizedType = retType.getParameterizedTypeMap().get("E");
                 try {
                     returnValueType = analyzer.analyzeProperty(parameterizedType, parameterizedType.getType());
                 }
@@ -297,9 +304,9 @@ public class EmbeddedRepoHandler implements IRepoHandler {
                 }
             }
             //1. COLLECTION (List)
-            else if (List.class.isAssignableFrom(returnType.getType())) {
-                _list = true;
-                AnalyzedParameterizedType parameterizedType = returnType.getParameterizedTypeMap().get("E");
+            else if (List.class.isAssignableFrom(retType.getType())) {
+                resultType = QueryResultType.LIST;
+                AnalyzedParameterizedType parameterizedType = retType.getParameterizedTypeMap().get("E");
                 try {
                     returnValueType = analyzer.analyzeProperty(parameterizedType, parameterizedType.getType());
                 }
@@ -309,11 +316,11 @@ public class EmbeddedRepoHandler implements IRepoHandler {
             }
 
             //2. ARRAY
-            else if (returnType.getType().isArray()) {
-                _array = true;
-                Class<?> componentType = returnType.getType().getComponentType();
+            else if (retType.getType().isArray()) {
+                resultType = QueryResultType.ARRAY;
+                Class<?> componentType = retType.getType().getComponentType();
                 try {
-                    returnValueType = analyzer.analyzeProperty(componentType, returnType.getParameterizedTypeMap());
+                    returnValueType = analyzer.analyzeProperty(componentType, retType.getParameterizedTypeMap());
                 }
                 catch (ClassAnalyzeException e){
                     throw new MagicRuntimeException("Failed to analyze return type of array [" + componentType + "]", e);
@@ -321,114 +328,145 @@ public class EmbeddedRepoHandler implements IRepoHandler {
             }
 
             //3. OBJECT-PROPERTY - MAP
-            else if (Map.class.isAssignableFrom(returnType.getType())) {
-                _objPropMap = true;
-                //TODO
-                returnValueType = returnType;
+            else if (Map.class.isAssignableFrom(retType.getType())) {
+                resultType = QueryResultType.OBJECT_MAP;
+                returnValueType = retType;
             }
 
             //4. OBJECT
             else {
-                _obj = true;
-                returnValueType = returnType;
+                resultType = QueryResultType.OBJECT;
+                returnValueType = retType;
             }
-
 
             if(returnValueType.getBuilder() == null) throw new MagicRuntimeException("No Builder present for return type [" + returnValueType.getType() + "]");
+        }
 
 
 
 
 
 
-            ResultSet resultSet = statement.executeQuery();
-            ResultSetMetaData metaData = resultSet.getMetaData();
-            int cols = metaData.getColumnCount();
 
-            List<Map<String, Object>> dataMapList = new ArrayList<>();
 
-            while(resultSet.next()){
-                Map<String, Object> dataMap = new HashMap<>();
-                for(int i=1;i<=cols;i++){
-                    String colName = metaData.getColumnName(i);
-                    int colType = metaData.getColumnType(i);
+        //Check if executeQuery or executeUpdate should be called
+        if(info.type == StatementType.QUERY){
+            try {
+                return executeQueryFromPreparedStatement(statement, returnValueType, resultType);
+            }
+            catch (SQLException e){
+                throw new MagicRuntimeException("Failed to run sql statement: [" + info.query + "]!", e);
+            }
+        }
+        else if(info.type == StatementType.UPDATE){
+            try {
+                executeUpdateFromPreparedStatement(statement);
+                return null;
+            }
+            catch (SQLException e){
+                throw new MagicRuntimeException("Failed to run sql statement: [" + info.query + "]!", e);
+            }
+        }
 
-                    Object data = DBHelper.getDataFromDBType(resultSet, i, colType);
-                    dataMap.put(colName, data);
-                }
 
-                dataMapList.add(dataMap);
+        throw new IllegalStateException("INVALID STATE: Unchecked type: [" + info.type + "]!");
+    }
+
+    private Object executeQueryFromPreparedStatement(PreparedStatement statement, AnalyzedPropertyClass returnValueType, QueryResultType resultType) throws SQLException{
+        ResultSet resultSet = statement.executeQuery();
+        ResultSetMetaData metaData = resultSet.getMetaData();
+        int cols = metaData.getColumnCount();
+
+        List<Map<String, Object>> dataMapList = new ArrayList<>();
+
+        while(resultSet.next()){
+            Map<String, Object> dataMap = new HashMap<>();
+            for(int i=1;i<=cols;i++){
+                String colName = metaData.getColumnName(i);
+                int colType = metaData.getColumnType(i);
+
+                Object data = DBHelper.getDataFromDBType(resultSet, i, colType);
+                dataMap.put(colName, data);
             }
 
-            if(_set){
-                Set<Object> set = new HashSet<>();
-                for(Map<String, Object> dataMap : dataMapList){
-                    Object data;
-                    try {
-                        data = buildEntityFromDataMap(dataMap, returnValueType);
-                    }
-                    catch (PersistException e){
-                        throw new MagicRuntimeException("Failed to build entity [" + returnValueType.getType() + "] from data map!", e);
-                    }
-                    set.add(data);
-                }
+            dataMapList.add(dataMap);
+        }
 
-                return set;
-            }
-            else if(_list){
-                List<Object> list = new ArrayList<>();
-                for(Map<String, Object> dataMap : dataMapList){
-                    Object data;
-                    try {
-                        data = buildEntityFromDataMap(dataMap, returnValueType);
-                    }
-                    catch (PersistException e){
-                        throw new MagicRuntimeException("Failed to build entity [" + returnValueType.getType() + "] from data map!", e);
-                    }
-                    list.add(data);
-                }
-
-                return list;
-            }
-            else if(_array){
-                Object[] array = new Object[dataMapList.size()];
-                int i=0;
-                for(Map<String, Object> dataMap : dataMapList){
-                    Object data;
-                    try {
-                        data = buildEntityFromDataMap(dataMap, returnValueType);
-                    }
-                    catch (PersistException e){
-                        throw new MagicRuntimeException("Failed to build entity [" + returnValueType.getType() + "] from data map!", e);
-                    }
-                    array[i++] = data;
-                }
-
-                return array;
-            }
-            else if(_objPropMap){
-                if(dataMapList.size() == 0) return null;
-                if(dataMapList.size() > 1) return new PersistQueryExecuteException("Multiple entities returned but only 1 expected!");
-
-                return dataMapList.get(0);
-            }
-            else {
-                if(dataMapList.size() == 0) return null;
-                if(dataMapList.size() > 1) return new PersistQueryExecuteException("Multiple entities returned but only 1 expected!");
-
+        if(resultType == QueryResultType.SET){
+            Set<Object> set = new HashSet<>();
+            for(Map<String, Object> dataMap : dataMapList){
+                Object data;
                 try {
-                    return buildEntityFromDataMap(dataMapList.get(0), returnValueType);
+                    data = buildEntityFromDataMap(dataMap, returnValueType);
                 }
                 catch (PersistException e){
                     throw new MagicRuntimeException("Failed to build entity [" + returnValueType.getType() + "] from data map!", e);
                 }
+                set.add(data);
             }
 
+            return set;
         }
-        catch (SQLException e){
-            throw new MagicRuntimeException("Failed to run sql statement: [" + query + "]!", e);
+        else if(resultType == QueryResultType.LIST){
+            List<Object> list = new ArrayList<>();
+            for(Map<String, Object> dataMap : dataMapList){
+                Object data;
+                try {
+                    data = buildEntityFromDataMap(dataMap, returnValueType);
+                }
+                catch (PersistException e){
+                    throw new MagicRuntimeException("Failed to build entity [" + returnValueType.getType() + "] from data map!", e);
+                }
+                list.add(data);
+            }
+
+            return list;
+        }
+        else if(resultType == QueryResultType.ARRAY){
+            Object[] array = new Object[dataMapList.size()];
+            int i=0;
+            for(Map<String, Object> dataMap : dataMapList){
+                Object data;
+                try {
+                    data = buildEntityFromDataMap(dataMap, returnValueType);
+                }
+                catch (PersistException e){
+                    throw new MagicRuntimeException("Failed to build entity [" + returnValueType.getType() + "] from data map!", e);
+                }
+                array[i++] = data;
+            }
+
+            return array;
+        }
+        else if(resultType == QueryResultType.OBJECT_MAP){
+            if(dataMapList.size() == 0) return null;
+            if(dataMapList.size() > 1) return new PersistQueryExecuteException("Multiple entities returned but only 1 expected!");
+
+            return dataMapList.get(0);
+        }
+        else {
+            if(dataMapList.size() == 0) return null;
+            if(dataMapList.size() > 1) return new PersistQueryExecuteException("Multiple entities returned but only 1 expected!");
+
+            try {
+                return buildEntityFromDataMap(dataMapList.get(0), returnValueType);
+            }
+            catch (PersistException e){
+                throw new MagicRuntimeException("Failed to build entity [" + returnValueType.getType() + "] from data map!", e);
+            }
         }
     }
+
+    private void executeUpdateFromPreparedStatement(PreparedStatement statement) throws SQLException {
+        statement.executeUpdate();
+    }
+
+
+
+
+
+
+
 
     private Object buildEntityFromDataMap(Map<String, Object> dataMap, AnalyzedPropertyClass cls) throws PersistException{
         Object dataObj;
@@ -442,7 +480,6 @@ public class EmbeddedRepoHandler implements IRepoHandler {
         Map<String, PropertyEntry> fieldEntries = cls.getFieldEntryMap();
         for(String fieldName : fieldEntries.keySet()){
             String _dbFieldName = DBHelper.dbFieldName(fieldName);
-            log.info("Field [{}] -> {}", fieldName, fieldEntries.get(fieldName).getType());
 
             PropertyEntry propertyEntry = fieldEntries.get(fieldName);
             Object data = dataMap.get(_dbFieldName);
