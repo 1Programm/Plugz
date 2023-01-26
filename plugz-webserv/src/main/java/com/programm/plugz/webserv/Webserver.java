@@ -372,6 +372,8 @@ class Webserver implements IRequestHandler {
         if(request.type == RequestType.OPTIONS){
             String requestingMethod = request.getFirstValueOfHeader("Access-Control-Request-Method");
 
+            log.debug("Preflight request for method type: [{}]", requestingMethod);
+
             for(RequestType type : RequestType.values()){
                 if(requestingMethod != null && requestingMethod.equals(type.name())){
                     if(invalidMapping(type, request.query)){
@@ -381,9 +383,8 @@ class Webserver implements IRequestHandler {
                             return;
                         }
 
-                        if(logRequests) log.info("[%7<({})]: {} was rejected: No request mapper found!", request.type, request.query);
-
-                        replyError(out, 501, "Not Implemented");
+                        log.error("[%7<({})]: {} was rejected: No request mapper found!", type, request.query);
+                        replyError(out, 401, "Not Implemented");
                         return;
                     }
                     break;

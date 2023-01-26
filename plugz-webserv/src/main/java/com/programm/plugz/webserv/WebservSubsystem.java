@@ -22,7 +22,7 @@ import java.lang.reflect.TypeVariable;
 import java.util.ArrayList;
 import java.util.List;
 
-@Logger("Webserv-sys")
+@Logger("Webserv")
 public class WebservSubsystem implements ISubsystem {
 
     private static final String CONF_SERVER_PORT_NAME = "webserv.port";
