@@ -89,7 +89,6 @@ public class MagicEnvironment {
 
     private long setupBeginTime;
     private URL executingClassUrl;
-    private boolean enableComponentScan = true;
     private String componentScanPath = null;
 
     public MagicEnvironment(String... args){
@@ -122,10 +121,6 @@ public class MagicEnvironment {
         catch (MagicInstanceException e){
             throw new IllegalStateException("INVALID STATE: There should be no class waiting yet!", e);
         }
-    }
-
-    private void findExecutingUrl(){
-
     }
 
     private void logBanner(){
@@ -335,16 +330,6 @@ public class MagicEnvironment {
         long startBeginTime = System.currentTimeMillis();
         log.info("Starting up the environment");
 
-        try {
-            instanceManager.checkWaitMap(true);
-        }
-        catch (MagicInstanceException e) {
-            throw new MagicRuntimeException("Exception solving wait dependencies in the service-setup phase!", e);
-        }
-        catch (MagicInstanceWaitException e){
-            throw new MagicRuntimeException(e.getMessage());
-        }
-
         if(configurations.getBoolOrError(CONF_ADD_SHUTDOWN_HOOK_NAME, MagicRuntimeException::new)){
             log.debug("Adding shutdown-hook...");
             addShutdownHook();
@@ -363,6 +348,16 @@ public class MagicEnvironment {
         }
         catch (MagicException e){
             throw new MagicRuntimeException(e);
+        }
+
+        try {
+            instanceManager.checkWaitMap(true);
+        }
+        catch (MagicInstanceException e) {
+            throw new MagicRuntimeException("Exception solving wait dependencies in the service-setup phase!", e);
+        }
+        catch (MagicInstanceWaitException e){
+            throw new MagicRuntimeException(e.getMessage());
         }
 
         try {

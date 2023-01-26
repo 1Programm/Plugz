@@ -14,10 +14,11 @@ public class Application {
     }
 
     @Get private ILogger log;
+    @Get private PersonRepo repo;
 
     @PostStartup
-    public void setup(@Get String abc){
-        log.info("> Repo: {}", "Test", abc);
+    public void setup(){
+        log.info("> Repo: {}", repo);
     }
 
 
