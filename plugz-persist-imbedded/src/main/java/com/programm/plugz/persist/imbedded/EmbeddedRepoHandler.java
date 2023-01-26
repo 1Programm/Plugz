@@ -15,6 +15,7 @@ import com.programm.plugz.persist.query.IParameterizedQuery;
 import com.programm.plugz.persist.query.IQuery;
 import lombok.RequiredArgsConstructor;
 
+import javax.naming.OperationNotSupportedException;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -26,7 +27,7 @@ import java.util.*;
 class EmbeddedRepoHandler implements IRepoHandler {
 
     private static String getUniqueMethodName(Method method){
-        return method.toGenericString();
+        return method.getName() + "%" + method.toGenericString();
     }
 
     private static String getTableNameFromEntity(AnalyzedPropertyClass _entityCls) {
@@ -41,25 +42,31 @@ class EmbeddedRepoHandler implements IRepoHandler {
 
     @RequiredArgsConstructor
     private class EmbeddedInvocationHandler implements InvocationHandler {
+        private final Class<?> repoClass;
         private final Map<String, MethodQueryInfoSupplier> methodQueryMap;
 
         @Override
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-            String mName = getUniqueMethodName(method);
+            String mName = method.getName();
+            String mNameUnique = getUniqueMethodName(method);
 
             switch (mName){
                 case "getClass":
+                    return repoClass;
                 case "equals":
+                    return false;
                 case "toString":
+                    return repoClass.getName() + "@" + Integer.toHexString(System.identityHashCode(proxy));
                 case "hashCode":
+                    return System.identityHashCode(proxy);
                 case "notify":
                 case "notifyAll":
                 case "wait":
-                    return method.invoke(proxy, args);
+                    throw new OperationNotSupportedException("Operation [" + mName + "] is not supported for repo proxy!");
             }
 
-            MethodQueryInfoSupplier infoSupplier = methodQueryMap.get(mName);
-            if(infoSupplier == null) throw new PersistQueryExecuteException("INVALID STATE: No query defined for method [" + mName + "]!");
+            MethodQueryInfoSupplier infoSupplier = methodQueryMap.get(mNameUnique);
+            if(infoSupplier == null) throw new PersistQueryExecuteException("INVALID STATE: No query defined for method [" + mNameUnique + "]!");
 
             return executeQuery(infoSupplier, args);
         }
@@ -207,7 +214,7 @@ class EmbeddedRepoHandler implements IRepoHandler {
             }
         }
 
-        EmbeddedInvocationHandler invocationHandler = new EmbeddedInvocationHandler(methodQueryMap);
+        EmbeddedInvocationHandler invocationHandler = new EmbeddedInvocationHandler(cls, methodQueryMap);
         return Proxy.newProxyInstance(cls.getClassLoader(), new Class<?>[]{cls}, invocationHandler);
     }
 
