@@ -23,6 +23,7 @@
         <module>plugz-persist</module>
         <module>plugz-persist-aqua</module>
         <module>plugz-persist-imbedded</module>
+        <module>plugz-codegen</module>
     </modules>
 
     <properties>
