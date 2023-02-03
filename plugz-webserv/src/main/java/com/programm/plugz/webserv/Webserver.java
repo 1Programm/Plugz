@@ -205,7 +205,7 @@ class Webserver implements IRequestHandler {
             PrintWriter out = new PrintWriter(client.getOutputStream()))
         {
             ExecutableRequestImpl request = parseRequest(in);
-            if(logRequests) log.info("[%7<({})]: {}", request.type, request.fullQuery);
+            if(logRequests && request.type != RequestType.OPTIONS) log.info("[%7<({})]: {}", request.type, request.fullQuery);
             handleRequest(in, out, request);
         }
     }
@@ -371,8 +371,7 @@ class Webserver implements IRequestHandler {
     private void continueHandleRequest(BufferedReader in, PrintWriter out, ExecutableRequestImpl request, Map<String, Cookie> newCookies, boolean withFallback){
         if(request.type == RequestType.OPTIONS){
             String requestingMethod = request.getFirstValueOfHeader("Access-Control-Request-Method");
-
-            log.debug("Preflight request for method type: [{}]", requestingMethod);
+            log.debug("Preflight request for method type [{}]: {}", requestingMethod, request.query);
 
             for(RequestType type : RequestType.values()){
                 if(requestingMethod != null && requestingMethod.equals(type.name())){
