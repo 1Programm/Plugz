@@ -6,8 +6,6 @@ public interface ProxyMethod {
 
     String getName();
 
-    Object invokeOrig(Object instance, Object... args) throws InvocationTargetException;
-
-    Object invokeProxy(Object instance, Object... args) throws InvocationTargetException;
+    Object invokeSuper(Object instance, Object... args) throws InvocationTargetException;
 
 }

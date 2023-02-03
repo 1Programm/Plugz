@@ -6,9 +6,9 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
-class FileManager {
+class TmpFileManager {
 
-    private static List<File> tempFiles = new ArrayList<>();
+    private static final List<File> tempFiles = new ArrayList<>();
     private static boolean shutdownhook = true;
 
     public static boolean recursiveDelete(File file){
@@ -36,7 +36,6 @@ class FileManager {
         if(shutdownhook){
             shutdownhook = false;
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-//                System.out.println("On Shutdown");
                 for(File toDelete : tempFiles) {
                     if(!file.exists()) continue;
                     if(!recursiveDelete(toDelete)) {
@@ -53,13 +52,6 @@ class FileManager {
 
         return dir;
     }
-
-//    public static File createTmpFile(String prefix, String suffix) throws IOException {
-//        File dir = Files.createTempFile(prefix, suffix).toFile();
-//        registerFileToBeDeleted(dir);
-//
-//        return dir;
-//    }
 
     public static File createTmpFile(String prefix, String suffix, File parentDirectory) throws IOException {
         File dir = File.createTempFile(prefix, suffix, parentDirectory);
