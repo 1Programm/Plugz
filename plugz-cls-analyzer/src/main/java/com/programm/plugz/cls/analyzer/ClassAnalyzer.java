@@ -352,12 +352,13 @@ public class ClassAnalyzer {
             if(Modifier.isStatic(mods)) continue;
             boolean accessible = Modifier.isPublic(clsModifiers) && Modifier.isPublic(mods);
 
-            if(stdName.startsWith("get_") || stdName.startsWith("is_")){
-                if(stdName.charAt(2) == '_'){
-                    stdName = stdName.substring("is_".length());
+            if(stdName.startsWith("get") || stdName.startsWith("is")){
+                if(generalizeFieldNames) {
+                    if(!stdName.startsWith("get_") && !stdName.startsWith("set_")) continue;
+                    stdName = stdName.substring((stdName.startsWith("get_") ? "get_" : "is_").length());
                 }
                 else {
-                    stdName = stdName.substring("get_".length());
+                    stdName = stdName.substring((stdName.startsWith("get") ? "get" : "is").length());
                 }
 
                 if(ignoreMap.containsKey(stdName)) continue;
