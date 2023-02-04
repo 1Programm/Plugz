@@ -4,12 +4,16 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 class TmpFileManager {
 
     private static final List<File> tempFiles = new ArrayList<>();
     private static boolean shutdownhook = true;
+
+    private static final Map<String, File> cachedNameToGeneratedFileMap = new HashMap<>();
 
     public static boolean recursiveDelete(File file){
         if(file.isDirectory()){
@@ -37,6 +41,7 @@ class TmpFileManager {
             shutdownhook = false;
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 for(File toDelete : tempFiles) {
+                    System.out.println("File to Delete: " + toDelete);
                     if(!file.exists()) continue;
                     if(!recursiveDelete(toDelete)) {
                         System.err.println("Failed to delete file: [" + toDelete.getAbsolutePath() + "]!");
@@ -46,18 +51,36 @@ class TmpFileManager {
         }
     }
 
-    public static File createTmpDirectory(String path) throws IOException {
-        File dir = Files.createTempDirectory(path).toFile();
+    public static File createTmpDirectory(String path, boolean caching) throws IOException {
+        File dir = caching ? cachedNameToGeneratedFileMap.get(path) : null;
+
+        if(dir == null) {
+            dir = Files.createTempDirectory(path).toFile();
+            if(caching) cachedNameToGeneratedFileMap.put(path, dir);
+        }
+
         registerFileToBeDeleted(dir);
 
         return dir;
     }
 
-    public static File createTmpFile(String prefix, String suffix, File parentDirectory) throws IOException {
-        File dir = File.createTempFile(prefix, suffix, parentDirectory);
-        registerFileToBeDeleted(dir);
+    public static File createTmpFile(String prefix, String suffix, File parentDirectory, boolean caching) throws IOException {
+        String path = "";
+        if(parentDirectory != null) {
+            path = parentDirectory.getAbsolutePath();
+            if (!path.endsWith("/")) path += "/";
+        }
+        path += prefix + suffix;
 
-        return dir;
+        File file = caching ? cachedNameToGeneratedFileMap.get(path) : null;
+        if(file == null) {
+            file = File.createTempFile(prefix, suffix, parentDirectory);
+            if(caching) cachedNameToGeneratedFileMap.put(path, file);
+        }
+
+        registerFileToBeDeleted(file);
+
+        return file;
     }
 
 }

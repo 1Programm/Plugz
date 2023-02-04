@@ -1,5 +1,8 @@
 package com.programm.plugz.codegen.codegenerator;
 
+/**
+ * Class representing some java modifiers.
+ */
 public enum Modifier {
 
     STATIC("static"),

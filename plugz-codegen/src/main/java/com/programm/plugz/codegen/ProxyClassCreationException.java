@@ -1,5 +1,8 @@
 package com.programm.plugz.codegen;
 
+/**
+ * Exception thrown when the creation of a proxy class failed.
+ */
 public class ProxyClassCreationException extends Exception {
 
     public ProxyClassCreationException(String message) {

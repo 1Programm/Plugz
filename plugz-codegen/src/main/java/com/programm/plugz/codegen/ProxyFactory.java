@@ -11,21 +11,116 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.*;
 
+/**
+ * Class for creating proxies.
+ */
 public class ProxyFactory {
 
     private static final String PROXY_FIELD_HANDLER = "$handler";
+    private static final String GENERATED_CLASSES_FOLDER_NAME = "com.programm.plugz.codegen";
     private static final Map<Class<?>, Class<?>> CASHED_LOG_PROXY_CLASS_MAP = new HashMap<>();
     private static final Map<Class<?>, Class<?>> CASHED_PROXY_CLASS_MAP = new HashMap<>();
 
     private static boolean doCaching = true;
 
+    /**
+     * Enable or disable caching for future calls.
+     * @param caching boolean flag.
+     */
     public static void doCaching(boolean caching){
         doCaching = caching;
     }
 
 
+    public static class T1 {
+        public void test() {
+            System.out.println("T1");
+        }
+    }
+
+    public static class T2 {
+        public void test() {
+            System.out.println("T2");
+        }
+    }
+
+    public static class T3 {
+        public void test() {
+            System.out.println("T3");
+        }
+    }
+
+    public static class T4 {
+        public void test() {
+            System.out.println("T4");
+        }
+    }
+
+    public static class T5 {
+        public void test() {
+            System.out.println("T5");
+        }
+    }
+
+    private static ProxyMethodHandler TEST_HANDLER = new ProxyMethodHandler() {
+        @Override
+        public boolean canHandle(Object instance, Method method) {
+            return true;
+        }
+
+        @Override
+        public Object invoke(Object instance, ProxyMethod method, Object... args) throws Exception {
+            System.out.println("Inv: " + method.getName());
+            return method.invokeSuper(instance, args);
+        }
+    };
+
+    public static void main(String[] args) throws Exception {
+//        Object[] proxies = createMultipleProxies2(TEST_HANDLER, T1.class, T2.class, T3.class, T4.class, T5.class);
+//
+//        System.out.println(Arrays.toString(proxies));
+
+//        doCaching(false);
+//
+//        int iter = 100;
+//        long sum = 0;
+//        float c = 0;
+//
+//        for(int i=0;i<iter;i++) {
+//            long start = System.currentTimeMillis();
+//            Object[] proxies = createMultipleProxies(TEST_HANDLER, T1.class, T2.class, T3.class, T4.class, T5.class);
+//
+//            sum += System.currentTimeMillis() - start;
+//            c++;
+//        }
+//
+//        System.out.println("Test 1 - Took: " + (sum / 1000f) + "s");
+//        float average = (sum / c);
+//        System.out.println("Average: " + (average / 1000f) + "s");
+//
+        long sum = 0;
+        float c = 0;
+        doCaching(true);
+        for(int i=0;i<100;i++) {
+            long start = System.currentTimeMillis();
+            Object[] proxies = createMultipleProxies(TEST_HANDLER, T1.class, T2.class, T3.class, T4.class, T5.class);
+
+            sum += System.currentTimeMillis() - start;
+            c++;
+        }
+//
+        System.out.println("Test 2 - Took: " + (sum / 1000f) + "s");
+        float average = (sum / c);
+        System.out.println("Average: " + (average / 1000f) + "s");
+    }
 
 
+    /**
+     * Creates a log proxy class for some superclass.
+     * @param superClass the superclass.
+     * @return the new generated class with the superclass being its parent.
+     * @throws ProxyClassCreationException if the class could not be created.
+     */
     public static Class<?> createLogProxyClass(Class<?> superClass) throws ProxyClassCreationException {
         Class<?> cls = doCaching ? CASHED_LOG_PROXY_CLASS_MAP.get(superClass) : null;
         if(cls == null) {
@@ -34,8 +129,17 @@ public class ProxyFactory {
 
             String packageName = superClass.getPackageName();
             String className = superClass.getSimpleName();
+
+            File parentDirectory;
             try {
-                cls = JavaCode.createAndCompileClass(packageName, className, (g, name) -> {
+                parentDirectory = TmpFileManager.createTmpDirectory(GENERATED_CLASSES_FOLDER_NAME, true);
+            }
+            catch (IOException e){
+                throw new ProxyClassCreationException("Failed to create parent source directory for generating classes to!", e);
+            }
+
+            try {
+                cls = JavaCode.createAndCompileClass(parentDirectory, packageName, className, (g, name) -> {
                     if(!packageName.isEmpty()) g.definePackage(packageName);
                     g.defineClass(name);
                     g.defineExtends(superClassCanonicalName);
@@ -52,6 +156,13 @@ public class ProxyFactory {
         return cls;
     }
 
+    /**
+     * Creates a log proxy instance for some superclass.
+     * Every method call to that instance will do a System.out.println(...) before calling the method of the superclass.
+     * @param superClass the superclass.
+     * @return the proxy instance.
+     * @throws ProxyClassCreationException if the class could not be created.
+     */
     @SuppressWarnings("unchecked")
     public static <T> T createLogProxy(Class<? super T> superClass) throws ProxyClassCreationException {
         Class<?> cls = createLogProxyClass(superClass);
@@ -67,6 +178,12 @@ public class ProxyFactory {
         }
     }
 
+    /**
+     * Creates a log proxy class for some superclass.
+     * @param superClass the superclass.
+     * @return the new generated class with the superclass being its parent.
+     * @throws ProxyClassCreationException if the class could not be created.
+     */
     public static Class<?> createProxyClass(Class<?> superClass) throws ProxyClassCreationException {
         Class<?> cls = doCaching ? CASHED_PROXY_CLASS_MAP.get(superClass) : null;
 
@@ -76,8 +193,17 @@ public class ProxyFactory {
 
             String packageName = superClass.getPackageName();
             String className = superClass.getSimpleName();
+
+            File parentDirectory;
             try {
-                cls = JavaCode.createAndCompileClass(packageName, className, (g, name) -> {
+                parentDirectory = TmpFileManager.createTmpDirectory(GENERATED_CLASSES_FOLDER_NAME, true);
+            }
+            catch (IOException e){
+                throw new ProxyClassCreationException("Failed to create parent source directory for generating classes to!", e);
+            }
+
+            try {
+                cls = JavaCode.createAndCompileClass(parentDirectory, packageName, className, (g, name) -> {
                     if(!packageName.isEmpty()) g.definePackage(packageName);
                     g.defineClass(name);
                     g.defineExtends(superClassCanonicalName);
@@ -94,6 +220,16 @@ public class ProxyFactory {
         return cls;
     }
 
+    /**
+     * Creates a proxy instance with a method handler.
+     * The method handler will be called before calling some method.
+     * It will try to find a fitting constructor for the given args and call it.
+     * @param superClass the superclass.
+     * @param methodHandler the proxy method handler.
+     * @param constructorArgs the args to pass to the constructor.
+     * @return the proxy instance.
+     * @throws ProxyClassCreationException if the creation of the proxy class failed.
+     */
     @SuppressWarnings("unchecked")
     public static <T> T createProxy(Class<? super T> superClass, ProxyMethodHandler methodHandler, Object... constructorArgs) throws ProxyClassCreationException {
         Class<?> cls = createProxyClass(superClass);
@@ -104,11 +240,23 @@ public class ProxyFactory {
         return (T) proxyInstance;
     }
 
+    /**
+     * Creates multiple proxies with the same method handler.
+     * Should be more efficient than the {@link #createProxy(Class, ProxyMethodHandler, Object...)} method.
+     * @param methodHandler the proxy method handler.
+     * @param superClasses the superclass.
+     * @return the proxy instances.
+     * @throws ProxyClassCreationException if the creation of the proxy class failed.
+     */
     public static Object[] createMultipleProxies(ProxyMethodHandler methodHandler, Class<?>... superClasses) throws ProxyClassCreationException {
         int len = superClasses.length;
 
-        File[] toCompileSourceCodeFiles = new File[len];
         Class<?>[] proxyClasses = new Class[len];
+        List<File> toCompileSourceCodeFiles = new ArrayList<>();
+        List<String> toCompileClassNames = new ArrayList<>();
+
+        File parentDirectory = null;
+        URL parentDirectoryUrl = null;
 
         int lenToCompile = 0;
         for(int i=0;i<len;i++){
@@ -116,9 +264,24 @@ public class ProxyFactory {
             Class<?> cls = doCaching ? CASHED_PROXY_CLASS_MAP.get(superClass) : null;
 
             if(cls != null) {
-                toCompileSourceCodeFiles[i] = null;
                 proxyClasses[i] = cls;
                 continue;
+            }
+
+            if(parentDirectory == null){
+                try {
+                    parentDirectory = TmpFileManager.createTmpDirectory(GENERATED_CLASSES_FOLDER_NAME, true);
+                }
+                catch (IOException e){
+                    throw new ProxyClassCreationException("Failed to create tmp parent directory for proxy classes", e);
+                }
+
+                try {
+                    parentDirectoryUrl = parentDirectory.toURI().toURL();
+                }
+                catch (MalformedURLException e){
+                    throw new ProxyClassCreationException("Malformed url from generated parent directory!", e);
+                }
             }
 
             String superClassCanonicalName = superClass.getCanonicalName();
@@ -128,56 +291,40 @@ public class ProxyFactory {
             String className = superClass.getSimpleName();
 
             try {
-                File sourceCodeFile = JavaCode.writeCodeToFile(packageName, className, (g, name) -> {
+                File sourceCodeFile = JavaCode.writeCodeToFile(parentDirectory, className, (g, name) -> {
                     if(!packageName.isEmpty()) g.definePackage(packageName);
                     g.defineClass(name);
                     g.defineExtends(superClassCanonicalName);
                     generateProxyClass(g, superClass);
                 });
 
-                toCompileSourceCodeFiles[i] = sourceCodeFile;
+                String generatedClassName = sourceCodeFile.getName().split("\\.")[0];
+                String fullGeneratedClassName = packageName.isEmpty() ? generatedClassName : packageName + "." + generatedClassName;
+
+
+                toCompileSourceCodeFiles.add(sourceCodeFile);
+                toCompileClassNames.add(fullGeneratedClassName);
             }
             catch (JavaCodeGenerationException e){
-                throw new ProxyClassCreationException("Failed to create and compile proxy for superclass: " + superClass + "!", e);
+                throw new ProxyClassCreationException("Failed to create source code file for class: [" + className + "]!", e);
             }
 
             lenToCompile++;
         }
 
-        URL url = null;
-        String[] classNamesToCompile = new String[lenToCompile];
-
-        for(int i=0;i<len;i++){
-            File sourceFile = toCompileSourceCodeFiles[i];
-            if(sourceFile == null) continue;
-            Class<?> superClass = superClasses[i];
-            String packageName = superClass.getPackageName();
-            File parentDirectory = sourceFile.getParentFile();
-            String generatedClassName = sourceFile.getName().split("\\.")[0];
-            String fullGeneratedClassName = packageName.isEmpty() ? generatedClassName : packageName + "." + generatedClassName;
+        if(lenToCompile > 0){
+            File[] sourceFiles = toCompileSourceCodeFiles.toArray(new File[0]);
 
             try {
-                JavaCode.compileSourceCode(sourceFile, parentDirectory);
+                JavaCode.compileSourceCode(sourceFiles, parentDirectory);
             }
             catch (IOException e){
-                throw new ProxyClassCreationException("Failed to compile source code of proxy class [" + fullGeneratedClassName + "]!", e);
+                throw new ProxyClassCreationException("Failed to compile source files!", e);
             }
 
-            if(url == null){
-                try {
-                    url = parentDirectory.toURI().toURL();
-                }
-                catch (MalformedURLException e){
-                    throw new ProxyClassCreationException("Malformed url from generated source directory!", e);
-                }
-            }
-
-            classNamesToCompile[i] = fullGeneratedClassName;
-        }
-
-        if(lenToCompile > 0){
             try {
-                Class<?>[] compiledClasses = JavaCode.loadClassesFromUrl(new URL[]{url}, classNamesToCompile);
+                String[] classNamesToCompile = toCompileClassNames.toArray(new String[0]);
+                Class<?>[] compiledClasses = JavaCode.loadClassesFromUrl(new URL[]{parentDirectoryUrl}, classNamesToCompile);
 
                 int o = 0;
                 for(int i=0;i<len;i++){
@@ -193,7 +340,6 @@ public class ProxyFactory {
                 throw new ProxyClassCreationException("Failed to load compiled proxy classes!", e);
             }
         }
-
 
         Object[] result = new Object[len];
         for(int i=0;i<len;i++){

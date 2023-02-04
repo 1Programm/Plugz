@@ -1,5 +1,8 @@
 package com.programm.plugz.codegen.codegenerator;
 
+/**
+ * Class representing types of java classes.
+ */
 public enum ClassType {
 
     CLASS("class"),

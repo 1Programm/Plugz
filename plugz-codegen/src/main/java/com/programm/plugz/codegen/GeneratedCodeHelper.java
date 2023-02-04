@@ -7,6 +7,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
+/**
+ * This class is used by generated proxy class code to wrap a proxy method so the super method can easily be called.
+ */
 public class GeneratedCodeHelper {
 
     @RequiredArgsConstructor

@@ -1,5 +1,8 @@
 package com.programm.plugz.codegen.codegenerator;
 
+/**
+ * Class representing the visibilities.
+ */
 public enum Visibility {
 
     PACKAGE_PRIVATE(""),
