@@ -9,6 +9,8 @@ import java.util.function.Predicate;
 public class ClassAnalyzer {
 
     private static final AnalyzedParameterizedType OBJECT_TYPE = new AnalyzedParameterizedType(Object.class, null, Collections.emptyMap());
+//    private static final AnalyzedParameterizedType STRING_TYPE = new AnalyzedParameterizedType(String.class, null, Collections.emptyMap());
+//    private static final AnalyzedPropertyClass STRING_PROP_CLASS = new AnalyzedPropertyClass(STRING_TYPE, Collections.emptyMap(), null);
 
     private static AnalyzedParameterizedType getTypeOrObject(AnalyzedParameterizedType type){
         return type == null ? OBJECT_TYPE : type;
@@ -220,7 +222,6 @@ public class ClassAnalyzer {
 
 
     private final boolean doCaching;
-    private final boolean generalizeFieldNames;
     private final boolean deepAnalyze;
     private final boolean deepProperties;
 
@@ -233,9 +234,8 @@ public class ClassAnalyzer {
     private final List<Predicate<Method>> ignorePropertyMethods = new ArrayList<>();
 
 
-    public ClassAnalyzer(boolean doCaching, boolean generalizeFieldNames, boolean deepAnalyze, boolean deepProperties) {
+    public ClassAnalyzer(boolean doCaching, boolean deepAnalyze, boolean deepProperties) {
         this.doCaching = doCaching;
-        this.generalizeFieldNames = generalizeFieldNames;
         this.deepAnalyze = deepAnalyze;
         this.deepProperties = deepProperties;
 
@@ -307,7 +307,7 @@ public class ClassAnalyzer {
             String fName = field.getName();
             if(fName.startsWith("this$")) continue;
 
-            String stdName = generalizeFieldNames ? nameToStd(fName) : fName;
+            String stdName = nameToStd(fName);
 
             if(testIgnore(field, ignorePropertyFields)) {
                 ignoreMap.put(stdName, true);
@@ -345,28 +345,25 @@ public class ClassAnalyzer {
             if(testIgnore(method, ignorePropertyMethods)) continue;
 
             String mName = method.getName();
-            String stdName = generalizeFieldNames ? nameToStd(mName) : mName;
+            String stdName = nameToStd(mName);
 
             int mods = method.getModifiers();
 
             if(Modifier.isStatic(mods)) continue;
             boolean accessible = Modifier.isPublic(clsModifiers) && Modifier.isPublic(mods);
 
-            if(stdName.startsWith("get") || stdName.startsWith("is")){
-                if(generalizeFieldNames) {
-                    if(!stdName.startsWith("get_") && !stdName.startsWith("set_")) continue;
-                    stdName = stdName.substring((stdName.startsWith("get_") ? "get_" : "is_").length());
-                }
-                else {
-                    stdName = stdName.substring((stdName.startsWith("get") ? "get" : "is").length());
-                }
+            if(stdName.startsWith("get_") || stdName.startsWith("is_")){
+                stdName = stdName.substring((stdName.startsWith("get_") ? "get_" : "is_").length());
 
                 if(ignoreMap.containsKey(stdName)) continue;
 
                 Class<?> classType = method.getReturnType();
                 Class<?> oldType = nameTypeMap.get(stdName);
 
-                if(oldType != null && isNotSameClass(classType, oldType)) throw new ClassAnalyzeException("Getter Method for property [" + stdName + "] and previously found type do not match! (" + classType + " <-> " + oldType + ")");
+                if(oldType != null && isNotSameClass(classType, oldType)) {
+                    continue;
+//                    throw new ClassAnalyzeException("Getter Method for property [" + stdName + "] and previously found type do not match! (" + classType + " <-> " + oldType + ")");
+                }
 
                 Type genericType = method.getGenericReturnType();
                 AnalyzedPropertyClass analyzedParameterizedPropertyClass;
@@ -391,7 +388,10 @@ public class ClassAnalyzer {
                 Class<?> classType = method.getParameterTypes()[0];
                 Class<?> oldType = nameTypeMap.get(stdName);
 
-                if(oldType != null && isNotSameClass(classType, oldType)) throw new ClassAnalyzeException("Setter Method for property [" + stdName + "] and previously found type do not match! (" + classType + " <-> " + oldType + ")");
+                if(oldType != null && isNotSameClass(classType, oldType)) {
+                    continue;
+//                    throw new ClassAnalyzeException("Setter Method for property [" + stdName + "] and previously found type do not match! (" + classType + " <-> " + oldType + ")");
+                }
 
                 Type genericType = method.getGenericParameterTypes()[0];
                 AnalyzedPropertyClass analyzedParameterizedPropertyClass;
