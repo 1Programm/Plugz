@@ -41,7 +41,6 @@ class TmpFileManager {
             shutdownhook = false;
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 for(File toDelete : tempFiles) {
-                    System.out.println("File to Delete: " + toDelete);
                     if(!file.exists()) continue;
                     if(!recursiveDelete(toDelete)) {
                         System.err.println("Failed to delete file: [" + toDelete.getAbsolutePath() + "]!");
