@@ -9,12 +9,6 @@ import java.util.function.Predicate;
 public class ClassAnalyzer {
 
     private static final AnalyzedParameterizedType OBJECT_TYPE = new AnalyzedParameterizedType(Object.class, null, Collections.emptyMap());
-//    private static final AnalyzedParameterizedType STRING_TYPE = new AnalyzedParameterizedType(String.class, null, Collections.emptyMap());
-//    private static final AnalyzedPropertyClass STRING_PROP_CLASS = new AnalyzedPropertyClass(STRING_TYPE, Collections.emptyMap(), null);
-
-    private static AnalyzedParameterizedType getTypeOrObject(AnalyzedParameterizedType type){
-        return type == null ? OBJECT_TYPE : type;
-    }
 
     @RequiredArgsConstructor
     private static class ConstructorBuilder implements IClassPropertyBuilder {
@@ -269,9 +263,13 @@ public class ClassAnalyzer {
     public AnalyzedPropertyClass analyzeProperty(AnalyzedParameterizedType analyzedClassType, Class<?> cls) throws ClassAnalyzeException {
         String beanString = analyzedClassType.toString();
 
+        AnalyzedPropertyClass result = new AnalyzedPropertyClass();
+        result.type = analyzedClassType;
+
         if(doCaching){
             AnalyzedPropertyClass analyzedClass = cachedClasses.get(beanString);
             if(analyzedClass != null) return analyzedClass;
+            cachedClasses.put(beanString, result);
         }
 
         int clsModifiers = cls.getModifiers();
@@ -295,6 +293,8 @@ public class ClassAnalyzer {
                 if (builder != null) break;
             }
         }
+
+        result.builder = builder;
 
 
         Map<String, PropertyEntry> entries = new HashMap<>();
@@ -362,7 +362,6 @@ public class ClassAnalyzer {
 
                 if(oldType != null && isNotSameClass(classType, oldType)) {
                     continue;
-//                    throw new ClassAnalyzeException("Getter Method for property [" + stdName + "] and previously found type do not match! (" + classType + " <-> " + oldType + ")");
                 }
 
                 Type genericType = method.getGenericReturnType();
@@ -390,7 +389,6 @@ public class ClassAnalyzer {
 
                 if(oldType != null && isNotSameClass(classType, oldType)) {
                     continue;
-//                    throw new ClassAnalyzeException("Setter Method for property [" + stdName + "] and previously found type do not match! (" + classType + " <-> " + oldType + ")");
                 }
 
                 Type genericType = method.getGenericParameterTypes()[0];
@@ -408,14 +406,9 @@ public class ClassAnalyzer {
             }
         }
 
+        result.fieldEntryMap = entries;
 
-        AnalyzedPropertyClass analyzedClass = new AnalyzedPropertyClass(analyzedClassType, entries, builder);
-
-        if(doCaching){
-            cachedClasses.put(beanString, analyzedClass);
-        }
-
-        return analyzedClass;
+        return result;
     }
 
     public AnalyzedParameterizedType analyzeParameterizedCls(Class<?> cls) throws ClassAnalyzeException {

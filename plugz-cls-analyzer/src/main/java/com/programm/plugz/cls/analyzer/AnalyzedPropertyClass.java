@@ -1,15 +1,17 @@
 package com.programm.plugz.cls.analyzer;
 
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 
 import java.util.Map;
 
-@RequiredArgsConstructor
+@AllArgsConstructor
+@NoArgsConstructor
 public class AnalyzedPropertyClass {
 
-    private final AnalyzedParameterizedType type;
-    private final Map<String, PropertyEntry> fieldEntryMap;
-    private final IClassPropertyBuilder builder;
+    AnalyzedParameterizedType type;
+    Map<String, PropertyEntry> fieldEntryMap;
+    IClassPropertyBuilder builder;
 
     public Class<?> getType() {
         return type.getType();
