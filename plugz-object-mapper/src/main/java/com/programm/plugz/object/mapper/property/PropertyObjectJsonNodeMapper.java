@@ -20,7 +20,7 @@ public class PropertyObjectJsonNodeMapper implements IObjectMapper<Object, JsonN
     private final boolean escapeInnerString;
 
     public PropertyObjectJsonNodeMapper(ISpecializedObjectMapperLookup specializedLookup) {
-        this(new ClassAnalyzer(true, false, true, true), specializedLookup, false);
+        this(new ClassAnalyzer(true, true, true), specializedLookup, false);
     }
 
     public PropertyObjectJsonNodeMapper(ClassAnalyzer analyzer, ISpecializedObjectMapperLookup specializedLookup, boolean escapeInnerString) {

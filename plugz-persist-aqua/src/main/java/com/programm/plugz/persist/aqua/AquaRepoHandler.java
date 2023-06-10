@@ -9,6 +9,7 @@ import com.programm.plugz.cls.analyzer.ClassAnalyzeException;
 import com.programm.plugz.cls.analyzer.ClassAnalyzer;
 import com.programm.plugz.persist.CustomQuery;
 import com.programm.plugz.persist.IRepoHandler;
+import com.programm.plugz.persist.PersistEntityInfo;
 import com.programm.plugz.persist.ex.PersistQueryBuildException;
 import com.programm.plugz.persist.ex.PersistQueryExecuteException;
 import com.programm.plugz.persist.ex.PersistShutdownException;
@@ -48,7 +49,7 @@ public class AquaRepoHandler implements IRepoHandler {
     }
 
     private final ILogger log;
-    private final ClassAnalyzer analyzer = new ClassAnalyzer(true, false, true, true);
+    private final ClassAnalyzer analyzer = new ClassAnalyzer(true, true, true);
     private final AquaQueryBuilder queryBuilder = new AquaQueryBuilder();
     //TODO
     private IAquaRepositoryConnection repoConnection = null;
@@ -58,7 +59,7 @@ public class AquaRepoHandler implements IRepoHandler {
     }
 
     @Override
-    public void startup(ClassAnalyzer analyzer) throws PersistStartupException {
+    public void startup(ClassAnalyzer analyzer, Map<Class<?>, PersistEntityInfo> infoMap) throws PersistStartupException {
         log.info("Starting up Aqua repo handler...");
         //TODO ...
     }
@@ -70,10 +71,10 @@ public class AquaRepoHandler implements IRepoHandler {
     }
 
     @Override
-    public Object createRepoImplementation(Class<?> cls, AnalyzedPropertyClass analyzedEntityClass) throws PersistQueryBuildException {
-        Map<String, AquaQueryInfo> methodToQueryMap = analyzeClass(cls, analyzedEntityClass);
+    public Object createRepoImplementation(Class<?> repoCls, PersistEntityInfo entityInfo, Map<Class<?>, PersistEntityInfo> infoMap) throws PersistQueryBuildException {
+        Map<String, AquaQueryInfo> methodToQueryMap = null;//analyzeClass(cls, analyzedEntityClass);
         AquaRepoInvocationHandler invocationHandler = new AquaRepoInvocationHandler(methodToQueryMap, this);
-        return Proxy.newProxyInstance(cls.getClassLoader(), new Class<?>[]{cls}, invocationHandler);
+        return Proxy.newProxyInstance(repoCls.getClassLoader(), new Class<?>[]{repoCls}, invocationHandler);
     }
 
     private Map<String, AquaQueryInfo> analyzeClass(Class<?> cls, AnalyzedPropertyClass analyzedEntityClass) throws PersistQueryBuildException {
@@ -237,16 +238,6 @@ public class AquaRepoHandler implements IRepoHandler {
 
     private String getTableName(AnalyzedPropertyClass entityCls){
         return entityCls.getType().getSimpleName().toLowerCase();
-    }
-
-    @Override
-    public IQuery createQuery(String query) throws PersistQueryBuildException {
-        return new AquaQueryImpl(queryBuilder.parseQuery(query));
-    }
-
-    @Override
-    public <T> IParameterizedQuery<T> createQuery(String query, Class<T> cls) {
-        return null;
     }
 
     public Object executeQuery(QueryExecutionInfo executionInfo, AnalyzedParameterizedType returnType, Boolean array, Boolean collection, List<AnalyzedParameterizedType> parameterTypes, Object[] args){

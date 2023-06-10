@@ -95,6 +95,54 @@ public class ProxyFactory {
         }
     }
 
+
+    public static Class<?> _createProxyClassWithAdditionalMethods(Class<?> superClass, Map<String, Class<?>> additionalMethods) throws ProxyClassCreationException {
+//        Class<?> cls = doCaching ? CASHED_PROXY_CLASS_MAP.get(superClass) : null;
+//
+//        if(cls == null){
+        String superClassCanonicalName = superClass.getCanonicalName();
+        if(superClassCanonicalName == null) throw new ProxyClassCreationException("Superclass cannot be a local, anonymous or hidden class [" + superClass + "]!");
+
+        String packageName = superClass.getPackageName();
+        String className = superClass.getSimpleName();
+
+        File parentDirectory;
+        try {
+            parentDirectory = TmpFileManager.createTmpDirectory(GENERATED_CLASSES_FOLDER_NAME, true);
+        }
+        catch (IOException e){
+            throw new ProxyClassCreationException("Failed to create parent source directory for generating classes to!", e);
+        }
+
+        Class<?> cls;
+        try {
+            cls = JavaCode.createAndCompileClass(parentDirectory, packageName, className, (g, name) -> {
+                if(!packageName.isEmpty()) g.definePackage(packageName);
+                g.defineClass(name);
+                g.defineExtends(superClassCanonicalName);
+                generateProxyClassWithAdditionalMethods(g, superClass, additionalMethods);
+            });
+
+            if(doCaching) CASHED_PROXY_CLASS_MAP.put(superClass, cls);
+        }
+        catch (JavaCodeGenerationException e){
+            throw new ProxyClassCreationException("Failed to create and compile proxy for superclass: " + superClass + "!", e);
+        }
+//        }
+
+        return cls;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T> T _createProxyWithAdditionalMethods(Class<? super T> superClass, ProxyMethodHandler methodHandler, Map<String, Class<?>> additionalMethods) throws ProxyClassCreationException {
+        Class<?> cls = _createProxyClassWithAdditionalMethods(superClass, additionalMethods);
+        Constructor<?> con = findFittingConstructorFromArgs(cls, new Object[0]);
+        if(con == null) throw new ProxyClassCreationException("Could not find an empty constructor!");
+
+        Object proxyInstance = createAndSetupProxyHandler(cls, con, methodHandler);
+        return (T) proxyInstance;
+    }
+
     /**
      * Creates a log proxy class for some superclass.
      * @param superClass the superclass.
@@ -354,6 +402,59 @@ public class ProxyFactory {
             generateHandledMethod(g, superClass, method);
         }
 
+        g.endBlock();
+    }
+
+    private static void generateProxyClassWithAdditionalMethods(JavaCodeGenerator g, Class<?> superClass, Map<String, Class<?>> additionalMethods) throws JavaCodeGenerationException{
+        g.startBlock();
+        g.defineMember(PROXY_FIELD_HANDLER, ProxyMethodHandler.class, Visibility.PUBLIC);
+
+        Set<String> alreadyGeneratedMethods = new HashSet<>();
+
+        Method[] declaredMethods = superClass.getDeclaredMethods();
+        for(Method method : declaredMethods){
+            alreadyGeneratedMethods.add(method.toGenericString());
+            generateHandledMethod(g, superClass, method);
+        }
+
+        Method[] methods = superClass.getMethods();
+        for(Method method : methods){
+            String gmName = method.toGenericString();
+            if(alreadyGeneratedMethods.contains(gmName)) continue;
+            generateHandledMethod(g, superClass, method);
+        }
+
+        for(String methodName : additionalMethods.keySet()){
+            Class<?> methodArgType = additionalMethods.get(methodName);
+            generateAdditionalMethod(g, superClass, methodName, methodArgType);
+        }
+
+        g.endBlock();
+    }
+
+    private static void generateAdditionalMethod(JavaCodeGenerator g, Class<?> superClass, String methodName, Class<?> argType) throws JavaCodeGenerationException {
+        g.defineMethod(methodName, Void.TYPE, argType);
+        g.startBlock();
+        g.defineVariable("m", Method.class);
+        g.defineTryStatement();
+        g.startBlock();
+        g.defineStatement("m = getClass().getMethod(\"" + methodName + "\", " + argType.getName() + ".class);");
+        g.endBlock();
+        g.defineCatchStatement(NoSuchMethodException.class);
+        g.startBlock();
+        g.defineStatement("throw new " + IllegalStateException.class.getName() + "(\"ILLEGAL STATE: Method should exist!\", e);");
+        g.endBlock();
+        g.defineIfStatement(PROXY_FIELD_HANDLER + ".canHandle(this, m)");
+        g.startBlock();
+        g.defineTryStatement();
+        g.startBlock();
+        g.defineStatement(PROXY_FIELD_HANDLER + ".invoke(this, " + GeneratedCodeHelper.class.getName() + ".wrapMethod(" + superClass.getCanonicalName() + ".class, m, (args) -> { return null; }), v0);");
+        g.endBlock();
+        g.defineCatchStatement(Exception.class);
+        g.startBlock();
+        g.defineStatement("throw new " + ProxyClassRuntimeException.class.getName() + "(e);");
+        g.endBlock();
+        g.endBlock();
         g.endBlock();
     }
 

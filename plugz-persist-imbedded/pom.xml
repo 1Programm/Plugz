@@ -23,6 +23,11 @@
             <artifactId>plugz-persist</artifactId>
             <version>1.0.0</version>
         </dependency>
+        <dependency>
+            <groupId>com.programm.plugz</groupId>
+            <artifactId>plugz-codegen</artifactId>
+            <version>1.0.0</version>
+        </dependency>
 
         <dependency>
             <groupId>org.projectlombok</groupId>

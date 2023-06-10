@@ -22,7 +22,7 @@ public class JsonNodePropertyObjectMapper implements IObjectMapper<JsonNode, Obj
     private final ISpecializedObjectMapperLookup specializedLookup;
 
     public JsonNodePropertyObjectMapper(ISpecializedObjectMapperLookup specializedLookup) {
-        this(new ClassAnalyzer(true, false, true, true), specializedLookup);
+        this(new ClassAnalyzer(true, true, true), specializedLookup);
     }
 
     public JsonNodePropertyObjectMapper(ClassAnalyzer analyzer, ISpecializedObjectMapperLookup specializedLookup) {

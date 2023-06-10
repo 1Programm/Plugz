@@ -7,12 +7,19 @@ import com.programm.plugz.api.MagicRuntimeException;
 import com.programm.plugz.api.PlugzConfig;
 import com.programm.plugz.api.auto.Get;
 import com.programm.plugz.api.instance.IInstanceManager;
+import com.programm.plugz.api.utils.ValueUtils;
 import com.programm.plugz.cls.analyzer.*;
-import com.programm.plugz.persist.Entity;
+import com.programm.plugz.codegen.ProxyClassCreationException;
+import com.programm.plugz.codegen.ProxyFactory;
+import com.programm.plugz.codegen.ProxyMethod;
+import com.programm.plugz.codegen.ProxyMethodHandler;
+import com.programm.plugz.debugger.DValue;
+import com.programm.plugz.debugger.DebugValue;
+import com.programm.plugz.debugger.DebuggerWindow;
 import com.programm.plugz.persist.IRepoHandler;
+import com.programm.plugz.persist.PersistEntityInfo;
+import com.programm.plugz.persist.PersistForeignKeyInfo;
 import com.programm.plugz.persist.ex.*;
-import com.programm.plugz.persist.query.IParameterizedQuery;
-import com.programm.plugz.persist.query.IQuery;
 import lombok.RequiredArgsConstructor;
 
 import javax.naming.OperationNotSupportedException;
@@ -23,25 +30,18 @@ import java.lang.reflect.Proxy;
 import java.sql.*;
 import java.util.*;
 
-@Logger("Persist [Embedded]")
-class EmbeddedRepoHandler implements IRepoHandler {
+@Logger("Persist [Imbedded]")
+class ImbeddedRepoHandler implements IRepoHandler {
+
+    @DebugValue
+    private static final DValue.Double NUM = new DValue.Double(10d);
 
     private static String getUniqueMethodName(Method method){
         return method.getName() + "%" + method.toGenericString();
     }
 
-    private static String getTableNameFromEntity(AnalyzedPropertyClass _entityCls) {
-        Class<?> entityCls = _entityCls.getType();
-        Entity entityAnnotation = entityCls.getAnnotation(Entity.class);
-        if(entityAnnotation != null && !entityAnnotation.tableName().isEmpty()){
-            return entityAnnotation.tableName().toUpperCase();
-        }
-
-        return entityCls.getSimpleName().toUpperCase();
-    }
-
     @RequiredArgsConstructor
-    private class EmbeddedInvocationHandler implements InvocationHandler {
+    private class ImbeddedRepoMethodInvocationHandler implements InvocationHandler {
         private final Class<?> repoClass;
         private final Map<String, MethodQueryInfoSupplier> methodQueryMap;
 
@@ -69,6 +69,50 @@ class EmbeddedRepoHandler implements IRepoHandler {
             if(infoSupplier == null) throw new PersistQueryExecuteException("INVALID STATE: No query defined for method [" + mNameUnique + "]!");
 
             return executeQuery(infoSupplier, args);
+        }
+    }
+
+    @RequiredArgsConstructor
+    private class ImbeddedProxyMethodHandler implements ProxyMethodHandler {
+        private final AnalyzedPropertyClass entityClass;
+
+        private final Map<String, Object> foreignKeyMappedValueMap = new HashMap<>();
+
+        @Override
+        public boolean canHandle(Object instance, Method method) {
+            String methodName = method.getName();
+            return methodName.startsWith("$set_fk_") || methodName.startsWith("get") || methodName.startsWith("set") || methodName.startsWith("is");
+        }
+
+        @Override
+        public Object invoke(Object instance, ProxyMethod method, Object... args) throws Exception {
+            String methodName = method.getName();
+            if(methodName.startsWith("$set_fk_")) {
+                String propName = methodName.substring("$set_fk_".length());
+                foreignKeyMappedValueMap.put(propName, args[0]);
+                return null;
+            }
+            else if(methodName.startsWith("get")){
+                String propName = methodName.substring("get".length()).toLowerCase();
+                PropertyEntry propEntry = entityClass.getFieldEntryMap().get(propName);
+                if(propEntry != null) {
+                    String tableName = DBHelper.dbFieldName(propName);
+                    Object value = method.invokeSuper(instance, args);
+                    if (value == null) {
+                        Object foreignKeyMappedValue = foreignKeyMappedValueMap.get(propName);
+                        if(foreignKeyMappedValue != null){
+                            PersistEntityInfo info = entityInfoMap.get(propEntry.getType());
+                            MethodQueryInfoSupplier sup = MethodQueryParser.analyzeAndGenerateSqlFromMethodName(null, tableName, info, "findById", info.analyzedEntity, entityInfoMap);
+                            value = executeQuery(sup, new Object[]{foreignKeyMappedValue});
+                            propEntry.getSetter().set(instance, value);
+                        }
+                    }
+
+                    return value;
+                }
+            }
+
+            return method.invokeSuper(instance, args);
         }
     }
 
@@ -110,12 +154,15 @@ class EmbeddedRepoHandler implements IRepoHandler {
 
     private final boolean logStatements;
 
-    private final Map<AnalyzedPropertyClass, DBEntityInfo> entityInfos = new HashMap<>();
+//    private final Map<Class<?>, PersistEntityInfo> entityInfos2 = new HashMap<>();
+//    private final Map<AnalyzedPropertyClass, DBEntityInfo> entityInfos = new HashMap<>();
 
     private ClassAnalyzer analyzer;
     private Connection databaseConnection;
 
-    public EmbeddedRepoHandler(@Get ILogger log, @Get IInstanceManager instanceManager, @Get PlugzConfig config) {
+    private Map<Class<?>, PersistEntityInfo> entityInfoMap;
+
+    public ImbeddedRepoHandler(@Get ILogger log, @Get IInstanceManager instanceManager, @Get PlugzConfig config) {
         this.log = log;
         this.instanceManager = instanceManager;
 
@@ -145,9 +192,11 @@ class EmbeddedRepoHandler implements IRepoHandler {
     }
 
     @Override
-    public void startup(ClassAnalyzer analyzer) throws PersistStartupException {
+    public void startup(ClassAnalyzer analyzer, Map<Class<?>, PersistEntityInfo> entityInfoMap) throws PersistStartupException {
         this.analyzer = analyzer;
         analyzer.registerBuilderProvider(this::provideBuilders);
+
+        this.entityInfoMap = entityInfoMap;
 
         log.info("Starting up persist-connection.");
         log.debug("With arguments [url: '{}', user: '{}', pwd: '{}']", databaseUrl, databaseUsername, databasePassword);
@@ -156,7 +205,7 @@ class EmbeddedRepoHandler implements IRepoHandler {
             databaseConnection = DriverManager.getConnection(databaseUrl, databaseUsername, databasePassword);
         }
         catch (SQLException e){
-            throw new PersistStartupException("Failed to establish aqua-persist connection!", e);
+            throw new PersistStartupException("Failed to establish database connection!", e);
         }
 
         try {
@@ -165,13 +214,57 @@ class EmbeddedRepoHandler implements IRepoHandler {
         catch (MagicInstanceException e){
             throw new PersistStartupException("Failed to register instance of db connection!", e);
         }
+
+        Set<String> tableCheckExist = new HashSet<>();
+        for(Class<?> entityClass : entityInfoMap.keySet()){
+            PersistEntityInfo entityInfo = entityInfoMap.get(entityClass);
+
+            String tableName = DBHelper.getTableNameFromEntity(entityInfo);
+            log.trace("Table Name from entity: [{}]", tableName);
+
+            //Check if table was already generated as a dependency of another table
+            if(tableCheckExist.contains(tableName)) continue;
+
+            try {
+                PersistEntityInfo dependTable = checkCreateTable(tableName, entityInfo, entityInfoMap, tableCheckExist);
+
+                if(dependTable != null) {
+                    Set<String> cyclicCheck = new HashSet<>();
+                    cyclicCheck.add(tableName);
+                    Stack<PersistEntityInfo> dependStack = new Stack<>();
+                    dependStack.push(dependTable);
+                    while(!dependStack.isEmpty()) {
+                        PersistEntityInfo info = dependStack.peek();
+                        String _tableName = DBHelper.getTableNameFromEntity(info);
+                        if(cyclicCheck.contains(_tableName)) throw new PersistStartupException("Cyclic table dependency " + cyclicCheck + "!");
+                        cyclicCheck.add(_tableName);
+                        dependTable = checkCreateTable(_tableName, info, entityInfoMap, tableCheckExist);
+                        if(dependTable != null) {
+                            dependStack.push(dependTable);
+                        }
+                        else {
+                            dependStack.pop();
+                            tableCheckExist.add(_tableName);
+                        }
+                    }
+
+                    dependTable = checkCreateTable(tableName, entityInfo, entityInfoMap, tableCheckExist);
+                    if(dependTable != null) throw new IllegalStateException("INVALID STATE: something went wrong.");
+                }
+            }
+            catch (PersistException e){
+                throw new PersistStartupException("Failed to create table [" + tableName + "] for entity: " + entityClass, e);
+            }
+
+            tableCheckExist.add(tableName);
+        }
     }
 
     @Override
     public void shutdown() throws PersistShutdownException {
         log.debug("Shutting down current database connection...");
         try {
-            databaseConnection.close();
+            if(databaseConnection != null) databaseConnection.close();
         }
         catch (SQLException e){
             throw new PersistShutdownException("Failed to shut down current database connection.", e);
@@ -179,34 +272,20 @@ class EmbeddedRepoHandler implements IRepoHandler {
     }
 
     @Override
-    public Object createRepoImplementation(Class<?> cls, AnalyzedPropertyClass analyzedEntityClass) throws PersistQueryBuildException {
-        log.debug("Creating Repository implementation for class [{}] with entity [{}] ...", cls, analyzedEntityClass.getType());
-        String tableName = getTableNameFromEntity(analyzedEntityClass);
-        log.trace("Table Name from entity: [{}]", tableName);
+    public Object createRepoImplementation(Class<?> cls, PersistEntityInfo entityInfo, Map<Class<?>, PersistEntityInfo> infoMap) throws PersistQueryBuildException {
+        log.debug("Creating Repository implementation for class [{}] with entity [{}] ...", cls, entityInfo.analyzedEntity.getType());
 
-        DBEntityInfo entityInfo = entityInfos.get(analyzedEntityClass);
-        if(entityInfo == null) {
-            entityInfo = DBHelper.createDBEntityInfo(analyzedEntityClass);
-            entityInfos.put(analyzedEntityClass, entityInfo);
-        }
-
-        try {
-            checkCreateTable(tableName, analyzedEntityClass, entityInfo);
-        }
-        catch (PersistException e){
-            throw new PersistQueryBuildException("Failed to create repo [" + cls + "]", e);
-        }
-
+        String tableName = DBHelper.getTableNameFromEntity(entityInfo);
 
         Map<String, MethodQueryInfoSupplier> methodQueryMap = new HashMap<>();
         Method[] declaredMethods = cls.getDeclaredMethods();
         for(Method method : declaredMethods){
-            AnalyzedPropertyClass methodReturnType = analyzeMethodReturnType(method, analyzedEntityClass.getParameterizedTypeMap());
+            AnalyzedPropertyClass methodReturnType = analyzeMethodReturnType(method, entityInfo.analyzedEntity.getParameterizedTypeMap());
 
             String mName = getUniqueMethodName(method);
 
             try {
-                MethodQueryInfoSupplier infoSupplier = MethodQueryParser.parse(tableName, analyzedEntityClass, entityInfo, method, methodReturnType);
+                MethodQueryInfoSupplier infoSupplier = MethodQueryParser.parse(tableName, entityInfo, method, methodReturnType, infoMap);
                 methodQueryMap.put(mName, infoSupplier);
             }
             catch (PersistQueryBuildException e){
@@ -214,59 +293,57 @@ class EmbeddedRepoHandler implements IRepoHandler {
             }
         }
 
-        EmbeddedInvocationHandler invocationHandler = new EmbeddedInvocationHandler(cls, methodQueryMap);
+        ImbeddedRepoMethodInvocationHandler invocationHandler = new ImbeddedRepoMethodInvocationHandler(cls, methodQueryMap);
         return Proxy.newProxyInstance(cls.getClassLoader(), new Class<?>[]{cls}, invocationHandler);
     }
 
-    private void checkCreateTable(String tableName, AnalyzedPropertyClass analyzedEntityClass, DBEntityInfo entityInfo) throws PersistException {
+    private PersistEntityInfo checkCreateTable(String tableName, PersistEntityInfo entityInfo, Map<Class<?>, PersistEntityInfo> infoMap, Set<String> tableCheckExist) throws PersistException {
         log.debug("Check-Create table [{}]...", tableName);
         if(tableCreateMode.equals(TABLE_CREATE_MODE_CREATE)){
             try {
-                if(DBHelper.tableNExists(databaseConnection, tableName)) {
+                if(!DBHelper.tableExists(databaseConnection, tableName)) {
                     log.debug("Table does not exist!");
                     log.debug("Creating table [{}]...", tableName);
-                    DBHelper.createTableForAnalyzedEntity(databaseConnection, tableName, analyzedEntityClass, entityInfo);
+                    return DBHelper.createTableForAnalyzedEntity(databaseConnection, tableName, entityInfo, infoMap, tableCheckExist);
                 }
+                return null;
             }
             catch (SQLException e){
                 throw new PersistQueryBuildException("Failed to create missing table [" + tableName + "]!", e);
             }
         }
         else if(tableCreateMode.equals(TABLE_CREATE_MODE_OVERRIDE)){
+            log.debug("Overriding table [{}]...", tableName);
             try {
-                log.debug("Overriding table [{}]...", tableName);
-                DBHelper.dropTable(databaseConnection, tableName);
-                DBHelper.createTableForAnalyzedEntity(databaseConnection, tableName, analyzedEntityClass, entityInfo);
+                if(DBHelper.tableExists(databaseConnection, tableName)) {
+                    DBHelper.dropTable(databaseConnection, tableName);
+                }
             }
             catch (SQLException e){
-                throw new PersistQueryBuildException("Failed to override table [" + tableName + "]!", e);
+                throw new PersistQueryBuildException("Failed to delete table [" + tableName + "]!", e);
+            }
+
+            try {
+                return DBHelper.createTableForAnalyzedEntity(databaseConnection, tableName, entityInfo, infoMap, tableCheckExist);
+            }
+            catch (SQLException e){
+                throw new PersistQueryBuildException("Failed to create table [" + tableName + "]!", e);
             }
         }
         else if(tableCreateMode.equals(TABLE_CREATE_MODE_FAIL)){
             try {
-                if(DBHelper.tableNExists(databaseConnection, tableName)) {
+                if(!DBHelper.tableExists(databaseConnection, tableName)) {
                     throw new PersistQueryBuildException("Table [" + tableName + "] does not exist while in fail mode!");
                 }
             }
             catch (SQLException e){
                 throw new PersistQueryBuildException("Failed to check if table [" + tableName + "] exists!", e);
             }
+            return null;
         }
         else {
             throw new PersistQueryBuildException("Unknown table_create_mode [" + tableCreateMode + "]!");
         }
-    }
-
-    @Override
-    public IQuery createQuery(String query) throws PersistQueryBuildException {
-        //TODO: Check if needed - otherwise remove
-        return null;
-    }
-
-    @Override
-    public <T> IParameterizedQuery<T> createQuery(String query, Class<T> cls) throws PersistQueryBuildException {
-        //TODO: Check if needed - otherwise remove
-        return null;
     }
 
     private Object executeQuery(MethodQueryInfoSupplier infoSupplier, Object[] origParameters){
@@ -280,7 +357,13 @@ class EmbeddedRepoHandler implements IRepoHandler {
         //Prepare Statement
         PreparedStatement statement;
         try {
-            statement = databaseConnection.prepareStatement(info.query);
+            if(info.generatedKeysCallback != null){
+                statement = databaseConnection.prepareStatement(info.query, Statement.RETURN_GENERATED_KEYS);
+            }
+            else {
+                statement = databaseConnection.prepareStatement(info.query);
+            }
+
             for (int i = 0; i < info.parameterTypes.size(); i++) {
                 DBHelper.prepareStatement(statement, i + 1, info.parameterTypes.get(i), parameters[i]);
             }
@@ -355,28 +438,52 @@ class EmbeddedRepoHandler implements IRepoHandler {
 
 
 
+        Object returnValue;
 
         //Check if executeQuery or executeUpdate should be called
         if(info.type == StatementType.QUERY){
             try {
-                return executeQueryFromPreparedStatement(statement, returnValueType, resultType);
+                returnValue = executeQueryFromPreparedStatement(statement, returnValueType, resultType);
+
+                if(info.generatedKeysCallback != null){
+                    ResultSet set = statement.getGeneratedKeys();
+                    try {
+                        info.generatedKeysCallback.call(set);
+                    }
+                    catch (SQLException e){
+                        throw new SQLException("Something went wrong when passing generated keys!", e);
+                    }
+                }
             }
             catch (SQLException e){
-                throw new MagicRuntimeException("Failed to run sql statement: [" + info.query + "]!", e);
+                throw new PersistRuntimeException("Failed to run sql statement: [" + info.query + "]!", e);
             }
         }
         else if(info.type == StatementType.UPDATE){
             try {
                 executeUpdateFromPreparedStatement(statement);
-                return null;
+
+                if(info.generatedKeysCallback != null){
+                    ResultSet set = statement.getGeneratedKeys();
+                    try {
+                        info.generatedKeysCallback.call(set);
+                    }
+                    catch (SQLException e){
+                        throw new SQLException("Something went wrong when passing generated keys!", e);
+                    }
+                }
+
+                returnValue = null;
             }
             catch (SQLException e){
-                throw new MagicRuntimeException("Failed to run sql statement: [" + info.query + "]!", e);
+                throw new PersistRuntimeException("Failed to run sql statement: [" + info.query + "]!", e);
             }
         }
+        else {
+            throw new IllegalStateException("INVALID STATE: Unchecked type: [" + info.type + "]!");
+        }
 
-
-        throw new IllegalStateException("INVALID STATE: Unchecked type: [" + info.type + "]!");
+        return returnValue;
     }
 
     private Object executeQueryFromPreparedStatement(PreparedStatement statement, AnalyzedPropertyClass returnValueType, QueryResultType resultType) throws SQLException{
@@ -393,6 +500,7 @@ class EmbeddedRepoHandler implements IRepoHandler {
                 int colType = metaData.getColumnType(i);
 
                 Object data = DBHelper.getDataFromDBType(resultSet, i, colType);
+                if(resultSet.wasNull()) data = null;
                 dataMap.put(colName, data);
             }
 
@@ -446,6 +554,8 @@ class EmbeddedRepoHandler implements IRepoHandler {
             return array;
         }
         else if(resultType == QueryResultType.OBJECT_MAP){
+            //TODO: lazyLoading through custom Map.class implementation
+
             if(dataMapList.size() == 0) return null;
             if(dataMapList.size() > 1) return new PersistQueryExecuteException("Multiple entities returned but only 1 expected!");
 
@@ -477,19 +587,62 @@ class EmbeddedRepoHandler implements IRepoHandler {
 
     private Object buildEntityFromDataMap(Map<String, Object> dataMap, AnalyzedPropertyClass cls) throws PersistException{
         Object dataObj;
-        try {
-            dataObj = cls.getBuilder().build();
+
+        PersistEntityInfo entityInfo = entityInfoMap.get(cls.getType());
+        if(entityInfo.foreignKeyInfoMap.size() == 0){
+            try {
+                dataObj = cls.getBuilder().build();
+            }
+            catch (InvocationTargetException e){
+                throw new PersistException("Failed to call builder [" + cls.getBuilder() + "]", e);
+            }
         }
-        catch (InvocationTargetException e){
-            throw new PersistException("Failed to call builder [" + cls.getBuilder() + "]", e);
+        else {
+            try {
+                dataObj = createEntityProxy(cls, entityInfo);
+            }
+            catch (ProxyClassCreationException e){
+                throw new PersistException("Failed to build proxy for class: [" + cls.getType() + "]!", e);
+            }
         }
 
         Map<String, PropertyEntry> fieldEntries = cls.getFieldEntryMap();
         for(String fieldName : fieldEntries.keySet()){
             String _dbFieldName = DBHelper.dbFieldName(fieldName);
-
             PropertyEntry propertyEntry = fieldEntries.get(fieldName);
+            Class<?> fieldType = propertyEntry.getType();
+
+            PersistForeignKeyInfo foreignKeyInfo = entityInfo.foreignKeyInfoMap.get(fieldName);
+            if(foreignKeyInfo != null) {
+                PersistEntityInfo foreignEntityInfo = entityInfoMap.get(foreignKeyInfo.foreignEntityType);
+                PropertyEntry foreignKeyMappedFieldEntry = foreignEntityInfo.analyzedEntity.getFieldEntryMap().get(foreignKeyInfo.foreignKey);
+
+                String setFkMethodName = "$set_fk_" + fieldName;
+                Class<?> generatedClass = dataObj.getClass();
+                Method m;
+                try {
+                    m = generatedClass.getMethod(setFkMethodName, foreignKeyMappedFieldEntry.getType());
+                }
+                catch (NoSuchMethodException e){
+                    throw new IllegalStateException("INVALID STATE: Method should exist!");
+                }
+
+                Object data = dataMap.get("FK_" + _dbFieldName + "_" + DBHelper.dbFieldName(foreignKeyInfo.foreignKey));
+
+                if(data != null){
+                    try {
+                        m.invoke(dataObj, data);
+                    }
+                    catch (Exception e){
+                        throw new IllegalStateException("INVALID STATE", e);
+                    }
+                }
+
+                continue;
+            }
+
             Object data = dataMap.get(_dbFieldName);
+            if(data == null) data = ValueUtils.getDefaultValue(fieldType);
             try {
                 propertyEntry.getSetter().set(dataObj, data);
             }
@@ -499,6 +652,20 @@ class EmbeddedRepoHandler implements IRepoHandler {
         }
 
         return dataObj;
+    }
+
+    private Object createEntityProxy(AnalyzedPropertyClass analyzedEntityClass, PersistEntityInfo entityInfo) throws ProxyClassCreationException {
+        Map<String, Class<?>> additionalForeignKeySetterMethods = new HashMap<>();
+        for(String foreignKeyName : entityInfo.foreignKeyInfoMap.keySet()){
+            PersistForeignKeyInfo foreignKeyInfo = entityInfo.foreignKeyInfoMap.get(foreignKeyName);
+            PersistEntityInfo foreignEntityInfo = entityInfoMap.get(foreignKeyInfo.foreignEntityType);
+            PropertyEntry foreignKeyMappedPropertyEntry = foreignEntityInfo.analyzedEntity.getFieldEntryMap().get(foreignKeyInfo.foreignKey);
+            Class<?> foreignKeyMappedType = foreignKeyMappedPropertyEntry.getType();
+
+            additionalForeignKeySetterMethods.put("$set_fk_" + foreignKeyName, foreignKeyMappedType);
+        }
+
+        return ProxyFactory._createProxyWithAdditionalMethods(analyzedEntityClass.getType(), new ImbeddedProxyMethodHandler(analyzedEntityClass), additionalForeignKeySetterMethods);
     }
 
     private AnalyzedPropertyClass analyzeMethodReturnType(Method method, Map<String, AnalyzedParameterizedType> genericTypes) throws PersistQueryBuildException{
