@@ -88,7 +88,15 @@ class DebuggerSubsystem implements ISubsystem {
 
         List<MagicDebugValue> childrenList = new ArrayList<>();
         if(instance != null) {
-            Object theInstance = manager.getField(field, instance);
+            Object theInstance;
+
+            if(Modifier.isStatic(field.getModifiers())){
+                theInstance = manager.getField(field, null);
+            }
+            else {
+                theInstance = manager.getField(field, instance);
+            }
+
             if(DValue.class.isAssignableFrom(type)){
                 debugValueInstance = (DValue<?>) theInstance;
                 type = debugValueInstance.type;
