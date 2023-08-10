@@ -331,6 +331,23 @@ public class MagicInstanceManager implements IInstanceManager {
 
     @Override
     public void instantiate(Class<?> cls, MagicConsumer<Object> callback) throws MagicInstanceException {
+        if(hasInstanceOfType(cls)){
+            if(callback == null){
+                //Already instantiated so we don't need to do anything
+                return;
+            }
+
+            log.debug("Instance of class [{}] already exists.", cls);
+            Object inst = getInstance(cls);
+            try {
+                callback.accept(inst);
+            }
+            catch (MagicException e){
+                throw new MagicInstanceException(e);
+            }
+            return;
+        }
+
         log.debug("Instantiating class [{}]", cls.getName());
 
         try {
